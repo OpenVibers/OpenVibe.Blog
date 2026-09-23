@@ -2,9 +2,10 @@
 
 > The official OpenVibe blog and a blog for every member: drafts, revisions, series, scheduling, feeds.
 
-**Status:** alpha (roadmap Wave 16, Blog half). The service runs and its tests pass. It is **not
-deployed**, `openvibe.blog` still shows its placeholder from OpenVibe.Sites, and its capabilities and
-service manifest are proposals that the next openvibe-contracts release has to include.
+**Status:** alpha (roadmap Wave 16, Blog half). **Public at https://openvibe.blog since 2026-09-23**
+(the launch release also removed the domain from OpenVibe.Sites). Its capabilities and service
+manifest are released in openvibe-contracts v0.18.0. The only post in production is the seed post,
+which is still a draft, so nothing is published yet.
 **Domain:** `openvibe.blog` · **Port:** 4810 · **Service id:** `blog`
 **Plan:** OpenVibe End-to-End Realignment & Implementation Plan, revision 3 (20 Sep 2026), §12.6; roadmap §15.13, §29, §32.
 **License:** AGPL-3.0 (same as every OpenVibe service).
@@ -96,8 +97,8 @@ Other tables in the same database:
 - **Members-only (VIP) posts:**
   - Visibility `members` with an `entitlement_key` in the ACL.
   - The entitlement seam (`server/domain/access.js`) admits nobody while
-    `BLOG_ENTITLEMENTS_PROVIDER=none`, the default because no entitlement service exists yet. Only
-    the blog's members and staff can read these posts.
+    `BLOG_ENTITLEMENTS_PROVIDER=none`, the default: OpenVibe.VIP runs loopback-only on the host but
+    Blog has no VIP client yet. Only the blog's members and staff can read these posts.
 
 ### Routes (server-rendered, useful without JavaScript)
 
@@ -150,7 +151,7 @@ Other tables in the same database:
 | `blog.schedule.failed` | internal |
 | `blog.index_document.upserted` / `.deleted` | Documents and tombstones in `search.index-document@1` form, with a monotonic index revision (`createIndexSequencer`). Only published, public, listable posts are upserted; every other state is a tombstone. A post that was never indexed gets no tombstone. |
 
-### Capabilities (proposed: `docs/capabilities-proposal/`)
+### Capabilities (released in openvibe-contracts v0.18.0; proposal: `docs/capabilities-proposal/`)
 
 Service tokens use audience `openvibe.blog`, with one capability per route. The person the service
 acts for goes in `X-OV-Subject`, and membership still applies:
@@ -161,16 +162,16 @@ acts for goes in `X-OV-Subject`, and membership still applies:
   `blog.post.schedule`, `blog.post.unpublish`, `blog.post.delete`
 - `blog.feed.read`
 
-Browser and app user JWTs are judged by blog membership. Until the proposals are released, grants
-for these ids are decided locally with the contracts library's matching rule
-(`server/auth/capabilities.js`). Nothing changes when they are released. The service manifest
-proposal is `docs/service-manifest-proposal.json`.
+Browser and app user JWTs are judged by blog membership. Grants for these ids are decided locally
+with the contracts library's matching rule (`server/auth/capabilities.js`). The service manifest
+(proposal: `docs/service-manifest-proposal.json`) is released in openvibe-contracts v0.18.0; this
+repo pins v0.19.0.
 
 ## Depends on
 
-- **Packages** (all pinned by release tarball): `openvibe-publishing` v0.2.0 (revisions, schedule,
+- **Packages** (all pinned by release tarball): `openvibe-publishing` v0.2.1 (revisions, schedule,
   taxonomy, citations, media, discussion, seo, authorship, index-hooks, ssr), `openvibe-contracts`
-  v0.13.0, `openvibe-shared` v1.3.0 (chrome, app icon, footer, legal, release, metrics, ready,
+  v0.19.0, `openvibe-shared` v1.3.0 (chrome, app icon, footer, legal, release, metrics, ready,
   theme presets), `openvibe-sdk` v0.2.2 (events outbox, service tokens).
 - **OpenVibe.Network:**
   - SSO: the OAuth client `blog` is already seeded with redirect
@@ -215,29 +216,30 @@ Each grant is `[client, capability, audience]`:
 
 ## Launch rule
 
-This repository alone doesn't make the product live. `openvibe.blog` keeps its placeholder on
+This repository alone doesn't make the product live. `openvibe.blog` kept its placeholder on
 [OpenVibers/OpenVibe.Sites](https://github.com/OpenVibers/OpenVibe.Sites) until all of plan §12.12
-exists. Status against each point:
+existed; the launch release went out on 2026-09-23. Status against each point:
 
 1. **Runtime, health, readiness, observability:** done.
 2. **Canonical identity and auth:** done.
 3. **SSR public routes useful without JS:** done.
-4. **Persistence and end-to-end workflows:** done.
-5. **Capability and event registration against OpenVibe.Contracts:** proposals are in `docs/`,
-   waiting on the release.
+4. **Persistence and end-to-end workflows:** done; `ovhost drill blog` restored it on the production
+   host on 2026-09-23.
+5. **Capability and event registration against OpenVibe.Contracts:** released in v0.18.0
+   (capabilities and service manifest; no `blog.*` event payload schemas yet).
 6. **Migration and seed strategy, threat review, sitemap/robots/feed behaviour:** done. There is
    nothing to migrate, the seed is described below and the threat review is below.
 7. **Acceptance tests:** done.
 
-**The launch release does all of these in one release:**
+**The launch release did all of these in one release (2026-09-23):**
 
 - Removes `openvibe.blog` from `OpenVibe.Sites/sites.json`.
 - Switches routing: nginx vhost, DNS and TLS.
 - Flips the Network hub entry (`server/chrome/sites.js`, `status: 'soon'`).
 - Registers maturity in the ecosystem registry.
 
-A placeholder never counts as an implemented service, and this README doesn't call the service
-live.
+A placeholder never counts as an implemented service. The site is public, but nothing is published
+on it until a person reviews and publishes the seed post (below).
 
 ## Seed
 
@@ -310,8 +312,7 @@ fnm exec --using=22.22.1 npm run dev       # http://localhost:4810 (set OV_OAUTH
 4. **systemd:** install `deploy/systemd/openvibe-blog.service` (port 4810, `StateDirectory=openvibe-blog`).
 5. **nginx:** install `deploy/nginx/openvibe.blog.conf`. `/metrics` is never proxied.
 6. **Seed:** `npm run seed`. It stays a draft until someone has reviewed it.
-7. **Contracts:** release the capability and manifest proposals in openvibe-contracts. Then CI's
-   contracts check can drop `continue-on-error`.
+7. **Contracts:** done: released in openvibe-contracts v0.18.0.
 8. **Launch:** in the same release, remove `openvibe.blog` from OpenVibe.Sites and flip the Network
    hub entry (see the launch rule above).
 

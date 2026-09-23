@@ -8,8 +8,8 @@
   "port": 4810,
   "domain": "openvibe.blog",
   "packages": [
-    "openvibe-publishing v0.2.0",
-    "openvibe-contracts v0.13.0",
+    "openvibe-publishing v0.2.1",
+    "openvibe-contracts v0.19.0",
     "openvibe-shared v1.3.0",
     "openvibe-sdk v0.2.2"
   ],
@@ -27,12 +27,13 @@
     "blog.post.delete",
     "blog.feed.read"
   ],
-  "capabilitiesRegistered": false,
-  "serviceManifestRegistered": false,
-  "entitlements": "none (members-only posts fail closed until an entitlement service exists)",
-  "seedPost": "draft (verbatim quotes; not reviewed by a person)",
+  "capabilitiesRegistered": true,
+  "serviceManifestRegistered": true,
+  "entitlements": "none wired (members-only posts fail closed; OpenVibe.VIP runs loopback-only on the host but Blog has no VIP client yet)",
+  "seedPost": "draft in production (verbatim quotes; not reviewed by a person); 0 posts published",
   "deployed": true,
-  "placeholderInSites": true,
-  "updated": "2026-09-22",
+  "deployment": "Public at https://openvibe.blog since 2026-09-23 (~03:00 UTC): /opt/openvibe.blog at e7b4986, unit openvibe-blog on 127.0.0.1:4810 behind the openvibe.blog nginx vhost, principal blog. Production content: 1 blog (official), 1 post, which is a draft, so the public site shows nothing published yet. Restore drill passed 2026-09-23.",
+  "placeholderInSites": false,
+  "updated": "2026-09-23",
   "deployedAt": "2026-09-23"
 }
