@@ -1,0 +1,19 @@
+{
+  "id": "blog.blog.configure",
+  "version": "1.0",
+  "owner": "blog",
+  "status": "active",
+  "visibility": "first-party",
+  "description": "Change a blog's title, description, language and feed settings (RSS, Atom, JSON Feed on/off, item count, full text or summaries). Only an owner of the blog (or staff on the official blog) acting through X-OV-Subject.",
+  "permissions": [
+    "blog:write"
+  ],
+  "resourceConstraints": [
+    "owner"
+  ],
+  "quotaClass": "blog-write",
+  "events": [],
+  "implementedBy": [
+    "PATCH /api/v1/blogs/:handle"
+  ]
+}

@@ -1,0 +1,21 @@
+{
+  "id": "blog.post.create",
+  "version": "1.0",
+  "owner": "blog",
+  "status": "active",
+  "visibility": "first-party",
+  "description": "Create a draft post (revision 1) on a blog the acting member belongs to. With X-OV-Origin: ai the draft is AI-generated output (OpenVibe.AI blog.draft_post; authorship.workflow { id, runId } required): never attributed to the person, noindex, and not publishable until a person reviews it.",
+  "permissions": [
+    "blog:write"
+  ],
+  "resourceConstraints": [
+    "owner"
+  ],
+  "quotaClass": "blog-write",
+  "events": [
+    "blog.post.created"
+  ],
+  "implementedBy": [
+    "POST /api/v1/blogs/:handle/posts"
+  ]
+}

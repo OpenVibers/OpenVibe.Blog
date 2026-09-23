@@ -1,0 +1,23 @@
+{
+  "id": "blog.post.read",
+  "version": "1.0",
+  "owner": "blog",
+  "status": "active",
+  "visibility": "first-party",
+  "description": "Read posts that are not public (drafts, scheduled, members-only, private), their revisions and diffs, for the member in X-OV-Subject. Published public posts need no capability.",
+  "permissions": [
+    "blog:read"
+  ],
+  "resourceConstraints": [
+    "owner"
+  ],
+  "quotaClass": "blog-read",
+  "events": [],
+  "implementedBy": [
+    "GET /api/v1/posts/:id",
+    "GET /api/v1/posts/:id/revisions",
+    "GET /api/v1/posts/:id/revisions/:n",
+    "GET /api/v1/posts/:id/diff",
+    "GET /api/v1/blogs/:handle/posts?all=1"
+  ]
+}

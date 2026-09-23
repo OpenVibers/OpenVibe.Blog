@@ -1,0 +1,26 @@
+{
+  "id": "blog.post.update",
+  "version": "1.0",
+  "owner": "blog",
+  "status": "active",
+  "visibility": "first-party",
+  "description": "Edit a post: content becomes a new immutable revision (expected_revision required; 412 revision.conflict when someone saved first), slug changes leave 301 redirects, visibility, taxonomy, series, media attachments (OpenVibe.Media object ids) and revert as a new revision. Authors edit their own posts; editors and owners every post of the blog.",
+  "permissions": [
+    "blog:write"
+  ],
+  "resourceConstraints": [
+    "owner"
+  ],
+  "quotaClass": "blog-write",
+  "events": [
+    "blog.post.updated",
+    "blog.index_document.upserted",
+    "blog.index_document.deleted"
+  ],
+  "implementedBy": [
+    "PATCH /api/v1/posts/:id",
+    "POST /api/v1/posts/:id/revert",
+    "POST /api/v1/posts/:id/attachments",
+    "DELETE /api/v1/posts/:id/attachments/:aid"
+  ]
+}

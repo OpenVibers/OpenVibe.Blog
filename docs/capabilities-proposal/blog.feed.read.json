@@ -1,0 +1,19 @@
+{
+  "id": "blog.feed.read",
+  "version": "1.0",
+  "owner": "blog",
+  "status": "active",
+  "visibility": "first-party",
+  "description": "Read a blog's JSON Feed through the API (public, published, listable posts only; the same items as /@handle/feed.json). Browsers and crawlers read the public RSS, Atom and JSON Feed URLs without any capability.",
+  "permissions": [
+    "blog:read"
+  ],
+  "resourceConstraints": [
+    "none"
+  ],
+  "quotaClass": "blog-read",
+  "events": [],
+  "implementedBy": [
+    "GET /api/v1/blogs/:handle/feed"
+  ]
+}

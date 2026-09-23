@@ -1,0 +1,23 @@
+{
+  "id": "blog.post.unpublish",
+  "version": "1.0",
+  "owner": "blog",
+  "status": "active",
+  "visibility": "first-party",
+  "description": "Take a published post down (readers get 404, Search a tombstone, feeds and sitemaps drop it). Editors, owners, the author, and staff (moderation).",
+  "permissions": [
+    "blog:write"
+  ],
+  "resourceConstraints": [
+    "owner"
+  ],
+  "quotaClass": "blog-write",
+  "events": [
+    "blog.post.unpublished",
+    "blog.index_document.upserted",
+    "blog.index_document.deleted"
+  ],
+  "implementedBy": [
+    "POST /api/v1/posts/:id/unpublish"
+  ]
+}

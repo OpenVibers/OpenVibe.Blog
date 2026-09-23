@@ -1,0 +1,19 @@
+{
+  "id": "blog.blog.create",
+  "version": "1.0",
+  "owner": "blog",
+  "status": "active",
+  "visibility": "first-party",
+  "description": "Get-or-create the blog of the acting member (X-OV-Subject, a usr_ subject): one member blog per subject, created on first use, owned by that subject, handle = the Network username unless another free handle is given. The charter's blog.create as a three-segment id. Browsers use their Network user JWT instead.",
+  "permissions": [
+    "blog:write"
+  ],
+  "resourceConstraints": [
+    "owner"
+  ],
+  "quotaClass": "blog-write",
+  "events": [],
+  "implementedBy": [
+    "POST /api/v1/blogs"
+  ]
+}

@@ -1,0 +1,23 @@
+{
+  "id": "blog.post.delete",
+  "version": "1.0",
+  "owner": "blog",
+  "status": "active",
+  "visibility": "first-party",
+  "description": "Delete a post: readers get 410, Search a tombstone, the Community thread is hidden; immutable revisions are kept. Editors, owners, the author, and staff (moderation).",
+  "permissions": [
+    "blog:write"
+  ],
+  "resourceConstraints": [
+    "owner"
+  ],
+  "quotaClass": "blog-write",
+  "events": [
+    "blog.post.deleted",
+    "blog.index_document.upserted",
+    "blog.index_document.deleted"
+  ],
+  "implementedBy": [
+    "DELETE /api/v1/posts/:id"
+  ]
+}

@@ -1,0 +1,25 @@
+{
+  "id": "blog.post.schedule",
+  "version": "1.0",
+  "owner": "blog",
+  "status": "active",
+  "visibility": "first-party",
+  "description": "Schedule a publish of a revision (or an unpublish) at a future time, or cancel it. Idempotent per (post, action, time, revision); applied by Blog's worker with leases, so a restart never publishes twice; a job that cannot succeed emits blog.schedule.failed.",
+  "permissions": [
+    "blog:write"
+  ],
+  "resourceConstraints": [
+    "owner"
+  ],
+  "quotaClass": "blog-write",
+  "events": [
+    "blog.post.published",
+    "blog.schedule.failed",
+    "blog.index_document.upserted",
+    "blog.index_document.deleted"
+  ],
+  "implementedBy": [
+    "POST /api/v1/posts/:id/schedule",
+    "DELETE /api/v1/posts/:id/schedule"
+  ]
+}

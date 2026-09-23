@@ -1,0 +1,21 @@
+{
+  "id": "blog.member.manage",
+  "version": "1.0",
+  "owner": "blog",
+  "status": "active",
+  "visibility": "first-party",
+  "description": "List, add, change and remove a blog's members (owner, editor, author) by Network subject. A member blog keeps at least one owner. Owners only.",
+  "permissions": [
+    "blog:write"
+  ],
+  "resourceConstraints": [
+    "owner"
+  ],
+  "quotaClass": "blog-write",
+  "events": [],
+  "implementedBy": [
+    "GET /api/v1/blogs/:handle/members",
+    "PUT /api/v1/blogs/:handle/members/:subject",
+    "DELETE /api/v1/blogs/:handle/members/:subject"
+  ]
+}

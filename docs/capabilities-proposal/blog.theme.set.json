@@ -1,0 +1,19 @@
+{
+  "id": "blog.theme.set",
+  "version": "1.0",
+  "owner": "blog",
+  "status": "active",
+  "visibility": "first-party",
+  "description": "Choose a blog's theme from the small set of openvibe-shared token presets (vibe, paper, slate, sand, nord, high-contrast). There is no site-local theme engine and no custom CSS. Owners only.",
+  "permissions": [
+    "blog:write"
+  ],
+  "resourceConstraints": [
+    "owner"
+  ],
+  "quotaClass": "blog-write",
+  "events": [],
+  "implementedBy": [
+    "PUT /api/v1/blogs/:handle/theme"
+  ]
+}

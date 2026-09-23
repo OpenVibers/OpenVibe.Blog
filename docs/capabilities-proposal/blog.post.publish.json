@@ -1,0 +1,24 @@
+{
+  "id": "blog.post.publish",
+  "version": "1.0",
+  "owner": "blog",
+  "status": "active",
+  "visibility": "first-party",
+  "description": "Make a revision the published one (idempotent). AI-generated revisions are refused (409 post.review_required) until a person has recorded an approving review.",
+  "permissions": [
+    "blog:write"
+  ],
+  "resourceConstraints": [
+    "owner"
+  ],
+  "quotaClass": "blog-write",
+  "events": [
+    "blog.post.published",
+    "blog.post.updated",
+    "blog.index_document.upserted",
+    "blog.index_document.deleted"
+  ],
+  "implementedBy": [
+    "POST /api/v1/posts/:id/publish"
+  ]
+}

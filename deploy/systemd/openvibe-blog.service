@@ -1,0 +1,31 @@
+[Unit]
+Description=OpenVibe.Blog — the official OpenVibe blog and a blog for every member
+# Network (sign-in, JWKS, service tokens) and Events (the outbox relay) should be up first, but Blog
+# degrades gracefully without them: pages and feeds serve, sign-in and events wait (see /api/ready).
+After=network.target
+Wants=openvibe-network.service
+
+[Service]
+Type=simple
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/opt/openvibe.blog
+EnvironmentFile=/etc/openvibe/blog.env
+Environment=NODE_ENV=production
+Environment=PORT=4810
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+ExecStart=/usr/bin/env node /opt/openvibe.blog/server/index.js
+Restart=always
+RestartSec=5
+KillSignal=SIGTERM
+TimeoutStopSec=10
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+# Blog's own database lives in /var/lib/openvibe-blog; the code tree stays read-only.
+StateDirectory=openvibe-blog
+Environment=BLOG_DB_PATH=/var/lib/openvibe-blog/blog.db
+
+[Install]
+WantedBy=multi-user.target
