@@ -200,8 +200,8 @@ repo pins v0.19.0.
 
 - **Packages** (all pinned by release tarball): `openvibe-publishing` v0.2.1 (revisions, schedule,
   taxonomy, citations, media, discussion, seo, authorship, index-hooks, ssr), `openvibe-contracts`
-  v0.19.0, `openvibe-shared` v1.3.0 (chrome, app icon, footer, legal, release, metrics, ready,
-  theme presets), `openvibe-sdk` v0.2.2 (events outbox, service tokens).
+  v0.32.0, `openvibe-shared` v1.5.0 (chrome, app icon, footer, legal, release, metrics, ready,
+  theme presets), `openvibe-sdk` v0.5.0 (events outbox, service tokens).
 - **OpenVibe.Network:**
   - SSO: the OAuth client `blog` is already seeded with redirect
     `https://openvibe.blog/auth/callback`.

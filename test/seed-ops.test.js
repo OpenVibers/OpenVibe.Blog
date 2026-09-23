@@ -65,6 +65,8 @@ const { seedOfficialPost, loadFacts, SLUG } = require('../server/seed');
         const rel = await t.get('/release.json');
         assert.strictEqual(rel.status, 200);
         assert.strictEqual(rel.json().service, 'blog');
+        assert.deepStrictEqual(require('openvibe-contracts').validate('registry.release-manifest@1', rel.json()).errors, []);
+        assert.strictEqual(rel.json().metrics_url, '/release-metrics');
     });
 
     await check('robots.txt names the sitemap and the automated-consumer policy; llms.txt orients machines', async () => {
