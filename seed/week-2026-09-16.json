@@ -1,0 +1,130 @@
+{
+  "week": {
+    "from": "2026-09-16",
+    "to": "2026-09-22"
+  },
+  "collected_at": "2026-09-23T02:20:56+00:00",
+  "items": [
+    {
+      "repo": "OpenVibe.Billing",
+      "heading": "OpenVibe.Billing (alpha, shadow)",
+      "quote": "OpenVibe.Billing W8: balanced append-only journal, provider receipts, subscriptions, payouts, freeze, reconciliation and the Live import (ADR-012)",
+      "kind": "commit",
+      "ref": "ab5ae8197a80f20df0723f4ef83aeb310072f302",
+      "date": "2026-09-22T18:18:02-07:00",
+      "url": "https://github.com/OpenVibers/OpenVibe.Billing/commit/ab5ae8197a80f20df0723f4ef83aeb310072f302"
+    },
+    {
+      "repo": "OpenVibe.Chat",
+      "heading": "OpenVibe.Chat service",
+      "quote": "Chat service: Live's chat behind a service boundary (roadmap Wave 6)",
+      "kind": "commit",
+      "ref": "abf1e4b40ab6c0dd478bd879bbd28436d7404c0c",
+      "date": "2026-09-22T18:53:50-07:00",
+      "url": "https://github.com/OpenVibers/OpenVibe.Chat/commit/abf1e4b40ab6c0dd478bd879bbd28436d7404c0c"
+    },
+    {
+      "repo": "OpenVibe.Community",
+      "heading": "Community forum and comments",
+      "quote": "Wave 5: typed comment threads, forum (spaces/threads/posts), Discord relay, Pulse",
+      "kind": "commit",
+      "ref": "139aedd004c39575bd4832b9dcbfbeef41c61fa5",
+      "date": "2026-09-22T18:06:24-07:00",
+      "url": "https://github.com/OpenVibers/OpenVibe.Community/commit/139aedd004c39575bd4832b9dcbfbeef41c61fa5"
+    },
+    {
+      "repo": "OpenVibe.Contracts",
+      "heading": "OpenVibe.Contracts first release",
+      "quote": "v0.1.0: first contracts (subject, legacy identity map, service-token claims, entity ref, problem, service manifest, capability, event envelope, media ref)",
+      "kind": "tag",
+      "ref": "bae88d185ab402915fad1c434ca11031adf63af8",
+      "date": "2026-09-22T14:08:20-07:00",
+      "url": "https://github.com/OpenVibers/OpenVibe.Contracts/commit/bae88d185ab402915fad1c434ca11031adf63af8",
+      "tag": "v0.1.0"
+    },
+    {
+      "repo": "OpenVibe.Events",
+      "heading": "OpenVibe.Events service",
+      "quote": "Events service: durable store, publish API, signed delivery with retry/DLQ/replay, SSE realtime gateway, client library",
+      "kind": "commit",
+      "ref": "f8c2e2418938498664fafbd6ce096faaf45284c4",
+      "date": "2026-09-22T17:52:23-07:00",
+      "url": "https://github.com/OpenVibers/OpenVibe.Events/commit/f8c2e2418938498664fafbd6ce096faaf45284c4"
+    },
+    {
+      "repo": "OpenVibe.Live",
+      "heading": "Live release prompts",
+      "quote": "GET /release.json; openvibe-shared v1.2.1 (the navbar loads release-watch.js: open tabs are prompted after a deploy and never reloaded while watching, broadcasting or typing)",
+      "kind": "commit",
+      "ref": "829ac9fb35df92d98eb79ea538f5d661690984a3",
+      "date": "2026-09-22T18:52:38-07:00",
+      "url": "https://github.com/OpenVibers/OpenVibe.Live/commit/829ac9fb35df92d98eb79ea538f5d661690984a3"
+    },
+    {
+      "repo": "OpenVibe.Media",
+      "heading": "Media canonical object model",
+      "quote": "Canonical object model (Wave 4): media_objects with locations, relationships, variants, jobs, retention holds and the public-size invariant; vods/clips/files/screenshot pastes become projections via object_id",
+      "kind": "commit",
+      "ref": "cced10f81e529c76346d6578c8b26a5350f744be",
+      "date": "2026-09-22T18:01:01-07:00",
+      "url": "https://github.com/OpenVibers/OpenVibe.Media/commit/cced10f81e529c76346d6578c8b26a5350f744be"
+    },
+    {
+      "repo": "OpenVibe.Network",
+      "heading": "Network sign-in everywhere",
+      "quote": "Verify-email page, sign-in everywhere, cross-site history, linked services for every site, navbar brand + modular menus",
+      "kind": "commit",
+      "ref": "d8b7f65f015ced051ed64a8269252395f6bed320",
+      "date": "2026-09-17T20:08:00-07:00",
+      "url": "https://github.com/OpenVibers/OpenVibe.Network/commit/d8b7f65f015ced051ed64a8269252395f6bed320"
+    },
+    {
+      "repo": "OpenVibe.Publishing",
+      "heading": "openvibe-publishing 0.1.0",
+      "quote": "openvibe-publishing 0.1.0: shared publishing packages (revisions, schedule, taxonomy, citations, media, discussion, seo gate, authorship, index hooks, ssr) with the two-products exit proof",
+      "kind": "tag",
+      "ref": "6b4f426badb8f9d2a0dc85fbd2fbdc4bae066354",
+      "date": "2026-09-22T18:38:23-07:00",
+      "url": "https://github.com/OpenVibers/OpenVibe.Publishing/commit/6b4f426badb8f9d2a0dc85fbd2fbdc4bae066354",
+      "tag": "v0.1.0"
+    },
+    {
+      "repo": "OpenVibe.SDK",
+      "heading": "openvibe-sdk 0.1.0",
+      "quote": "openvibe-sdk 0.1.0: core client, auth, registry, identity, modules, events, realtime, media, community and a mock platform",
+      "kind": "tag",
+      "ref": "c5d6d281c86e0aa00eafcb6630936d21225bbfdb",
+      "date": "2026-09-22T18:20:42-07:00",
+      "url": "https://github.com/OpenVibers/OpenVibe.SDK/commit/c5d6d281c86e0aa00eafcb6630936d21225bbfdb",
+      "tag": "v0.1.0"
+    },
+    {
+      "repo": "OpenVibe.Search",
+      "heading": "OpenVibe.Search service",
+      "quote": "Search service: index documents with revision ordering and tombstones, event inbox, permission-aware FTS5 query API, removal events through an outbox",
+      "kind": "commit",
+      "ref": "a9d48430eb8d019948b3b912f4440045307c52ec",
+      "date": "2026-09-22T18:32:49-07:00",
+      "url": "https://github.com/OpenVibers/OpenVibe.Search/commit/a9d48430eb8d019948b3b912f4440045307c52ec"
+    },
+    {
+      "repo": "OpenVibe.Shared",
+      "heading": "openvibe-shared 1.0.0",
+      "quote": "First release from its own repository.",
+      "kind": "changelog",
+      "ref": "CHANGELOG.md#1.0.0 — 2026-09-22",
+      "date": "2026-09-22",
+      "url": "https://github.com/OpenVibers/OpenVibe.Shared/blob/11735628f73026823ebfe40c45a35f2e23b8ba3d/CHANGELOG.md"
+    },
+    {
+      "repo": "OpenVibe.Tools",
+      "heading": "Tools durable jobs",
+      "quote": "Durable jobs on Img, Audio and Docs: /api/v1/jobs with SSE progress, cancel, reattach, idempotency keys and owner scoping; results can be Media objects",
+      "kind": "commit",
+      "ref": "7b76c41792688d089ff826f4273efe4dd82c2350",
+      "date": "2026-09-22T18:42:49-07:00",
+      "url": "https://github.com/OpenVibers/OpenVibe.Tools/commit/7b76c41792688d089ff826f4273efe4dd82c2350"
+    }
+  ],
+  "excluded_notes": "Dates are committer dates in -07:00; the 2026-09-22 evening commits are 2026-09-23 in UTC. CHANGELOG entries dated 2026-09-23 (openvibe-shared 1.1.0-1.3.0, openvibe-sdk 0.2.0-0.2.2) were left out as outside the week. No deployment claims: STATUS.json says \"deployed\": false for Chat, Events, Search and Sources; Billing says \"authoritative\": false (\"neither is applied or executed, so Live stays authoritative.\"); Host Stage A is \"not installed on the production host\". Conflicting signals left out: Live commit 9f4f1da (\"Wave 6 cutover, 2026-09-23 02:03 UTC\") and Contracts ADR-010 (\"executed 2026-09-23\") vs Chat STATUS \"deployed\": false; Sites 7b7c917 (\"OpenVibe.Events serves it\") vs Events STATUS \"deployed\": false. Also left out for length: OpenVibe.Sources service (alpha W14, deployed false), OpenVibe.Host Stage A CLI, OpenVibe.Games Wave 12 platform commit (very long subject), Community paste authority cutover (786e6f8), Network canonical subject ids / ecosystem registry / FedCM, Tools' twelve single-purpose tools, Live observability, Contracts v0.2.0-v0.14.0 tags, Sites placeholders, and charter-only placeholder repos (OpenRe.Stream, AI, Tips, VIP, Wiki; Realtime closed by ADR-005). Tag items carry an extra \"tag\" field; their quote is the tagged commit's subject."
+}

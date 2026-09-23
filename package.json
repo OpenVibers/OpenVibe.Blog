@@ -1,0 +1,35 @@
+{
+  "name": "openvibe-blog",
+  "version": "0.1.0",
+  "private": true,
+  "description": "OpenVibe.Blog — the official OpenVibe blog and a blog for every member: drafts, immutable revisions, series, tags and categories, scheduling, feeds, sitemaps and Community comments, server-rendered and useful without JavaScript.",
+  "main": "server/index.js",
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "NODE_ENV=development node server/index.js",
+    "test": "node test/run.js",
+    "seed": "node scripts/seed.js"
+  },
+  "keywords": ["openvibe", "blog", "publishing", "feeds"],
+  "author": "OpenVibers",
+  "license": "AGPL-3.0-only",
+  "repository": "github:OpenVibers/OpenVibe.Blog",
+  "dependencies": {
+    "better-sqlite3": "^11.10.0",
+    "cookie-parser": "^1.4.7",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "express-rate-limit": "^7.5.0",
+    "helmet": "^8.1.0",
+    "openvibe-contracts": "https://codeload.github.com/OpenVibers/OpenVibe.Contracts/tar.gz/refs/tags/v0.13.0",
+    "openvibe-publishing": "https://codeload.github.com/OpenVibers/OpenVibe.Publishing/tar.gz/refs/tags/v0.2.0",
+    "openvibe-sdk": "https://codeload.github.com/OpenVibers/OpenVibe.SDK/tar.gz/refs/tags/v0.2.2",
+    "openvibe-shared": "https://codeload.github.com/OpenVibers/OpenVibe.Shared/tar.gz/refs/tags/v1.3.0"
+  },
+  "devDependencies": {
+    "jsonwebtoken": "^9.0.2"
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  }
+}
