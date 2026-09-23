@@ -87,6 +87,11 @@ function createPublicRoutes(ctx) {
         const items = await reading.listItems(rows);
         const canonical = seo.canonicalUrl(config.baseUrl, pager.page === 1 ? path : `${path}?page=${pager.page}`, { query: ['page'] });
         const feeds = reading.feedsOf(blog);
+        // Series and categories are named when a draft or restricted post uses them: list only those
+        // holding a post this viewer may see in the list, so their names never leak ahead of a post.
+        const shows = (filter) => posts.listPublished({ ...filter, blogId: blog.id, restricted, limit: 1 }).total > 0;
+        const prune = (nodes) => nodes.map((n) => ({ ...n, children: prune(n.children || []) }))
+            .filter((n) => n.children.length || shows({ termIds: [n.id] }));
         send(req, res, 200, {
             title: blog.title,
             description: blog.description,
@@ -102,7 +107,7 @@ function createPublicRoutes(ctx) {
                 : { '@context': 'https://schema.org', '@type': 'Blog', '@id': `${publication.abs(path)}#blog`, name: blog.title, url: publication.abs(path), description: blog.description || undefined }],
             body: pages.blogIndex({
                 blog, blogUrl: `/@${blog.handle}`, items, pager, feeds,
-                series: blogs.series(blog), categories: reading.categoriesTree(blog),
+                series: blogs.series(blog).filter((sr) => shows({ seriesId: sr.id })), categories: prune(reading.categoriesTree(blog)),
                 canWrite: access.canWrite(store, req.viewer, blog, 'create'),
             }),
         }, { cacheable: !restricted });
@@ -146,10 +151,12 @@ function createPublicRoutes(ctx) {
 
     // ── Collections ─────────────────────────────────────────
 
-    async function collection(req, res, { blog, heading, intro, crumbs, path, filter, order, empty }) {
+    async function collection(req, res, { blog, heading, intro, crumbs, path, filter, order, empty, hideEmpty = false }) {
         const page = pageNumber(req);
         const restricted = blog ? isMember(blog, req.viewer) : false;
         const { total, posts: rows } = posts.listPublished({ ...filter, blogId: blog ? blog.id : null, restricted, limit: PER_PAGE, offset: (page - 1) * PER_PAGE, order });
+        // A series or category named only by drafts or posts this viewer cannot see does not exist for them.
+        if (hideEmpty && !total) return notFound(req, res);
         const pager = ssr.paginate({ page, perPage: PER_PAGE, total, href: (p) => (p === 1 ? path : `${path}?page=${p}`) });
         if (pager.outOfRange && total) return notFound(req, res);
         const items = await reading.listItems(rows, { perBlogLinks: Boolean(blog) });
@@ -189,7 +196,7 @@ function createPublicRoutes(ctx) {
         const ids = [term.id, ...store.taxonomy.descendants(term.id).map((t) => t.id)];
         return collection(req, res, { blog, heading: term.name, intro: `Posts in ${trail.map((t) => t.name).join(' › ')}.`, path: reading.urls.category(blog, term),
             crumbs: [blogCrumb(blog), ...trail.map((t, i) => (i === trail.length - 1 ? { name: t.name } : { name: t.name, url: reading.urls.category(blog, t) }))],
-            filter: { termIds: ids }, empty: 'No public posts in this category yet.' });
+            filter: { termIds: ids }, empty: 'No public posts in this category yet.', hideEmpty: true });
     }));
 
     router.get('/@:handle/series/:series', wrap(async (req, res) => {
@@ -197,7 +204,7 @@ function createPublicRoutes(ctx) {
         const series = blog && blogs.seriesBySlug(blog, req.params.series);
         if (!series) return notFound(req, res);
         return collection(req, res, { blog, heading: series.title, intro: series.description || `A series on ${blog.title}.`, path: reading.urls.series(blog, series),
-            crumbs: [blogCrumb(blog), { name: series.title }], filter: { seriesId: series.id }, order: 'series', empty: 'No public parts of this series yet.' });
+            crumbs: [blogCrumb(blog), { name: series.title }], filter: { seriesId: series.id }, order: 'series', empty: 'No public parts of this series yet.', hideEmpty: true });
     }));
 
     async function personFor(who) {

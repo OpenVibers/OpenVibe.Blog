@@ -12,8 +12,9 @@ function createEffects({ outbox, community }) {
         after(before, post, ctx) {
             outbox.kick();
             if (!post || !before) return;
-            const wasPublic = before.visibility === 'public' && before.state !== 'deleted';
-            const isPublic = post.visibility === 'public' && post.state !== 'deleted';
+            // Public = readable by everyone: published and public. Unpublishing hides the thread too.
+            const wasPublic = before.visibility === 'public' && before.state === 'published';
+            const isPublic = post.visibility === 'public' && post.state === 'published';
             if (wasPublic && !isPublic) community.setThreadVisibility(post, 'hidden', ctx).catch(() => {});
             else if (!wasPublic && isPublic) community.setThreadVisibility(post, 'public', ctx).catch(() => {});
         },

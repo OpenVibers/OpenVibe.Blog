@@ -375,6 +375,9 @@ function createAuthRoutes(config, auth) {
 
     // ── GET /auth/me ─────────────────────────────────────────
     router.get('/me', async (req, res) => {
+        res.set('Cache-Control', 'private, no-store');
+        res.vary('Cookie');
+        res.vary('Authorization');
         const token = extractToken(req);
         if (!token) return res.status(401).json({ error: 'Not authenticated' });
         const claims = await auth.verify(token);
