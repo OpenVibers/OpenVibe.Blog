@@ -141,8 +141,22 @@ ${categories.length ? h`<p class="categories">Filed under ${categories.map((c) =
 ${raw(comments ? commentsSection(comments, o) : '')}`);
 }
 
+/** A members-only post for a reader without access: title, the author's summary, a join link — never the text. */
+function membersTeaser({ teaser, signedIn, loginUrl, unavailable }) {
+    const owner = teaser.owner && (teaser.owner.name || teaser.owner.username);
+    return String(h`<article class="post teaser" data-post-id="${teaser.id}" data-members-only="1">
+<header><h1>${teaser.title || 'Members-only post'}</h1><p class="byline"><span class="badge">Members only</span> · <a href="${teaser.blog.url}">${teaser.blog.title}</a></p></header>
+${teaser.summary ? h`<p class="summary">${teaser.summary}</p>` : ''}
+<section class="message">
+<p>${owner ? h`This post is for members of ${owner} on OpenVibe.VIP.` : 'This post is for members of this blog.'}${unavailable ? ' Memberships could not be checked just now; try again in a moment.' : ''}</p>
+${teaser.join_url ? h`<p><a class="button" href="${teaser.join_url}" rel="noopener">Join on OpenVibe.VIP</a></p>` : ''}
+${signedIn ? '' : h`<p>Already a member? <a href="${loginUrl}">Sign in</a>.</p>`}
+</section>
+</article>`);
+}
+
 function message({ heading, text, action }) {
     return String(h`<section class="message"><h1>${heading}</h1><p>${text}</p>${action ? h`<p><a class="button" href="${action.href}">${action.label}</a></p>` : ''}</section>`);
 }
 
-module.exports = { renderBody, blogIndex, collection, postPage, message, postList, categoryTree, time, dateLabel };
+module.exports = { renderBody, blogIndex, collection, postPage, membersTeaser, message, postList, categoryTree, time, dateLabel };

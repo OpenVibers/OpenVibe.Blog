@@ -20,8 +20,9 @@
  * Reading (visibility of a post):
  *   public    everyone once published
  *   unlisted  everyone with the link once published; never listed, fed, mapped or indexed
- *   members   the blog's members, staff, and viewers the entitlement check admits (VIP). No
- *             entitlement service exists yet: the default checker admits nobody (fails closed)
+ *   members   the blog's members, staff, and viewers OpenVibe.VIP admits as members of the blog's
+ *             owner (the entitlement checker below). Everyone else gets a teaser, never the body.
+ *             The official blog has no owner in VIP: its members-only posts admit nobody else
  *   private   the blog's members and staff
  * Anything not published (draft, scheduled, unpublished) is readable by the blog's members
  * (authors: their own posts) and staff only. Deleted posts are readable by nobody.
@@ -56,30 +57,48 @@ function memberCanSee(store, viewer, blog, post) {
 
 /**
  * The entitlement seam for members-only (VIP) posts.
- *   check({ subject, key }) → true | false (never throws: an error counts as "no")
- * 'none' — no entitlement service exists yet, so nobody outside the blog's members and staff is
- * admitted. A cached badge or a client claim is never authorization.
+ *   decide({ subject, blog, post }) → { allow, reason }   never throws: an error is a "no"
+ *   has({ subject, blog, post })    → true | false
+ * Providers:
+ *   'vip'   OpenVibe.VIP decides (server/clients/vip.js: policies/evaluate, owner = the blog's owner,
+ *           Blog's default gate member + blog:gated_post), through the VIP cache
+ *   'none'  nobody outside the blog's members and staff is admitted
+ *   check   (tests) a function ({ subject, key, blog, post }) → true
+ * A cached badge or a client claim is never authorization. post.entitlement_key is informational
+ * (it names the gate in Search ACLs); VIP decides.
  */
-function createEntitlementChecker({ provider = 'none', check = null } = {}) {
+function createEntitlementChecker({ provider = 'none', check = null, vip = null } = {}) {
+    const wrap = (name, decide) => ({
+        provider: name,
+        async decide(args) {
+            if (!args || !args.subject) return { allow: false, reason: 'not_signed_in' };
+            try {
+                const d = await decide(args);
+                return { allow: d.allow === true, reason: d.reason || (d.allow === true ? 'member' : 'denied') };
+            } catch { return { allow: false, reason: 'error' }; }
+        },
+        async has(args) { return (await this.decide(args)).allow; },
+    });
     if (typeof check === 'function') {
-        return {
-            provider: 'custom',
-            async has(subject, key) {
-                if (!subject || !key) return false;
-                try { return (await check({ subject, key })) === true; } catch { return false; }
-            },
-        };
+        return wrap('custom', async ({ subject, blog, post }) => ((await check({ subject, key: post && post.entitlement_key, blog, post })) === true
+            ? { allow: true, reason: 'member' } : { allow: false, reason: 'not_a_member' }));
+    }
+    if (provider === 'vip') {
+        if (vip && vip.enabled) return wrap('vip', (args) => vip.decide(args));
+        console.warn('[Blog] BLOG_ENTITLEMENTS_PROVIDER=vip needs OV_OAUTH_CLIENT_SECRET; members-only posts stay closed');
+        return wrap('none', async () => ({ allow: false, reason: 'vip_not_configured' }));
     }
     if (provider !== 'none') {
         // A provider name we do not implement must not silently admit anyone.
         console.warn(`[Blog] BLOG_ENTITLEMENTS_PROVIDER=${provider} is not implemented; members-only posts stay closed`);
     }
-    return { provider: 'none', async has() { return false; } };
+    return wrap('none', async () => ({ allow: false, reason: 'no_entitlement_service' }));
 }
 
 /**
- * Read decision for one post. → { allowed, status, reason }
- *   status 404 hides existence (drafts, private, deleted); 403 says "members only".
+ * Read decision for one post. → { allowed, status, reason, vip? }
+ *   status 404 hides existence (drafts, private, deleted); 403 says "members only" (the caller shows
+ *   a teaser and a join link, never the body); `vip` is the entitlement answer's reason.
  */
 async function canReadPost(store, viewer, blog, post, entitlements) {
     if (!post || post.state === 'deleted') return { allowed: false, status: 404, reason: 'not_found' };
@@ -90,10 +109,9 @@ async function canReadPost(store, viewer, blog, post, entitlements) {
     if (member) return { allowed: true, status: 200, reason: 'member' };
     if (post.visibility === 'private') return { allowed: false, status: 404, reason: 'private' };
     // members (VIP): the entitlement check, failing closed.
-    if (viewer && viewer.subject && post.entitlement_key && await entitlements.has(viewer.subject, post.entitlement_key)) {
-        return { allowed: true, status: 200, reason: 'entitled' };
-    }
-    return { allowed: false, status: 403, reason: 'members_only' };
+    const d = await entitlements.decide({ subject: viewer && viewer.subject, blog, post });
+    if (d.allow) return { allowed: true, status: 200, reason: 'entitled' };
+    return { allowed: false, status: 403, reason: 'members_only', vip: d.reason };
 }
 
 /** Write decisions. action ∈ create | edit | publish | delete | configure | members. */

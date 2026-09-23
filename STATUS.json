@@ -29,7 +29,7 @@
   ],
   "capabilitiesRegistered": true,
   "serviceManifestRegistered": true,
-  "entitlements": "none wired (members-only posts fail closed; OpenVibe.VIP runs loopback-only on the host but Blog has no VIP client yet)",
+  "entitlements": "OpenVibe.VIP in code (policies/evaluate with the blog owner and the blog:gated_post default gate, cached 30 s; teaser and join link otherwise). Not deployed yet, and the Network has not granted blog vip.resource.policy.evaluate: until both, members-only posts admit only the blog's members and staff",
   "seedPost": "draft in production (verbatim quotes; not reviewed by a person); 0 posts published",
   "deployed": true,
   "deployment": "Public at https://openvibe.blog since 2026-09-23 (~03:00 UTC): /opt/openvibe.blog at e7b4986, unit openvibe-blog on 127.0.0.1:4810 behind the openvibe.blog nginx vhost, principal blog. Production content: 1 blog (official), 1 post, which is a draft, so the public site shows nothing published yet. Restore drill passed 2026-09-23.",

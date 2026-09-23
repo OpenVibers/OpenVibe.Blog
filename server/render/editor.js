@@ -63,9 +63,9 @@ ${post ? h`<label for="slug">URL slug</label><input id="slug" name="slug" value=
 <label for="series">Series <span class="meta">(title; empty for none)</span></label><input id="series" name="series" value="${series ? series.title : ''}">
 <label for="seriesPosition">Part number in the series</label><input id="seriesPosition" name="seriesPosition" type="number" min="1" value="${post && post.series_position ? post.series_position : ''}">
 <label for="visibility">Who can read it</label>
-${select('visibility', [['public', 'Public'], ['unlisted', 'Unlisted (link only; never listed, fed or indexed)'], ['members', 'Members only (VIP entitlement)'], ['private', 'Private (this blog’s members)']], vis)}
-<label for="entitlementKey">Entitlement key for members-only posts</label><input id="entitlementKey" name="entitlementKey" value="${post && post.entitlement_key ? post.entitlement_key : `blog:${blog.handle}:members`}">
-<p class="meta">Members-only posts are readable by this blog’s members and staff. Other readers need the entitlement; no entitlement service is connected yet, so nobody else is admitted.</p>
+${select('visibility', [['public', 'Public'], ['unlisted', 'Unlisted (link only; never listed, fed or indexed)'], ['members', 'Members only (the blog owner’s OpenVibe.VIP members)'], ['private', 'Private (this blog’s members)']], vis)}
+<label for="entitlementKey">Gate label for members-only posts <span class="meta">(informational; OpenVibe.VIP decides who reads)</span></label><input id="entitlementKey" name="entitlementKey" value="${post && post.entitlement_key ? post.entitlement_key : `vip:${blog.handle}`}">
+<p class="meta">Members-only posts are readable by this blog’s members and staff, and by active OpenVibe.VIP members of the blog’s owner. If the owner defines a perk bound to <code>blog gated_post</code>, members need a plan that includes it; a rule the owner sets for the post on openvibe.vip takes precedence. Everyone else sees the title, the summary above as a teaser, and a link to join — never the text. ${blog.kind === 'official' ? 'The official blog has no VIP owner, so here nobody else is admitted.' : ''}</p>
 <label><input type="checkbox" name="allowComments" value="1"${raw(!post || post.allow_comments ? ' checked' : '')}> Comments (public posts only, hosted by OpenVibe.Community)</label>
 <label><input type="checkbox" name="noindex" value="1"${raw(post && post.noindex ? ' checked' : '')}> Ask search engines not to index it</label>
 <input type="hidden" name="allowComments" value="0">

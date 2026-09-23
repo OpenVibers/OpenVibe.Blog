@@ -10,7 +10,7 @@ const ssr = require('openvibe-publishing/ssr');
 const authorship = require('openvibe-publishing/authorship');
 const { renderBody } = require('../render/pages');
 
-function createReading({ store, blogs, posts: postsApi, publication, people, media }) {
+function createReading({ store, blogs, posts: postsApi, publication, people, media, vip = null }) {
     const { db } = store;
 
     const blogPath = (blog) => publication.blogPath(blog);
@@ -141,7 +141,30 @@ function createReading({ store, blogs, posts: postsApi, publication, people, med
         });
     }
 
-    return { urls, feedsOf, termsView, listItems, categoriesTree, feedItems, postJson, postJsonLd, db };
+    /**
+     * What a reader without access to a members-only post sees: the title, the author's summary (the
+     * teaser — never text taken from the body), where it lives and where to join the owner's plans on
+     * OpenVibe.VIP. The official blog has no VIP owner: no join link.
+     */
+    async function teaser(blog, post, { reason = null } = {}) {
+        const rev = post.published_revision ? store.revisions.get(post.id, post.published_revision) : null;
+        const owner = blog.owner_subject ? await people.one(blog.owner_subject) : null;
+        return {
+            id: post.id,
+            url: publication.postUrl(blog, post),
+            blog: { id: blog.id, handle: blog.handle, title: blog.title, url: publication.abs(blogPath(blog)) },
+            title: rev ? rev.fields.title : null,
+            summary: rev ? rev.fields.summary || null : null,
+            visibility: post.visibility,
+            members_only: true,
+            published_at: post.first_published_at ? new Date(post.first_published_at).toISOString() : null,
+            owner: owner ? { subject: owner.subject, name: owner.known ? owner.name : null, username: owner.username } : null,
+            join_url: owner && vip ? vip.joinUrl(owner) : null,
+            reason,
+        };
+    }
+
+    return { urls, feedsOf, termsView, listItems, categoriesTree, feedItems, postJson, postJsonLd, teaser, db };
 }
 
 module.exports = { createReading };

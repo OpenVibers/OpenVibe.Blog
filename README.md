@@ -20,7 +20,7 @@ It also uses:
 - Community for comments
 - OpenVibe.AI's `blog.draft_post` output, as drafts that need review
 - openvibe-shared theme presets
-- an optional VIP gate: members-only posts with an entitlement check that fails closed
+- a VIP gate: members-only posts decided by OpenVibe.VIP (the blog owner's members), teaser and join link for everyone else, failing closed
 
 ## Owns
 
@@ -94,11 +94,40 @@ Other tables in the same database:
   noindex and can't be published or scheduled until a person records an approving review. A person
   editing it makes a hybrid (AI-assisted) revision. The disclosure appears on the page, in the JSON
   and in the Search document.
-- **Members-only (VIP) posts:**
-  - Visibility `members` with an `entitlement_key` in the ACL.
-  - The entitlement seam (`server/domain/access.js`) admits nobody while
-    `BLOG_ENTITLEMENTS_PROVIDER=none`, the default: OpenVibe.VIP runs loopback-only on the host but
-    Blog has no VIP client yet. Only the blog's members and staff can read these posts.
+- **Members-only posts (OpenVibe.VIP, the `blog gated_post` binding):**
+  - Visibility `members`. The blog's own members (owner, editors, authors of the post) and staff
+    read as always. Anyone else is admitted only when OpenVibe.VIP says so:
+    `POST /api/v1/policies/evaluate` with `resource { service: 'blog', type: 'post', id }`,
+    `owner` = the blog's owner (`blogs.owner_subject`) and Blog's default gate
+    `fallback { requirement: 'member', binding: 'blog:gated_post' }` — an active member of the owner
+    or, if the owner defines a perk bound to `blog gated_post`, a member whose plan version includes
+    it. A rule the owner sets for the post on openvibe.vip takes precedence.
+    ([server/clients/vip.js](server/clients/vip.js), the seam in `server/domain/access.js`.)
+  - `BLOG_ENTITLEMENTS_PROVIDER`: `vip` is the default when `OV_OAUTH_CLIENT_SECRET` is set, else
+    `none` (only the blog's members and staff). Every doubt — VIP down, a refused token, no grant,
+    no owner — is a refusal.
+  - The official blog has no owner in VIP (its owners are memberships), so its members-only posts
+    admit nobody beyond its members and staff.
+  - Everyone else gets a **teaser**: the title, the author's summary (never text taken from the
+    body; write a summary to have one) and a join link to the owner's plans
+    (`OV_VIP_URL/<owner username>`), on the page (403), the `.json` twin (403 `{ teaser }`) and
+    `GET /api/v1/posts/:id` (403 problem with `teaser`). Feeds, sitemaps and listings for outsiders
+    carry public posts only; Search gets a tombstone; the product events' document carries the
+    teaser, never the body.
+  - `entitlement_key` (default `vip:<handle>`) is informational: it names the gate in the members
+    ACL of product-event documents. VIP decides.
+  - The client is `openvibe-vip/client`, vendored verbatim in
+    [server/vip/vip-client.js](server/vip/vip-client.js) (from OpenVibe.VIP 2accbeb) until VIP
+    publishes a tag to pin.
+  - **Convergence bound.** Answers are cached (`createVipCache`): a "yes" at most
+    `BLOG_VIP_CACHE_TTL_MS` (30 s, and never past the entitlement's expiry), a "no"
+    `BLOG_VIP_CACHE_DENY_TTL_MS` (10 s: a new member waits at most that long), a failure
+    `BLOG_VIP_CACHE_UNAVAILABLE_TTL_MS` (2 s, and it never extends a "yes"). So once VIP stops
+    granting (it applied `billing.entitlement.changed` and emitted `vip.membership.changed`), Blog
+    stops admitting that reader within 30 s. Blog does not subscribe to Events yet; a delivery
+    handed to `ctx.vip.cache.handleEvent` refuses at once. End to end (VIP's own bound when events
+    are lost) see OpenVibe.VIP's README, "The product cache and the convergence bound".
+    `test/members-vip.test.js` proves both.
 
 ### Routes (server-rendered, useful without JavaScript)
 
@@ -183,8 +212,8 @@ repo pins v0.19.0.
 - **OpenVibe.Events:** `events.event.publish`.
 - **OpenVibe.Search:** consumes `blog.index_document.*` through its `*.index_document.*`
   subscription. `blog` is already in Search's default `SEARCH_EVENT_OWNERS`.
-- **Optional:** an entitlement service (OpenVibe.VIP or Billing's `billing.entitlement.check`) for
-  members-only posts. Until one exists, the gate fails closed.
+- **OpenVibe.VIP:** `vip.resource.policy.evaluate` for members-only posts
+  (`OV_VIP_INTERNAL_URL`, default `http://127.0.0.1:4620`). Without it the gate fails closed.
 
 ### Grants the Network must hold for client `blog`
 
@@ -196,6 +225,8 @@ Each grant is `[client, capability, audience]`:
 - `[blog, community.comment.moderate, openvibe.community]` (optional: hides the threads of deleted
   or no-longer-public posts)
 - `[blog, media.object.read, openvibe.media]`, namespace `blog`. Media also needs a `blog` tenant.
+- `[blog, vip.resource.policy.evaluate, openvibe.vip]` for members-only posts (until granted, only the
+  blog's members and staff read them).
 - For OpenVibe.AI to deliver drafts: `[ai, blog.post.create, openvibe.blog]`. Add
   `[ai, blog.post.read, openvibe.blog]` if it reads the drafts back.
 
@@ -208,6 +239,7 @@ Each grant is `[client, capability, audience]`:
 | Feeds, canonical HTML, sitemap and Search converge on publication state: publish, revise, unpublish and delete. | `test/lifecycle.test.js` |
 | Feeds and canonical URLs stay stable across slug changes: the feed id is unchanged, old paths 301 and chains collapse. | `test/slug-media.test.js` |
 | VIP-only and private posts never leak through cache headers, Search, feeds or sitemaps. Visibility changes tombstone with a higher revision, and the entitlement seam fails closed. | `test/privacy.test.js` |
+| Members-only posts through OpenVibe.VIP: the owner, resource and default gate are sent; members read; strangers, signed-out readers and a VIP outage get the teaser and join link, and the body is absent from pages, `.json`, API, feeds, sitemaps, Search and product events; a cached yes ends within the TTL and at once on `vip.membership.changed`. | `test/members-vip.test.js` |
 | A deleted Media object yields an explicit broken-asset state in the page, JSON, feed and editor, and an outage is not a deletion. | `test/slug-media.test.js` |
 | Useful without JavaScript: write, edit, publish, comment and configure with forms only. Form tokens, the 412 message and Community threads referenced, never copied. | `test/nojs-editor.test.js` |
 | Capability-guarded service tokens, X-OV-Subject membership, AI drafts that need a person's review, and problem+json with request ids. | `test/api-ai.test.js` |
@@ -272,12 +304,12 @@ its commit or tag, date and GitHub URL, and is attached as a citation.
   - Links on member blogs get `rel="nofollow ugc noopener"`.
   - CSP from helmet.
 - **Private content:** read decisions live in `server/domain/access.js`. 404 hides drafts and
-  private posts, and 403 applies to members-only posts. A redirect never reveals the new slug of a
+  private posts, and 403 (with the teaser, never the body) applies to members-only posts. A redirect never reveals the new slug of a
   post the reader may not see.
 - **Leaks:** see the caching and events sections above. The product events carry no body. Search
   gets bodies only for public, listable posts.
 - **SSRF:** Blog makes no outbound calls to user-chosen URLs. It calls only its configured Network,
-  Community and Media hosts.
+  Community, Media and VIP hosts.
 - **AI:** output is never attributed to a person. It needs a person's (`usr_`) review before
   publication or indexing, and only a signed-in person can record a review.
 - **Abuse:** rate limits on `/auth`, `/write` and `/api/v1`, both in Express and in the nginx

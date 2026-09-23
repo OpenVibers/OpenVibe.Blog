@@ -41,5 +41,5 @@
   "namespacesOwned": [
     "blog.*"
   ],
-  "notes": "Port 4810. Owns blogs, blog_memberships, blog_posts, blog_post_revisions, blog_series, blog_taxonomy, blog_post_terms, blog_schedules, blog_redirects, blog_feed_settings in its own SQLite (openvibe-publishing packages, prefix blog). Consumes OpenVibe.Network (SSO, identity.subject.resolve), OpenVibe.Community (community.comment.write, community.comment.moderate), OpenVibe.Media (media.object.read, namespace blog) and publishes through OpenVibe.Events (events.event.publish); OpenVibe.Search reads blog.index_document.* from Events."
+  "notes": "Port 4810. Owns blogs, blog_memberships, blog_posts, blog_post_revisions, blog_series, blog_taxonomy, blog_post_terms, blog_schedules, blog_redirects, blog_feed_settings in its own SQLite (openvibe-publishing packages, prefix blog). Consumes OpenVibe.Network (SSO, identity.subject.resolve), OpenVibe.Community (community.comment.write, community.comment.moderate), OpenVibe.Media (media.object.read, namespace blog), OpenVibe.VIP (vip.resource.policy.evaluate, members-only posts) and publishes through OpenVibe.Events (events.event.publish); OpenVibe.Search reads blog.index_document.* from Events."
 }

@@ -76,7 +76,7 @@ function createPosts({ store, blogs, publication, access, outbox, log = console 
         const vis = v == null || v === '' ? 'public' : String(v);
         if (!VISIBILITIES.includes(vis)) throw new ApiError(422, 'post.invalid_visibility', `visibility must be one of ${VISIBILITIES.join(', ')}`);
         if (vis !== 'members') return { visibility: vis, entitlement_key: null };
-        const k = String(key || `blog:${blog.handle}:members`).trim().toLowerCase();
+        const k = String(key || `vip:${blog.handle}`).trim().toLowerCase();   // informational: VIP decides (domain/access.js)
         if (!KEY_RE.test(k)) throw new ApiError(422, 'post.invalid_entitlement', 'entitlement key must match ^[a-z][a-z0-9_.:-]{0,127}$');
         return { visibility: vis, entitlement_key: k };
     }

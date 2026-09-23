@@ -204,7 +204,9 @@ function createApi(ctx) {
         const { post, blog } = mustPost(req);
         if (access.canWrite(store, req.viewer, blog, 'edit', post) || access.isStaff(req.viewer)) return { post: postDto(post, { full: true }) };
         const d = await access.canReadPost(store, req.viewer, blog, post, entitlements);
-        if (!d.allowed) throw new ApiError(d.status, d.status === 403 ? 'post.members_only' : 'post.not_found', d.status === 403 ? 'Members only' : 'No such post');
+        // Members only: the teaser (title, the author's summary) and the join link, never the body.
+        if (!d.allowed && d.status === 403) throw new ApiError(403, 'post.members_only', 'Members only', { teaser: await reading.teaser(blog, post, { reason: d.vip || null }) });
+        if (!d.allowed) throw new ApiError(d.status, 'post.not_found', 'No such post');
         return { post: postDto(post) };
     }));
 

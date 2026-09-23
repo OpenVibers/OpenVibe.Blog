@@ -82,9 +82,23 @@ function load(env = process.env) {
             id: env.BLOG_WORKER_ID || `blog-${process.pid}`,
         },
 
-        // Entitlement checks for members-only (VIP) posts. 'none' (default): no entitlement service
-        // exists yet, so the check fails closed — only the post's blog members and staff can read.
-        entitlements: { provider: env.BLOG_ENTITLEMENTS_PROVIDER || 'none' },
+        // Entitlement checks for members-only posts. 'vip' (the default when Blog has a client secret):
+        // OpenVibe.VIP decides (policies/evaluate with the blog owner as owner and the product's default
+        // gate { member, blog:gated_post }), through a cache. 'none' (the default without a secret):
+        // nobody outside the blog's members and staff reads a members-only post. Both fail closed.
+        entitlements: { provider: env.BLOG_ENTITLEMENTS_PROVIDER || (env.OV_OAUTH_CLIENT_SECRET ? 'vip' : 'none') },
+
+        // OpenVibe.VIP: the service Blog asks (loopback) and the public site readers join on. A cached
+        // "yes" lives BLOG_VIP_CACHE_TTL_MS at most — the bound on how long Blog keeps admitting a
+        // reader after VIP stops (README, "Members-only posts").
+        vip: {
+            internalUrl: trim(env.OV_VIP_INTERNAL_URL || 'http://127.0.0.1:4620'),
+            publicUrl: trim(env.OV_VIP_URL || 'https://openvibe.vip'),
+            timeoutMs: int(env.BLOG_VIP_TIMEOUT_MS, 2000),
+            ttlMs: int(env.BLOG_VIP_CACHE_TTL_MS, 30_000),
+            denyTtlMs: int(env.BLOG_VIP_CACHE_DENY_TTL_MS, 10_000),
+            unavailableTtlMs: int(env.BLOG_VIP_CACHE_UNAVAILABLE_TTL_MS, 2_000),
+        },
 
         // Browser origins that may call /api/v1 with a Bearer Network JWT (no cookies cross origins).
         apiCorsOrigins: list(env.API_CORS_ORIGINS || 'https://openvibe.network,https://openvibe.live,https://openvibe.community,https://openvibe.media'),

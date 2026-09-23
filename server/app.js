@@ -28,6 +28,7 @@ const { createEffects } = require('./domain/effects');
 const { createPeople } = require('./clients/network');
 const { createCommunity } = require('./clients/community');
 const { createMedia } = require('./clients/media');
+const { createVip } = require('./clients/vip');
 const { createBlogOutbox } = require('./events/outbox');
 const { createPublicRoutes } = require('./http/public');
 const { createEditorRoutes } = require('./http/editor');
@@ -42,7 +43,7 @@ const VERSION = require('../package.json').version;
 
 /**
  * opts: config, store | dbPath, now (clock), fetchImpl, auth (a createAuthClient-like object),
- *       entitlementCheck ({ subject, key }) → bool, log
+ *       entitlementCheck ({ subject, key, blog, post }) → bool (replaces VIP), log
  */
 function createApp(opts = {}) {
     const config = opts.config || configLib.load();
@@ -57,15 +58,16 @@ function createApp(opts = {}) {
     const people = createPeople({ store, config, fetchImpl });
     const community = createCommunity({ store, config, fetchImpl });
     const media = createMedia({ config, fetchImpl });
-    const reading = createReading({ store, blogs, posts, publication, people, media });
+    const vip = createVip({ config, fetchImpl, now: store.now, log });
+    const reading = createReading({ store, blogs, posts, publication, people, media, vip });
     const effects = createEffects({ outbox, community });
-    const entitlements = access.createEntitlementChecker({ provider: config.entitlements.provider, check: opts.entitlementCheck });
+    const entitlements = access.createEntitlementChecker({ provider: config.entitlements.provider, check: opts.entitlementCheck, vip });
     const auth = opts.auth || createAuthClient(config);
     const viewers = createViewerResolver({ auth, config, people });
     const worker = createWorker({ config, store, posts, media, outbox, log });
     blogs.ensureOfficial();
 
-    const ctx = { config, store, outbox, blogs, publication, posts, people, community, media, reading, effects, entitlements, auth, viewers, access, worker };
+    const ctx = { config, store, outbox, blogs, publication, posts, people, community, media, reading, effects, entitlements, vip, auth, viewers, access, worker };
 
     const app = express();
     app.disable('x-powered-by');

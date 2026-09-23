@@ -297,6 +297,25 @@ function createPublicRoutes(ctx) {
         }, { cacheable });
     }
 
+    /**
+     * 403 for a members-only post the reader may not read: the teaser (title, the author's summary)
+     * and a join link to the owner's plans on OpenVibe.VIP — never the text. Private, no-store, noindex.
+     */
+    async function membersOnly(req, res, blog, post, decision) {
+        const teaser = await reading.teaser(blog, post, { reason: decision.vip || null });
+        if (req.path.endsWith('.json')) {
+            cacheHeaders(res, { cacheable: false, robots: 'noindex, nofollow' });
+            return res.status(403).json({ code: 'post.members_only', detail: 'Members only', teaser });
+        }
+        const signedIn = req.viewer.kind === 'user' && Boolean(req.viewer.subject);
+        send(req, res, 403, {
+            title: teaser.title ? `${teaser.title} (members only)` : 'Members only',
+            description: teaser.summary || undefined,
+            decision: pageDecision(req.path, { indexable: false }),
+            body: pages.membersTeaser({ teaser, signedIn, loginUrl: `/auth/login?next=${encodeURIComponent(req.originalUrl)}`, unavailable: decision.vip === 'vip_unavailable' || decision.vip === 'entitlement_unknown' }),
+        });
+    }
+
     /** Resolve /@handle/:slug to a readable post, or answer (301 / 404 / 403 / 410) and return null. */
     async function resolvePost(req, res, blog, slug) {
         const post = posts.bySlug(blog, slug);
@@ -323,9 +342,8 @@ function createPublicRoutes(ctx) {
         }
         const decision = await access.canReadPost(store, req.viewer, blog, post, entitlements);
         if (!decision.allowed) {
-            if (decision.status === 403) {
-                messagePage(req, res, 403, 'Members only', 'This post is for members of this blog. Sign in with an account that has access.', { href: `/auth/login?next=${encodeURIComponent(req.originalUrl)}`, label: 'Sign in' });
-            } else notFound(req, res);
+            if (decision.status === 403) await membersOnly(req, res, blog, post, decision);
+            else notFound(req, res);
             return null;
         }
         return post;

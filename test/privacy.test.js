@@ -45,11 +45,12 @@ function assertPrivate(r, what) {
         assertPrivate(await t.get('/@carol/open-post', { as: reader }), 'signed-in view');
     });
 
-    await check('members-only: anonymous → 403 without the text; non-entitled member of the network → 403; no-store', async () => {
+    await check('members-only: anonymous → 403 teaser without the text; non-entitled member of the network → 403; no-store', async () => {
         const a = await t.get('/@carol/members-post');
         assert.strictEqual(a.status, 403);
         assert.doesNotMatch(a.text, /SECRET-members/);
-        assert.doesNotMatch(a.text, /Members post/, 'not even the title');
+        assert.match(a.text, /Members post/, 'the teaser names the post');
+        assert.match(a.text, /data-members-only="1"/);
         assertPrivate(a, 'members 403');
         assert.match(a.headers.get('x-robots-tag'), /noindex/);
         const r = await t.get('/@carol/members-post', { as: reader });
@@ -128,12 +129,18 @@ function assertPrivate(r, what) {
 
     await check('without an entitlement service the check fails closed', async () => {
         const { createEntitlementChecker } = require('../server/domain/access');
+        const blog = t.ctx.blogs.byHandle('carol');
+        const post = t.ctx.posts.get(mem.id);
+        const args = { subject: vip.subject, blog, post };
         const none = createEntitlementChecker({ provider: 'none' });
-        assert.strictEqual(await none.has(vip.subject, 'vip:carol'), false);
+        assert.strictEqual(await none.has(args), false);
         const unknown = createEntitlementChecker({ provider: 'vip-service-that-does-not-exist' });
-        assert.strictEqual(await unknown.has(vip.subject, 'vip:carol'), false);
+        assert.strictEqual(await unknown.has(args), false);
+        const unwired = createEntitlementChecker({ provider: 'vip' });
+        assert.strictEqual(await unwired.has(args), false, 'vip without a client secret');
         const throwing = createEntitlementChecker({ check: async () => { throw new Error('down'); } });
-        assert.strictEqual(await throwing.has(vip.subject, 'vip:carol'), false);
+        assert.strictEqual(await throwing.has(args), false);
+        assert.deepStrictEqual(await throwing.decide(args), { allow: false, reason: 'error' });
     });
 
     await check('API reads of non-public posts are private and refused to outsiders', async () => {

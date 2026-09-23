@@ -9,7 +9,8 @@
  *
  * Search receives ONLY published, public, listable posts. Everything else (drafts, scheduled,
  * unlisted, members/VIP, private, unpublished, deleted) is a tombstone, so a visibility change or
- * an unpublish removes the old copy; a post that was never indexed gets no tombstone.
+ * an unpublish removes the old copy; a post that was never indexed gets no tombstone. The product
+ * events' document for a members-only post carries the teaser (title, summary), never the body.
  */
 const seo = require('openvibe-publishing/seo');
 const ssr = require('openvibe-publishing/ssr');
@@ -91,6 +92,9 @@ function createPublication({ store, config, outbox }) {
         const series = post.series_id ? db.prepare('SELECT slug FROM blog_series WHERE id = ?').get(post.series_id) : null;
         const rec = authorshipOf(rev);
         const acl = aclFor(blog, post);
+        // Members-only: whatever carries this document (the blog.post.* events) gets the teaser — the
+        // title and the author's summary — never the body. (Search itself only ever gets a tombstone.)
+        const gated = post.visibility === 'members';
         const doc = hooks.buildIndexDocument({
             ...identity,
             state: 'published',
@@ -99,8 +103,8 @@ function createPublication({ store, config, outbox }) {
             includeUnlisted: !forSearch,
             canonicalUrl: postUrl(blog, post),
             title: rev.fields.title,
-            summary: rev.fields.summary || ssr.markdownToText(rev.content, 300),
-            body: ssr.markdownToText(rev.content),
+            summary: gated ? (rev.fields.summary || null) : (rev.fields.summary || ssr.markdownToText(rev.content, 300)),
+            body: gated ? '' : ssr.markdownToText(rev.content),
             facets: { blog: blog.handle, tags, categories, ...(series ? { series: series.slug } : {}) },
             authorship: rec,
             citations: store.citations.forRevision(post.id, rev.number),
