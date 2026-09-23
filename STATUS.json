@@ -7,13 +7,32 @@
   "runtime": "node 22, express 4, better-sqlite3 11",
   "port": 4810,
   "domain": "openvibe.blog",
-  "packages": ["openvibe-publishing v0.2.0", "openvibe-contracts v0.13.0", "openvibe-shared v1.3.0", "openvibe-sdk v0.2.2"],
-  "capabilities": ["blog.blog.create", "blog.blog.configure", "blog.theme.set", "blog.member.manage", "blog.post.create", "blog.post.read", "blog.post.update", "blog.post.publish", "blog.post.schedule", "blog.post.unpublish", "blog.post.delete", "blog.feed.read"],
+  "packages": [
+    "openvibe-publishing v0.2.0",
+    "openvibe-contracts v0.13.0",
+    "openvibe-shared v1.3.0",
+    "openvibe-sdk v0.2.2"
+  ],
+  "capabilities": [
+    "blog.blog.create",
+    "blog.blog.configure",
+    "blog.theme.set",
+    "blog.member.manage",
+    "blog.post.create",
+    "blog.post.read",
+    "blog.post.update",
+    "blog.post.publish",
+    "blog.post.schedule",
+    "blog.post.unpublish",
+    "blog.post.delete",
+    "blog.feed.read"
+  ],
   "capabilitiesRegistered": false,
   "serviceManifestRegistered": false,
   "entitlements": "none (members-only posts fail closed until an entitlement service exists)",
   "seedPost": "draft (verbatim quotes; not reviewed by a person)",
-  "deployed": false,
+  "deployed": true,
   "placeholderInSites": true,
-  "updated": "2026-09-22"
+  "updated": "2026-09-22",
+  "deployedAt": "2026-09-23"
 }
