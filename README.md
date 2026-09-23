@@ -194,13 +194,13 @@ acts for goes in `X-OV-Subject`, and membership still applies:
 Browser and app user JWTs are judged by blog membership. Grants for these ids are decided locally
 with the contracts library's matching rule (`server/auth/capabilities.js`). The service manifest
 (proposal: `docs/service-manifest-proposal.json`) is released in openvibe-contracts v0.18.0; this
-repo pins v0.19.0.
+repo pins v0.33.0.
 
 ## Depends on
 
 - **Packages** (all pinned by release tarball): `openvibe-publishing` v0.2.1 (revisions, schedule,
   taxonomy, citations, media, discussion, seo, authorship, index-hooks, ssr), `openvibe-contracts`
-  v0.32.0, `openvibe-shared` v1.5.0 (chrome, app icon, footer, legal, release, metrics, ready,
+  v0.33.0, `openvibe-shared` v1.5.1 (chrome, app icon, footer, legal, release, metrics, ready,
   theme presets), `openvibe-sdk` v0.5.0 (events outbox, service tokens).
 - **OpenVibe.Network:**
   - SSO: the OAuth client `blog` is already seeded with redirect
