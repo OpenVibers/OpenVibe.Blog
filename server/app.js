@@ -67,7 +67,8 @@ function createApp(opts = {}) {
     const worker = createWorker({ config, store, posts, media, outbox, log });
     blogs.ensureOfficial();
 
-    const ctx = { config, store, outbox, blogs, publication, posts, people, community, media, reading, effects, entitlements, vip, auth, viewers, access, worker };
+    const aiDrafts = opts.aiDrafts || require('./domain/ai-drafts').createAiDrafts({ config, store, posts, access, fetchImpl });
+    const ctx = { config, store, outbox, blogs, publication, posts, people, community, media, reading, effects, entitlements, vip, auth, viewers, access, worker, aiDrafts };
 
     const app = express();
     app.disable('x-powered-by');

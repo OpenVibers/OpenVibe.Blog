@@ -8,6 +8,7 @@
  *   POST /write/start                        create your member blog (first use)
  *   GET  /write/@:handle                     the blog's posts (drafts included)
  *   GET  /write/@:handle/new, POST …/new     a new draft
+ *   POST /write/@:handle/ai-draft             a new draft written by OpenVibe.AI (blog.draft_post)
  *   GET  /write/posts/:id, POST …            edit (a new revision; 412 when someone saved first)
  *   POST /write/posts/:id/{publish,schedule,unschedule,unpublish,delete,review,revert}
  *   POST /write/posts/:id/media, …/media/:aid/remove
@@ -116,7 +117,18 @@ function createEditorRoutes(ctx) {
     router.get('/@:handle/new', wrap(async (req, res) => {
         const blog = blogFor(req);
         if (!blog || !access.canWrite(store, req.viewer, blog, 'create')) return notFound(req, res);
-        page(req, res, 'New post', `<p><a href="/write/@${esc(blog.handle)}">← ${esc(blog.title)}</a></p><h1>New post</h1>${editor.postForm({ blog, post: null, head: null, terms: {}, series: null, csrf: csrf(req), action: `/write/@${blog.handle}/new` })}`);
+        const aiForm = ctx.aiDrafts && ctx.aiDrafts.enabled ? editor.aiDraftForm({ blog, csrf: csrf(req) }) : '';
+        page(req, res, 'New post', `<p><a href="/write/@${esc(blog.handle)}">← ${esc(blog.title)}</a></p><h1>New post</h1>${aiForm}${editor.postForm({ blog, post: null, head: null, terms: {}, series: null, csrf: csrf(req), action: `/write/@${blog.handle}/new` })}`);
+    }));
+
+    // Draft with AI: the draft is AI-authored and stays a noindex draft until someone reviews it.
+    router.post('/@:handle/ai-draft', wrap(async (req, res) => {
+        const blog = blogFor(req);
+        if (!blog || !ctx.aiDrafts || !ctx.aiDrafts.enabled) return notFound(req, res);
+        const b = formInput(req.body);
+        const { post, revision } = await ctx.aiDrafts.draft(req.viewer, blog, { topic: b.topic, brief: b.brief, tone: b.tone, audience: b.audience }, { traceparent: req.ov && req.ov.traceparent });
+        effects.after(null, post, req.ov);
+        res.redirect(303, `/write/posts/${post.id}?saved=${encodeURIComponent(`AI draft saved (revision ${revision.number}). It stays a draft, marked as AI-written, until you review and publish it.`)}`);
     }));
 
     router.post('/@:handle/new', wrap(async (req, res) => {

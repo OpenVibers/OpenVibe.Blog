@@ -182,6 +182,15 @@ function createApi(ctx) {
         return { total, posts: rows.map((p) => postDto(p)) };
     }));
 
+    // Draft with AI: OpenVibe.AI's blog.draft_post writes a draft (AI-authored, noindex until reviewed).
+    router.post('/blogs/:handle/posts/ai-draft', guard('blog.post.create'), jsonBody, run(async (req) => {
+        const blog = mustBlog(req);
+        if (!ctx.aiDrafts || !ctx.aiDrafts.enabled) throw new ApiError(503, 'ai.not_configured', 'Drafting with AI is not available on this blog right now');
+        const { post, revision } = await ctx.aiDrafts.draft(req.viewer, blog, req.body || {}, tp(req));
+        after(null, post.id, req);
+        return { post: postDto(post, { full: true }), revision: revision.number };
+    }, 201));
+
     router.post('/blogs/:handle/posts', guard('blog.post.create'), jsonBody, run((req) => {
         const blog = mustBlog(req);
         const { post, revision } = posts.create(req.viewer, blog, req.body || {}, tp(req));

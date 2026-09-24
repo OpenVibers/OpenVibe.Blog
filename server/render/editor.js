@@ -46,6 +46,19 @@ function select(name, options, current) {
     return h`<select id="${name}" name="${name}">${options.map(([v, label]) => (v === current ? h`<option value="${v}" selected>${label}</option>` : h`<option value="${v}">${label}</option>`))}</select>`;
 }
 
+/** Draft with AI (only when OpenVibe.AI is configured): a topic, and optionally a brief, tone and audience. */
+function aiDraftForm({ blog, csrf }) {
+    return h`<details class="ai-draft"><summary>Draft with AI</summary>
+<form method="post" action="/write/@${blog.handle}/ai-draft">${csrfField(csrf)}
+<p class="muted">OpenVibe.AI writes a first draft. It is saved as a draft marked as AI-written, and is not published or shown to search engines until you review it.</p>
+<label>Topic <input name="topic" maxlength="300" required placeholder="What should the post be about?"></label>
+<label>Brief <textarea name="brief" maxlength="4000" rows="4" placeholder="Points to cover, links, what to avoid (optional)"></textarea></label>
+<label>Tone <input name="tone" maxlength="200" placeholder="e.g. friendly, plain (optional)"></label>
+<label>Audience <input name="audience" maxlength="300" placeholder="Who is it for? (optional)"></label>
+<button type="submit">Write a draft</button>
+</form></details>`;
+}
+
 /** New post and edit form (the same fields). */
 function postForm({ blog, post, head, terms, series, csrf, message, action }) {
     const f = head ? head.fields : {};
@@ -150,4 +163,4 @@ ${m.role !== 'owner' || blog.kind === 'official' ? h`<form method="post" action=
 <button type="submit">Add member</button></form></section>`);
 }
 
-module.exports = { home, blogDashboard, postForm, editPage, revisionsPage, settingsPage, gateSummary };
+module.exports = { home, blogDashboard, postForm, aiDraftForm, editPage, revisionsPage, settingsPage, gateSummary };

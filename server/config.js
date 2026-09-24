@@ -34,6 +34,8 @@ function load(env = process.env) {
         // OpenVibe.Network: SSO (OAuth2 authorization server), JWKS, client-credentials tokens.
         networkUrl: trim(env.OV_NETWORK_URL || 'https://openvibe.network'),
         networkInternalUrl: trim(env.OV_NETWORK_INTERNAL_URL || 'http://127.0.0.1:4000'),
+        // OpenVibe.AI for "Draft with AI" (server/domain/ai-drafts.js); empty = the button is not offered.
+        aiUrl: trim(env.OV_AI_INTERNAL_URL || ''),
         oauth: {
             clientId: env.OV_OAUTH_CLIENT_ID || 'blog',
             clientSecret: env.OV_OAUTH_CLIENT_SECRET || '',
