@@ -36,10 +36,10 @@ function roleOf(store, blogId, subject) {
     return row ? row.role : null;
 }
 
-/** Effective role of the viewer on a blog, staff included ('owner' on the official blog). */
+/** Effective role of the viewer on a blog, staff included ('owner' of the official blog with staff.editorial.manage). */
 function effectiveRole(store, viewer, blog) {
     const role = roleOf(store, blog.id, viewer && viewer.subject);
-    if (viewer && viewer.staff && blog.kind === 'official') return 'owner';
+    if (viewer && viewer.editorial && blog.kind === 'official') return 'owner';
     return role;
 }
 

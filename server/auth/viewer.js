@@ -22,8 +22,7 @@ const contracts = require('openvibe-contracts');
 const { extractToken, claimsToUser, decodeJwtPayload } = require('./sso');
 const { checkCapability } = require('./capabilities');
 
-const { ids, serviceAuth, http } = contracts;
-const STAFF_ROLES = new Set(['admin']);
+const { ids, serviceAuth, http, staff: staffMap } = contracts;
 const PRINCIPAL_SUB = /^(svc|app|mod):/;
 const AUDIENCE = 'openvibe.blog';
 
@@ -68,7 +67,8 @@ function createViewerResolver({ auth, config, people }) {
         if (!claims || (typeof claims.sub === 'string' && PRINCIPAL_SUB.test(claims.sub))) return null;
         const subject = ids.isSubjectId('user', claims.subject_id) ? claims.subject_id : null;
         if (subject && people) { try { people.rememberClaims(subject, claims); } catch { /* display cache only */ } }
-        return { kind: 'user', subject, staff: STAFF_ROLES.has(claims.role), origin: 'user', user: claimsToUser(claims), token };
+        // Staff powers come from the contracts staff map (ADR-022): moderation on any blog, and the official blog.
+        return { kind: 'user', subject, staff: staffMap.can(claims, 'staff.content.moderate'), editorial: staffMap.can(claims, 'staff.editorial.manage'), origin: 'user', user: claimsToUser(claims), token };
     }
 
     /** opts.services=false (pages) treats a service token as no identity: pages are for browsers. */
@@ -116,4 +116,4 @@ function guard(cap) {
     };
 }
 
-module.exports = { createViewerResolver, guard, ANONYMOUS, ViewerError, STAFF_ROLES };
+module.exports = { createViewerResolver, guard, ANONYMOUS, ViewerError };

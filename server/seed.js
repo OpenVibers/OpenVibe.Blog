@@ -55,7 +55,7 @@ function seedOfficialPost(ctx, { author, reviewer = null, publish = false, facts
     const subject = author || owners[0];
     if (!ids.isSubjectId('user', subject)) throw new Error('The seed needs an accountable author: set BLOG_OFFICIAL_OWNERS or pass --author usr_…');
     if (publish && !ids.isSubjectId('user', reviewer)) throw new Error('Publishing the seed needs the person who reviewed it: --reviewer usr_…');
-    const actor = { kind: 'user', subject, staff: true, user: {} };
+    const actor = { kind: 'user', subject, staff: true, editorial: true, user: {} };
 
     let post = posts.bySlug(blog, SLUG);
     let created = false;
@@ -78,7 +78,7 @@ function seedOfficialPost(ctx, { author, reviewer = null, publish = false, facts
     let published = false;
     if (publish) {
         const head = store.revisions.head(post.id);
-        review = posts.review({ kind: 'user', subject: reviewer, staff: true, user: {} }, post, { revision: head.number, decision: 'approved', note: 'Seed post reviewed: every quote checked against its source.' });
+        review = posts.review({ kind: 'user', subject: reviewer, staff: true, editorial: true, user: {} }, post, { revision: head.number, decision: 'approved', note: 'Seed post reviewed: every quote checked against its source.' });
         published = posts.publish(actor, posts.get(post.id), { revision: head.number }).changed;
     }
     return { post: posts.get(post.id), created, review, published };

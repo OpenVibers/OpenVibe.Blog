@@ -94,7 +94,7 @@ function createEditorRoutes(ctx) {
     router.get('/', wrap(async (req, res) => {
         const mine = blogs.blogsOf(req.viewer.subject);
         const official = blogs.official();
-        if (access.isStaff(req.viewer) && !mine.some((b) => b.id === official.id)) mine.unshift({ ...official, role: 'owner (staff)' });
+        if (req.viewer.editorial && !mine.some((b) => b.id === official.id)) mine.unshift({ ...official, role: 'owner (staff)' });
         page(req, res, 'Write', editor.home({ viewer: req.viewer, blogs: mine, csrf: csrf(req), suggestedHandle: req.viewer.user && req.viewer.user.username ? String(req.viewer.user.username).toLowerCase() : '', message: flashOf(req) }));
     }));
 
