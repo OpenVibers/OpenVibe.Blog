@@ -182,6 +182,22 @@ function createApi(ctx) {
         return { total, posts: rows.map((p) => postDto(p)) };
     }));
 
+    // The network changelog (server/changelog.js): what shipped on every OpenVibe site, newest first, and
+    // the latest patch notes post. Public: every site's "recently shipped" reads it.
+    router.get('/changelog', run((req, res) => {
+        res.set('Access-Control-Allow-Origin', '*');
+        res.set('Cache-Control', 'public, max-age=60');
+        const service = /^[a-z][a-z0-9-]{1,39}$/.test(String(req.query.service || '')) ? String(req.query.service) : null;
+        const latest = ctx.changelog.latestPost();
+        let post = null;
+        if (latest) {
+            const p = posts.get(latest.post_id);
+            const blog = p ? blogs.get(p.blog_id) : null;
+            if (p && blog && p.state === 'published') post = { id: p.id, title: (posts.head(p) || { fields: {} }).fields.title || null, url: publication.abs(publication.postPath(blog, p)), published_at: p.published_at || null, entries: latest.entries };
+        }
+        return { service, entries: ctx.changelog.entries({ service, limit: req.query.limit }), latest_post: post };
+    }));
+
     // Draft with AI: OpenVibe.AI's blog.draft_post writes a draft (AI-authored, noindex until reviewed).
     router.post('/blogs/:handle/posts/ai-draft', guard('blog.post.create'), jsonBody, run(async (req) => {
         const blog = mustBlog(req);

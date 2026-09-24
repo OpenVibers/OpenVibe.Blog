@@ -68,7 +68,8 @@ function createApp(opts = {}) {
     blogs.ensureOfficial();
 
     const aiDrafts = opts.aiDrafts || require('./domain/ai-drafts').createAiDrafts({ config, store, posts, access, fetchImpl });
-    const ctx = { config, store, outbox, blogs, publication, posts, people, community, media, reading, effects, entitlements, vip, auth, viewers, access, worker, aiDrafts };
+    const changelog = opts.changelog || require('./changelog').createChangelog({ config, store, blogs, posts, aiDrafts, fetchImpl, log });
+    const ctx = { config, store, outbox, blogs, publication, posts, people, community, media, reading, effects, entitlements, vip, auth, viewers, access, worker, aiDrafts, changelog };
 
     const app = express();
     app.disable('x-powered-by');

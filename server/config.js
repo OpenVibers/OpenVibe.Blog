@@ -34,6 +34,22 @@ function load(env = process.env) {
         // OpenVibe.Network: SSO (OAuth2 authorization server), JWKS, client-credentials tokens.
         networkUrl: trim(env.OV_NETWORK_URL || 'https://openvibe.network'),
         networkInternalUrl: trim(env.OV_NETWORK_INTERNAL_URL || 'http://127.0.0.1:4000'),
+        // The network changelog and its patch notes (server/changelog.js).
+        changelog: {
+            enabled: env.CHANGELOG !== 'off',
+            networkUrl: trim(env.OV_NETWORK_INTERNAL_URL || 'http://127.0.0.1:4000'),
+            githubToken: env.CHANGELOG_GITHUB_TOKEN || '',
+            blogHandle: String(env.CHANGELOG_BLOG || 'openvibe').toLowerCase(),
+            batchSize: Math.max(5, parseInt(env.CHANGELOG_BATCH_SIZE, 10) || 40),
+            majorLines: Math.max(50, parseInt(env.CHANGELOG_MAJOR_LINES, 10) || 800),
+            quietMs: Math.max(0, parseInt(env.CHANGELOG_QUIET_MS, 10) || 30 * 60 * 1000),
+            maxAgeMs: Math.max(0, parseInt(env.CHANGELOG_MAX_AGE_MS, 10) || 7 * 24 * 3600 * 1000),
+            minGapMs: Math.max(0, parseInt(env.CHANGELOG_MIN_GAP_MS, 10) || 6 * 3600 * 1000),
+            intervalMs: Math.max(60 * 1000, parseInt(env.CHANGELOG_INTERVAL_MS, 10) || 10 * 60 * 1000),
+            firstDelayMs: 60 * 1000,
+            since: env.CHANGELOG_SINCE && !Number.isNaN(Date.parse(env.CHANGELOG_SINCE)) ? new Date(env.CHANGELOG_SINCE).toISOString() : null,
+            aiDraft: env.CHANGELOG_AI_DRAFT !== 'off',
+        },
         // OpenVibe.AI for "Draft with AI" (server/domain/ai-drafts.js); empty = the button is not offered.
         aiUrl: trim(env.OV_AI_INTERNAL_URL || ''),
         oauth: {

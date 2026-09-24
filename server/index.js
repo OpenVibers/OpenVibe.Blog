@@ -17,10 +17,13 @@ const server = app.listen(config.port, config.host, () => {
 server.keepAliveTimeout = 65_000;
 ctx.outbox.start();
 ctx.worker.start();
+// The network changelog and patch notes run where the worker runs (one process).
+if (config.worker.enabled) ctx.changelog.start();
 
 function shutdown(signal) {
     console.log(`[Blog] ${signal}: closing`);
     ctx.worker.stop();
+    ctx.changelog.stop();
     server.close(async () => {
         try { await ctx.outbox.stop(); } catch { /* best effort */ }
         try { ctx.store.close(); } catch { /* already closed */ }
