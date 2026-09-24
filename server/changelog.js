@@ -26,6 +26,7 @@
  * shipped" shows, with the latest patch notes post to link to.
  */
 const crypto = require('crypto');
+const { serviceAuth } = require('openvibe-contracts');
 
 const GITHUB = 'https://api.github.com';
 const clean = (s, n) => String(s == null ? '' : s).replace(/\s+/g, ' ').trim().slice(0, n);
@@ -124,10 +125,43 @@ function createChangelog({ config, store, blogs, posts, aiDrafts = null, fetchIm
         if (!res.ok) throw Object.assign(new Error(`${url.replace(/\?.*$/, '')} answered ${res.status}`), { status: res.status });
         return res.json();
     }
-    const gh = (path) => getJson(`${GITHUB}${path}`, { headers: {
-        Accept: 'application/vnd.github+json', 'User-Agent': 'OpenVibe.Blog changelog (+https://openvibe.blog)',
-        ...(c.githubToken ? { Authorization: `Bearer ${c.githubToken}` } : {}),
-    } });
+    // The GitHub token: CHANGELOG_GITHUB_TOKEN, else the network's (admin → Settings → GitHub), asked of
+    // Network with Blog's service token (network.integration.github.read) and kept ten minutes; else
+    // anonymous (60 requests an hour, shared by the host).
+    const TOKEN_TTL_MS = 10 * 60 * 1000;
+    const networkTokens = !c.githubToken && config.oauth && config.oauth.clientSecret && config.networkInternalUrl
+        ? serviceAuth.createTokenClient({ tokenUrl: `${config.networkInternalUrl}/oauth/token`, clientId: config.oauth.clientId, clientSecret: config.oauth.clientSecret,
+            audience: 'openvibe.network', scope: 'network.integration.github.read', fetchImpl })
+        : null;
+    let cachedToken = { value: null, until: 0, source: c.githubToken ? 'env' : 'none' };
+    async function githubToken() {
+        if (c.githubToken) return c.githubToken;
+        if (!networkTokens) return null;
+        if (nowMs() < cachedToken.until) return cachedToken.value;
+        try {
+            const res = await fetchImpl(`${config.networkInternalUrl}/internal/integrations/github-token`, { headers: { Accept: 'application/json', ...(await networkTokens.authHeaders()) }, signal: AbortSignal.timeout(10000) });
+            const body = await res.json().catch(() => ({}));
+            if (res.status === 401) networkTokens.invalidate();
+            const value = res.ok && typeof body.token === 'string' && body.token ? body.token : null;
+            cachedToken = { value, until: nowMs() + (res.ok || res.status === 404 ? TOKEN_TTL_MS : 60 * 1000), source: value ? 'network' : res.status === 404 ? 'none' : `network error ${res.status}` };
+        } catch (err) {
+            cachedToken = { value: null, until: nowMs() + 60 * 1000, source: `network unreachable: ${err.message}` };
+        }
+        return cachedToken.value;
+    }
+    const gh = async (path) => {
+        const token = await githubToken();
+        try {
+            return await getJson(`${GITHUB}${path}`, { headers: {
+                Accept: 'application/vnd.github+json', 'User-Agent': 'OpenVibe.Blog changelog (+https://openvibe.blog)',
+                ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            } });
+        } catch (err) {
+            // A revoked or replaced network token: ask again next time.
+            if (err.status === 401 && token && !c.githubToken) cachedToken.until = 0;
+            throw err;
+        }
+    };
 
     /** [{ id, name, repo, origin, release, releasedAt }] for services that run a release and name a repository. */
     async function registry() {
@@ -349,7 +383,7 @@ function createChangelog({ config, store, blogs, posts, aiDrafts = null, fetchIm
     /** Every site with entries: [{ service, entries, latest_at }], most recently shipped first. */
     function sites() { return q.sites.all(); }
 
-    return { tick, collect, due, render, publish, start, stop, entries, page, latestPost, recentPosts, sites, importHistory, stats: () => ({ enabled: c.enabled, ...stats, pending: q.pending.all().length }) };
+    return { tick, collect, due, render, publish, start, stop, entries, page, latestPost, recentPosts, sites, importHistory, stats: () => ({ enabled: c.enabled, ...stats, github_token: cachedToken.source, pending: q.pending.all().length }) };
 }
 
 /** A stable id for a batch (tests). */

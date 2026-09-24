@@ -129,6 +129,50 @@ const H = (n) => n.toString(16).padStart(40, 'a');
         assert.ok(one.next);
     });
 
+    await check('the GitHub token: CHANGELOG_GITHUB_TOKEN, else the network\'s (Blog service token, kept ten minutes), else anonymous', async () => {
+        const seen = { auth: [], network: 0, oauth: [] };
+        let networkAnswer = { status: 200, body: { token: 'ghp_fromnetwork', source: 'database' } };
+        const fx = async (url, opts = {}) => {
+            const u = new URL(url);
+            const json = (body, status = 200) => ({ ok: status < 300, status, json: async () => body });
+            if (u.pathname === '/oauth/token') { seen.oauth.push(String(opts.body)); return json({ access_token: 'svc-tok', token_type: 'Bearer', expires_in: 300 }); }
+            if (u.pathname === '/internal/integrations/github-token') {
+                seen.network++;
+                assert.strictEqual(opts.headers.Authorization || opts.headers.authorization, 'Bearer svc-tok');
+                return json(networkAnswer.body, networkAnswer.status);
+            }
+            if (u.hostname === 'api.github.com') seen.auth.push((opts.headers && opts.headers.Authorization) || null);
+            return fetchImpl(url, opts);
+        };
+        const mk = (extra, oauth = { clientId: 'blog', clientSecret: 's3cret' }) => createChangelog({ config: { ...config, oauth, networkInternalUrl: 'http://network.internal', changelog: { ...config.changelog, ...extra } }, store: t.ctx.store, blogs: t.ctx.blogs, posts: t.ctx.posts, aiDrafts: null, fetchImpl: fx, log: { log() {}, warn() {} } });
+        const release = async (cl2, n) => { releases.live = `aaaaaaa1000${n}`; compares[releases.live] = { status: 'ahead', commits: [commit(900 + n, `Token check ${n}`)], files: [{ additions: 1, deletions: 0 }] }; await cl2.collect(); };
+
+        const net = mk({ githubToken: '' });
+        await release(net, 1);
+        assert.strictEqual(seen.auth.pop(), 'Bearer ghp_fromnetwork');
+        assert.ok(seen.oauth[0].includes('audience=openvibe.network') && seen.oauth[0].includes('network.integration.github.read'));
+        assert.strictEqual(net.stats().github_token, 'network');
+        await release(net, 2);
+        assert.strictEqual(seen.auth.pop(), 'Bearer ghp_fromnetwork');
+        assert.strictEqual(seen.network, 1, 'kept ten minutes');
+
+        networkAnswer = { status: 404, body: { error: 'not_configured' } };
+        t.clock.advance(11 * 60 * 1000);
+        await release(net, 3);
+        assert.strictEqual(seen.auth.pop(), null, 'none set: anonymous');
+        assert.strictEqual(net.stats().github_token, 'none');
+
+        const env = mk({ githubToken: 'ghp_fromenv' });
+        const before = seen.network;
+        await release(env, 4);
+        assert.strictEqual(seen.auth.pop(), 'Bearer ghp_fromenv');
+        assert.strictEqual(seen.network, before, 'the environment wins; Network is not asked');
+
+        const none = mk({ githubToken: '' }, { clientId: 'blog', clientSecret: '' });
+        await release(none, 5);
+        assert.strictEqual(seen.auth.pop(), null, 'no service credentials: anonymous');
+    });
+
     await t.close();
     done();
 })();
