@@ -5,7 +5,7 @@
  *   - <head>: title, description, canonical and robots from the indexability gate's decision
  *     (openvibe-publishing/seo metaTags — there is no default that makes a page indexable),
  *     Open Graph/Twitter, JSON-LD, feed links, the shared app icon and critical canvas
- *   - the shared chrome: navbar.js and theme-loader.js from the Network (progressive), a
+ *   - the OpenVibe Frame: navbar.js and theme-loader.js from the Network (progressive), a
  *     <noscript> navigation bar and the server-rendered shared footer (openvibe-shared)
  *   - a blog's theme preset applied to its content surface only (openvibe-shared tokens)
  */
@@ -15,7 +15,7 @@ const path = require('path');
 const seo = require('openvibe-publishing/seo');
 const { escapeHtml: esc } = require('openvibe-publishing/ssr');
 const appIcon = require('openvibe-shared/app-icon');
-const chrome = require('openvibe-shared/chrome-ssr');
+const frame = require('openvibe-shared/frame');
 
 const NETWORK_URL = 'https://openvibe.network';
 const SITE_NAME = 'OpenVibe.Blog';
@@ -97,16 +97,16 @@ ${appIcon.headTags({ site: 'blog' })}
 <body class="${esc(o.bodyClass || '')}">
 <a class="skip" href="#main">Skip to content</a>
 <div id="navbar-mount"></div>
-${chrome.noscriptNav({ name: SITE_NAME, home: '/', links: [{ label: 'Blog', href: '/' }, { label: 'Write', href: '/write' }] })}
+${frame.noscriptNav({ name: SITE_NAME, home: '/', links: [{ label: 'Blog', href: '/' }, { label: 'Write', href: '/write' }] })}
 <noscript><div class="account-bar" role="navigation" aria-label="Account">${account}</div></noscript>
 <main id="main" class="page blog-surface"${style}>
 ${o.body || ''}
 </main>
-${chrome.footer(footer)}
+${frame.footer(footer)}
 <script>
 window.__OV_PAGE = ${JSON.stringify({ navbar: nav, footer }).replace(/</g, '\\u003c')};
 document.addEventListener('DOMContentLoaded', function () {
-  try { if (window.OpenVibeNavbar) OpenVibeNavbar.init(window.__OV_PAGE.navbar); } catch (e) { /* the chrome is optional */ }
+  try { if (window.OpenVibeNavbar) OpenVibeNavbar.init(window.__OV_PAGE.navbar); } catch (e) { /* the Frame is optional */ }
   try { if (window.OpenVibeFooter) OpenVibeFooter.init(window.__OV_PAGE.footer); } catch (e) { /* */ }
 });
 </script>

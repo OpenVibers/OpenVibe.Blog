@@ -17,7 +17,7 @@
  *     members/VIP and private posts, refusals, 404/410 — is `private, no-store` + X-Robots-Tag.
  */
 const express = require('express');
-const chromeSsr = require('openvibe-shared/chrome-ssr');
+const frame = require('openvibe-shared/frame');
 const seo = require('openvibe-publishing/seo');
 const ssr = require('openvibe-publishing/ssr');
 const authorship = require('openvibe-publishing/authorship');
@@ -110,7 +110,7 @@ function createPublicRoutes(ctx) {
                 blog, blogUrl: `/@${blog.handle}`, items, pager, feeds,
                 series: blogs.series(blog).filter((sr) => shows({ seriesId: sr.id })), categories: prune(reading.categoriesTree(blog)),
                 canWrite: access.canWrite(store, req.viewer, blog, 'create'),
-            }) + (home && pager.page === 1 ? chromeSsr.shipped({ service: 'blog', title: 'Recently shipped on OpenVibe.Blog' }) : ''),
+            }) + (home && pager.page === 1 ? frame.shipped({ service: 'blog', title: 'Recently shipped on OpenVibe.Blog' }) : ''),
         }, { cacheable: !restricted });
     }
 
@@ -123,7 +123,7 @@ function createPublicRoutes(ctx) {
         description: 'Every change deployed to OpenVibe.Blog, newest first, with the Patch notes that gather them.',
         decision: pageDecision('/updates'),
         canonical: seo.canonicalUrl(config.baseUrl, '/updates'),
-        body: chromeSsr.updatesBody({ service: 'blog', siteName: 'OpenVibe.Blog' }) + chromeSsr.shippedScript(),
+        body: frame.updatesBody({ service: 'blog', siteName: 'OpenVibe.Blog' }) + frame.shippedScript(),
     }, { cacheable: true })));
 
     router.get('/@:handle', wrap(async (req, res) => {
