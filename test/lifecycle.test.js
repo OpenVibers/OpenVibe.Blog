@@ -165,6 +165,20 @@ const LONG = Array.from({ length: 120 }, (_, i) => `word${i}`).join(' ');
         assert.strictEqual(r.headers.get('content-type'), 'application/problem+json');
     });
 
+    await check('an edit that does not send citations keeps them; sending a list replaces them', async () => {
+        const made = await t.get('/api/v1/blogs/alice/posts', { as: alice, json: { title: 'Cited', body: `Sources below.\n\n${LONG}`, citations: [{ url: 'https://example.org/a', title: 'A', quote: 'quoted' }] } });
+        assert.strictEqual(made.status, 201, made.text);
+        const id = made.json().post.id;
+        const citesAt = () => { const h = t.ctx.store.revisions.head(id); return t.ctx.store.citations.forRevision(id, h.number).map((c) => c.url); };
+        assert.deepStrictEqual(citesAt(), ['https://example.org/a']);
+        let r = await t.get(`/api/v1/posts/${id}`, { as: alice, method: 'PATCH', json: { expected_revision: t.ctx.store.revisions.head(id).number, body: `Edited in /write.\n\n${LONG}` } });
+        assert.strictEqual(r.status, 200, r.text);
+        assert.deepStrictEqual(citesAt(), ['https://example.org/a'], 'carried forward');
+        r = await t.get(`/api/v1/posts/${id}`, { as: alice, method: 'PATCH', json: { expected_revision: t.ctx.store.revisions.head(id).number, body: `Replaced.\n\n${LONG}`, citations: [] } });
+        assert.strictEqual(r.status, 200, r.text);
+        assert.deepStrictEqual(citesAt(), [], 'an explicit empty list removes them');
+    });
+
     await t.close();
     done();
 })();

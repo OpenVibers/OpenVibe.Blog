@@ -293,7 +293,12 @@ function createPosts({ store, blogs, publication, access, outbox, log = console 
                     });
                     revision = out.revision;
                     created = out.created;
-                    if (created) attachCitations(post, revision.number, input.citations);
+                    if (created) {
+                        // An edit that does not send citations keeps the ones it had (the /write editor does not
+                        // resend them); sending a list, even an empty one, replaces them.
+                        if (input.citations !== undefined) attachCitations(post, revision.number, input.citations);
+                        else store.citations.carryForward({ entityId: post.id, fromRevision: head.number, toRevision: revision.number, attachedBy: viewer.subject });
+                    }
                 }
                 const sets = {};
                 if (input.slug !== undefined && input.slug !== '' && input.slug !== post.slug) {
