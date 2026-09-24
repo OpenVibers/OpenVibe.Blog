@@ -17,6 +17,7 @@
  *     members/VIP and private posts, refusals, 404/410 — is `private, no-store` + X-Robots-Tag.
  */
 const express = require('express');
+const ovServe = require('openvibe-shared/serve');
 const frame = require('openvibe-shared/frame');
 const seo = require('openvibe-publishing/seo');
 const ssr = require('openvibe-publishing/ssr');
@@ -123,7 +124,7 @@ function createPublicRoutes(ctx) {
         description: 'Every change deployed to OpenVibe.Blog, newest first, with the Patch notes that gather them.',
         decision: pageDecision('/updates'),
         canonical: seo.canonicalUrl(config.baseUrl, '/updates'),
-        body: frame.updatesBody({ service: 'blog', siteName: 'OpenVibe.Blog' }) + frame.shippedScript(),
+        body: frame.updatesBody({ service: 'blog', siteName: 'OpenVibe.Blog' }) + `<script src="${ovServe.url('shipped.js')}" defer></script>`,
     }, { cacheable: true })));
 
     router.get('/@:handle', wrap(async (req, res) => {

@@ -17,14 +17,14 @@ const { boot, check, done } = require('./helpers/boot');
         const up = await t.get('/updates');
         assert.strictEqual(up.status, 200);
         assert.ok(up.text.includes('What shipped on OpenVibe.Blog') && up.text.includes('data-ov-shipped="log" data-service="blog"'));
-        assert.ok(up.text.includes('https://openvibe.network/shared/shipped.js'));
+        assert.ok(/\/shared\/shipped\.js\?v=[0-9a-f]{12}/.test(up.text), 'this site\'s own pinned shipped.js');
         assert.ok(up.text.includes('https://openvibe.network/updates?site=blog'), 'no-JavaScript fallback');
     });
     await check('one account UI: the shared navbar signs out through this site; the old bar is only for no-JS', async () => {
         const home = await t.get('/');
         assert.ok(home.text.includes('"logoutUrl":"/auth/logout?next={path}"'));
         assert.ok(/<noscript><div class="account-bar"/.test(home.text), 'the site account bar only without JavaScript');
-        assert.ok(home.text.includes('https://openvibe.network/shared/footer.js') && home.text.includes('"updates":"/updates"'));
+        assert.ok(/\/shared\/footer\.js\?v=[0-9a-f]{12}/.test(home.text) && home.text.includes('"updates":"/updates"'));
         assert.ok(home.text.includes('href="/updates"'), 'the footer links the update log');
     });
     await t.close();

@@ -10,6 +10,7 @@
  *   - a blog's theme preset applied to its content surface only (openvibe-shared tokens)
  */
 const crypto = require('crypto');
+const ovServe = require('openvibe-shared/serve');
 const fs = require('fs');
 const path = require('path');
 const seo = require('openvibe-publishing/seo');
@@ -90,9 +91,9 @@ ${o.modified ? `<meta property="article:modified_time" content="${esc(o.modified
 ${seo.feedLinks(o.feeds || [])}
 ${appIcon.headTags({ site: 'blog' })}
 <link rel="stylesheet" href="${asset('css/blog.css')}">
-<script src="${NETWORK_URL}/shared/theme-loader.js" defer></script>
-<script src="${NETWORK_URL}/shared/navbar.js" defer></script>
-<script src="${NETWORK_URL}/shared/footer.js" defer></script>
+<script src="${ovServe.url('theme-loader.js')}" defer></script>
+<script src="${ovServe.url('navbar.js')}" defer></script>
+<script src="${ovServe.url('footer.js')}" defer></script>
 </head>
 <body class="${esc(o.bodyClass || '')}">
 <a class="skip" href="#main">Skip to content</a>
