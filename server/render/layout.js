@@ -72,7 +72,9 @@ function renderPage(o) {
         silentLogin: `${o.config.baseUrl}/auth/login?silent=1&next={url}`,
         sessionUrl: '/auth/me',
         loginUrl: `/auth/login?next=${loginNext}`,
+        logoutUrl: '/auth/logout?next={path}',   // Sign out in the shared navbar ends this site's session too
     };
+    const footer = { service: 'blog', variant: 'full', mount: '#ov-footer', brandName: SITE_NAME, updates: '/updates' };
     const style = o.theme ? ` style="${esc(themeStyle(o.theme.vars))}" data-blog-theme="${esc(o.theme.slug)}"` : '';
     const account = signedIn
         ? `<a href="/write">Write</a> · <a href="/auth/logout?next=${loginNext}">Sign out</a>`
@@ -90,20 +92,22 @@ ${appIcon.headTags({ site: 'blog' })}
 <link rel="stylesheet" href="${asset('css/blog.css')}">
 <script src="${NETWORK_URL}/shared/theme-loader.js" defer></script>
 <script src="${NETWORK_URL}/shared/navbar.js" defer></script>
+<script src="${NETWORK_URL}/shared/footer.js" defer></script>
 </head>
 <body class="${esc(o.bodyClass || '')}">
 <a class="skip" href="#main">Skip to content</a>
 <div id="navbar-mount"></div>
 ${chrome.noscriptNav({ name: SITE_NAME, home: '/', links: [{ label: 'Blog', href: '/' }, { label: 'Write', href: '/write' }] })}
-<div class="account-bar" role="navigation" aria-label="Account">${account}</div>
+<noscript><div class="account-bar" role="navigation" aria-label="Account">${account}</div></noscript>
 <main id="main" class="page blog-surface"${style}>
 ${o.body || ''}
 </main>
-${chrome.footer({ service: 'blog', variant: 'full' })}
+${chrome.footer(footer)}
 <script>
-window.__OV_PAGE = ${JSON.stringify({ navbar: nav }).replace(/</g, '\\u003c')};
+window.__OV_PAGE = ${JSON.stringify({ navbar: nav, footer }).replace(/</g, '\\u003c')};
 document.addEventListener('DOMContentLoaded', function () {
   try { if (window.OpenVibeNavbar) OpenVibeNavbar.init(window.__OV_PAGE.navbar); } catch (e) { /* the chrome is optional */ }
+  try { if (window.OpenVibeFooter) OpenVibeFooter.init(window.__OV_PAGE.footer); } catch (e) { /* */ }
 });
 </script>
 </body>

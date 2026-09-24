@@ -17,6 +17,7 @@
  *     members/VIP and private posts, refusals, 404/410 — is `private, no-store` + X-Robots-Tag.
  */
 const express = require('express');
+const chromeSsr = require('openvibe-shared/chrome-ssr');
 const seo = require('openvibe-publishing/seo');
 const ssr = require('openvibe-publishing/ssr');
 const authorship = require('openvibe-publishing/authorship');
@@ -77,7 +78,7 @@ function createPublicRoutes(ctx) {
 
     // ── Blog front pages ────────────────────────────────────
 
-    async function blogFront(req, res, blog) {
+    async function blogFront(req, res, blog, { home = false } = {}) {
         const page = pageNumber(req);
         const restricted = isMember(blog, req.viewer);
         const path = publication.blogPath(blog);
@@ -109,11 +110,21 @@ function createPublicRoutes(ctx) {
                 blog, blogUrl: `/@${blog.handle}`, items, pager, feeds,
                 series: blogs.series(blog).filter((sr) => shows({ seriesId: sr.id })), categories: prune(reading.categoriesTree(blog)),
                 canWrite: access.canWrite(store, req.viewer, blog, 'create'),
-            }),
+            }) + (home && pager.page === 1 ? chromeSsr.shipped({ service: 'blog', title: 'Recently shipped on OpenVibe.Blog' }) : ''),
         }, { cacheable: !restricted });
     }
 
-    router.get('/', wrap(async (req, res) => blogFront(req, res, blogs.official())));
+    router.get('/', wrap(async (req, res) => blogFront(req, res, blogs.official(), { home: true })));
+
+    // What shipped on OpenVibe.Blog: the shared update log (openvibe-shared shipped.js, fed by the
+    // network changelog this service keeps), like every OpenVibe site's /updates.
+    router.get('/updates', wrap(async (req, res) => send(req, res, 200, {
+        title: 'What shipped on OpenVibe.Blog',
+        description: 'Every change deployed to OpenVibe.Blog, newest first, with the Patch notes that gather them.',
+        decision: pageDecision('/updates'),
+        canonical: seo.canonicalUrl(config.baseUrl, '/updates'),
+        body: chromeSsr.updatesBody({ service: 'blog', siteName: 'OpenVibe.Blog' }) + chromeSsr.shippedScript(),
+    }, { cacheable: true })));
 
     router.get('/@:handle', wrap(async (req, res) => {
         const blog = activeBlog(req);
