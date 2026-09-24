@@ -22,7 +22,7 @@ const H = (n) => n.toString(16).padStart(40, 'a');
             { id: 'tools', name: 'OpenVibe.Tools', repository: 'OpenVibers/OpenVibe.Tools', publicOrigin: 'https://openvibe.tools' },
             { id: 'norepo', name: 'X' },
         ] });
-        if (u.pathname === '/api/v1/registry/releases') return json({ releases: Object.entries(releases).map(([id, r]) => ({ id, release: r, released_at: new Date(t.clock.now()).toISOString() })) });
+        if (u.pathname === '/api/v1/registry/releases') return json({ checked_at: null, libraries: [], behind: [], services: Object.entries(releases).map(([id, r]) => ({ id, release: r, released_at: new Date(t.clock.now()).toISOString() })) });
         if (u.hostname === 'api.github.com') {
             ghCalls.push(u.pathname);
             const m = u.pathname.match(/^\/repos\/(.+)\/compare\/(.+)\.\.\.(.+)$/);

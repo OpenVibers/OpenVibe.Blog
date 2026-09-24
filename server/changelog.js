@@ -110,9 +110,10 @@ function createChangelog({ config, store, blogs, posts, aiDrafts = null, fetchIm
     async function registry() {
         const base = String(c.networkUrl).replace(/\/+$/, '');
         const [svc, rel] = await Promise.all([getJson(`${base}/api/v1/registry/services`), getJson(`${base}/api/v1/registry/releases`)]);
-        const services = new Map((svc.services || svc || []).map((s) => [s.id, s]));
+        const list = (x, key) => (Array.isArray(x) ? x : (x && (x[key] || x.services)) || []);
+        const services = new Map(list(svc, 'services').map((s) => [s.id, s]));
         const out = [];
-        for (const r of rel.releases || rel || []) {
+        for (const r of list(rel, 'releases')) {
             const s = services.get(r.id);
             if (!s || !s.repository || !/^[0-9a-f]{7,40}$/.test(String(r.release || ''))) continue;
             if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(s.repository)) continue;
