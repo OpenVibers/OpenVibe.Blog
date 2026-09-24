@@ -188,14 +188,18 @@ function createApi(ctx) {
         res.set('Access-Control-Allow-Origin', '*');
         res.set('Cache-Control', 'public, max-age=60');
         const service = /^[a-z][a-z0-9-]{1,39}$/.test(String(req.query.service || '')) ? String(req.query.service) : null;
-        const latest = ctx.changelog.latestPost();
-        let post = null;
-        if (latest) {
-            const p = posts.get(latest.post_id);
+        const postOf = (row) => {
+            const p = row && posts.get(row.post_id);
             const blog = p ? blogs.get(p.blog_id) : null;
-            if (p && blog && p.state === 'published') post = { id: p.id, title: (posts.head(p) || { fields: {} }).fields.title || null, url: publication.abs(publication.postPath(blog, p)), published_at: p.published_at || null, entries: latest.entries };
-        }
-        return { service, entries: ctx.changelog.entries({ service, limit: req.query.limit }), latest_post: post };
+            if (!p || !blog || p.state !== 'published') return null;
+            return { id: p.id, title: (posts.head(p) || { fields: {} }).fields.title || null, url: publication.abs(publication.postPath(blog, p)), published_at: p.published_at || null, entries: row.entries };
+        };
+        const page = ctx.changelog.page({ service, limit: req.query.limit, before: req.query.before });
+        const recent = ctx.changelog.recentPosts(5).map(postOf).filter(Boolean);
+        return {
+            service, entries: page.entries, next: page.next, latest_post: recent[0] || null, posts: recent,
+            ...(service ? {} : { sites: ctx.changelog.sites() }),
+        };
     }));
 
     // Draft with AI: OpenVibe.AI's blog.draft_post writes a draft (AI-authored, noindex until reviewed).

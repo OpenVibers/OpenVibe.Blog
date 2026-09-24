@@ -63,7 +63,25 @@ function ensureSchema(db) {
             ai_draft_id TEXT,
             created_at  INTEGER NOT NULL
         );
+        CREATE TABLE IF NOT EXISTS changelog_history (
+            service     TEXT PRIMARY KEY,
+            imported    INTEGER NOT NULL,
+            imported_at INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_changelog_service ON changelog_entries(service, deployed_at);
     `);
+    // Added after the first release: who wrote each change (the commit's author name).
+    const cols = db.prepare('PRAGMA table_info(changelog_entries)').all().map((c) => c.name);
+    if (!cols.includes('author')) db.exec('ALTER TABLE changelog_entries ADD COLUMN author TEXT');
+}
+
+/** The feed's page cursor: "<deployed_at>|<id>" of the last entry shown. */
+function encodeCursor(e) { return Buffer.from(`${e.deployed_at}|${e.id}`).toString('base64url'); }
+function decodeCursor(s) {
+    try {
+        const [at, id] = Buffer.from(String(s || ''), 'base64url').toString('utf8').split('|');
+        return at && !Number.isNaN(Date.parse(at)) && /^\d+$/.test(id) ? { at, id: Number(id) } : null;
+    } catch { return null; }
 }
 
 /** The first line of a commit message, cut at a word near `n` characters. */
@@ -87,8 +105,13 @@ function createChangelog({ config, store, blogs, posts, aiDrafts = null, fetchIm
         state: db.prepare('SELECT * FROM changelog_state WHERE service = ?'),
         putState: db.prepare(`INSERT INTO changelog_state (service, release, head, checked_at) VALUES (@service, @release, @head, @at)
             ON CONFLICT(service) DO UPDATE SET release = excluded.release, head = excluded.head, checked_at = excluded.checked_at`),
-        insert: db.prepare(`INSERT OR IGNORE INTO changelog_entries (service, repo, sha, subject, committed_at, deployed_at, release, release_lines, major)
-            VALUES (@service, @repo, @sha, @subject, @committed_at, @deployed_at, @release, @release_lines, @major)`),
+        insert: db.prepare(`INSERT OR IGNORE INTO changelog_entries (service, repo, sha, subject, author, committed_at, deployed_at, release, release_lines, major, post_id)
+            VALUES (@service, @repo, @sha, @subject, @author, @committed_at, @deployed_at, @release, @release_lines, @major, @post_id)`),
+        fillAuthor: db.prepare('UPDATE changelog_entries SET author = ? WHERE service = ? AND sha = ? AND author IS NULL'),
+        history: db.prepare('SELECT * FROM changelog_history WHERE service = ?'),
+        putHistory: db.prepare('INSERT OR REPLACE INTO changelog_history (service, imported, imported_at) VALUES (?, ?, ?)'),
+        recentPosts: db.prepare('SELECT * FROM changelog_posts ORDER BY created_at DESC LIMIT ?'),
+        sites: db.prepare(`SELECT service, COUNT(*) AS entries, MAX(deployed_at) AS latest_at FROM changelog_entries GROUP BY service ORDER BY latest_at DESC`),
         pending: db.prepare('SELECT * FROM changelog_entries WHERE post_id IS NULL ORDER BY deployed_at, committed_at, id'),
         mark: db.prepare('UPDATE changelog_entries SET post_id = ? WHERE id = ? AND post_id IS NULL'),
         lastPost: db.prepare('SELECT * FROM changelog_posts ORDER BY created_at DESC LIMIT 1'),
@@ -122,18 +145,43 @@ function createChangelog({ config, store, blogs, posts, aiDrafts = null, fetchIm
         return out;
     }
 
-    function addEntries(svc, commits, { releaseLines = 0, major = false } = {}) {
+    const authorOf = (cm) => clean((cm.commit && cm.commit.author && cm.commit.author.name) || (cm.author && cm.author.login) || '', 80) || null;
+
+    // history: the commits a site shipped before the changelog watched it, so its updates page is not
+    // empty on day one. They carry post_id 'history' (never pending, never in a patch notes post) and
+    // their commit time stands in for the deploy time nobody recorded.
+    function addEntries(svc, commits, { releaseLines = 0, major = false, history = false } = {}) {
         const deployedAt = svc.releasedAt || new Date(nowMs()).toISOString();
         let n = 0;
         for (const cm of commits) {
             const subject = subjectOf(cm.commit && cm.commit.message);
             if (!subject || isNoise(subject)) continue;
             const flagged = major || isVersionBump(subject) || /\[major\]/i.test((cm.commit && cm.commit.message) || '');
-            n += q.insert.run({
-                service: svc.id, repo: svc.repo, sha: cm.sha, subject, committed_at: (cm.commit && cm.commit.author && cm.commit.author.date) || null,
-                deployed_at: deployedAt, release: svc.release, release_lines: releaseLines, major: flagged ? 1 : 0,
+            const committedAt = (cm.commit && cm.commit.author && cm.commit.author.date) || null;
+            if (history && !committedAt) continue;
+            const author = authorOf(cm);
+            const added = q.insert.run({
+                service: svc.id, repo: svc.repo, sha: cm.sha, subject, author, committed_at: committedAt,
+                deployed_at: history ? new Date(committedAt).toISOString() : deployedAt, release: svc.release, release_lines: releaseLines, major: flagged ? 1 : 0,
+                post_id: history ? 'history' : null,
             }).changes;
+            if (!added && author) q.fillAuthor.run(author, svc.id, cm.sha);
+            n += added;
         }
+        return n;
+    }
+
+    /** Once per service: its last c.history commits on the deployed release. */
+    async function importHistory(svc) {
+        if (!(c.history > 0) || q.history.get(svc.id)) return 0;
+        let list;
+        try { list = await gh(`/repos/${svc.repo}/commits?sha=${svc.release}&per_page=${Math.min(c.history, 100)}`); } catch (err) {
+            // A repository GitHub will not list (private, empty, gone) is not asked again; anything else is.
+            if ([404, 409, 422].includes(err.status)) { q.putHistory.run(svc.id, 0, nowMs()); return 0; }
+            throw err;
+        }
+        const n = addEntries(svc, Array.isArray(list) ? list : [], { history: true });
+        q.putHistory.run(svc.id, n, nowMs());
         return n;
     }
 
@@ -160,8 +208,13 @@ function createChangelog({ config, store, blogs, posts, aiDrafts = null, fetchIm
 
     async function collect() {
         let added = 0;
+        let histories = 0;
         for (const svc of await registry()) {
-            try { added += await collectOne(svc); } catch (err) {
+            try {
+                added += await collectOne(svc);
+                // A few history imports per run keep an unauthenticated GitHub budget intact.
+                if (histories < 6 && !q.history.get(svc.id)) { histories++; await importHistory(svc); }
+            } catch (err) {
                 stats.lastError = `${svc.id}: ${err.message}`;
                 if (err.status === 403 || err.status === 429) break;     // GitHub's rate limit: try again next run
             }
@@ -271,23 +324,35 @@ function createChangelog({ config, store, blogs, posts, aiDrafts = null, fetchIm
     }
     function stop() { if (timer) clearInterval(timer); timer = null; }
 
-    /** The public feed: newest first. */
-    function entries({ service = null, limit = 20 } = {}) {
+    /** The public feed, newest first: { entries, next } (next = the cursor for the page after, or null). */
+    function page({ service = null, limit = 20, before = null } = {}) {
         const n = Math.min(Math.max(parseInt(limit, 10) || 20, 1), 100);
-        const rows = service
-            ? db.prepare('SELECT * FROM changelog_entries WHERE service = ? ORDER BY deployed_at DESC, id DESC LIMIT ?').all(String(service), n)
-            : db.prepare('SELECT * FROM changelog_entries ORDER BY deployed_at DESC, id DESC LIMIT ?').all(n);
-        return rows.map((e) => ({
-            service: e.service, sha: e.sha, short: e.sha.slice(0, 7), subject: e.subject, committed_at: e.committed_at, deployed_at: e.deployed_at,
-            major: Boolean(e.major), url: `https://github.com/${e.repo}/commit/${e.sha}`, post_id: e.post_id || null,
-        }));
+        const cur = decodeCursor(before);
+        const where = [];
+        const args = [];
+        if (service) { where.push('service = ?'); args.push(String(service)); }
+        if (cur) { where.push('(deployed_at < ? OR (deployed_at = ? AND id < ?))'); args.push(cur.at, cur.at, cur.id); }
+        const rows = db.prepare(`SELECT * FROM changelog_entries ${where.length ? `WHERE ${where.join(' AND ')}` : ''} ORDER BY deployed_at DESC, id DESC LIMIT ?`).all(...args, n + 1);
+        const more = rows.length > n;
+        const shown = rows.slice(0, n);
+        return {
+            entries: shown.map((e) => ({
+                service: e.service, sha: e.sha, short: e.sha.slice(0, 7), subject: e.subject, author: e.author || null, committed_at: e.committed_at, deployed_at: e.deployed_at,
+                major: Boolean(e.major), url: `https://github.com/${e.repo}/commit/${e.sha}`, post_id: e.post_id && e.post_id !== 'history' ? e.post_id : null,
+            })),
+            next: more && shown.length ? encodeCursor(shown[shown.length - 1]) : null,
+        };
     }
+    function entries(opts = {}) { return page(opts).entries; }
     function latestPost() { return q.lastPost.get() || null; }
+    function recentPosts(limit = 5) { return q.recentPosts.all(Math.min(Math.max(parseInt(limit, 10) || 5, 1), 20)); }
+    /** Every site with entries: [{ service, entries, latest_at }], most recently shipped first. */
+    function sites() { return q.sites.all(); }
 
-    return { tick, collect, due, render, publish, start, stop, entries, latestPost, stats: () => ({ enabled: c.enabled, ...stats, pending: q.pending.all().length }) };
+    return { tick, collect, due, render, publish, start, stop, entries, page, latestPost, recentPosts, sites, importHistory, stats: () => ({ enabled: c.enabled, ...stats, pending: q.pending.all().length }) };
 }
 
 /** A stable id for a batch (tests). */
 function batchKey(list) { return crypto.createHash('sha256').update(list.map((e) => `${e.service}:${e.sha}`).join(',')).digest('hex').slice(0, 16); }
 
-module.exports = { createChangelog, subjectOf, ensureSchema, batchKey };
+module.exports = { createChangelog, subjectOf, ensureSchema, batchKey, encodeCursor, decodeCursor };

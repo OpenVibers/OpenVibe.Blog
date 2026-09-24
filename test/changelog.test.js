@@ -14,6 +14,7 @@ const H = (n) => n.toString(16).padStart(40, 'a');
     const releases = { live: 'aaaaaaa00001', tools: 'bbbbbbb00001' };
     const compares = {};
     const ghCalls = [];
+    const history = {};
     const fetchImpl = async (url) => {
         const u = new URL(url);
         const json = (body, status = 200) => ({ ok: status < 300, status, json: async () => body });
@@ -27,11 +28,13 @@ const H = (n) => n.toString(16).padStart(40, 'a');
             ghCalls.push(u.pathname);
             const m = u.pathname.match(/^\/repos\/(.+)\/compare\/(.+)\.\.\.(.+)$/);
             if (m && compares[m[3]]) return json(compares[m[3]]);
+            const h = u.pathname.match(/^\/repos\/(.+)\/commits$/);
+            if (h && history[h[1]]) return json(history[h[1]]);
             return json({ message: 'Not Found' }, 404);
         }
         return json({}, 404);
     };
-    const config = { ...t.ctx.config, changelog: { ...t.ctx.config.changelog, enabled: true, batchSize: 5, majorLines: 500, quietMs: 30 * 60 * 1000, maxAgeMs: 7 * 24 * 3600 * 1000, minGapMs: 6 * 3600 * 1000, since: null, aiDraft: false, blogHandle: 'openvibe' } };
+    const config = { ...t.ctx.config, changelog: { ...t.ctx.config.changelog, enabled: true, batchSize: 5, majorLines: 500, quietMs: 30 * 60 * 1000, maxAgeMs: 7 * 24 * 3600 * 1000, minGapMs: 6 * 3600 * 1000, since: null, aiDraft: false, blogHandle: 'openvibe', history: 0 } };
     const cl = createChangelog({ config, store: t.ctx.store, blogs: t.ctx.blogs, posts: t.ctx.posts, aiDrafts: null, fetchImpl, log: { log() {}, warn() {} } });
     const commit = (i, msg) => ({ sha: H(i), commit: { message: msg, author: { date: new Date(t.clock.now()).toISOString() } } });
 
@@ -98,6 +101,32 @@ const H = (n) => n.toString(16).padStart(40, 'a');
         compares.bbbbbbb00003 = { status: 'ahead', commits: [commit(10, '1.7.0: openvibe-shared/trace')], files: [{ additions: 3, deletions: 1 }] };
         await cl.tick();
         assert.strictEqual(cl.entries({ service: 'tools' })[0].major, true);
+    });
+
+    await check('history: each site\'s earlier commits once, never pending, with authors; the feed pages by cursor', async () => {
+        history['OpenVibers/OpenVibe.Live'] = [20, 21, 22].map((i) => ({ sha: H(i), commit: { message: `Earlier change ${i}\n\nbody`, author: { name: 'OpenVibers', date: new Date(t.clock.now() - (30 - i) * 86400000).toISOString() } } }))
+            .concat([{ sha: H(5), commit: { message: 'Small change 5', author: { name: 'OpenVibers', date: new Date(t.clock.now()).toISOString() } } }]);
+        const hc = createChangelog({ config: { ...config, changelog: { ...config.changelog, history: 50 } }, store: t.ctx.store, blogs: t.ctx.blogs, posts: t.ctx.posts, fetchImpl, log: { log() {}, warn() {} } });
+        const before = hc.stats().pending;
+        await hc.collect();
+        assert.strictEqual(hc.stats().pending, before, 'history never waits for a patch notes post');
+        const all = hc.entries({ service: 'live', limit: 100 });
+        assert.ok(all.some((e) => e.subject === 'Earlier change 20' && e.author === 'OpenVibers' && e.post_id === null));
+        assert.strictEqual(all.find((e) => e.sha === H(5)).author, 'OpenVibers', 'a known commit gains its author');
+        const calls = ghCalls.length;
+        await hc.collect();
+        assert.strictEqual(ghCalls.length, calls, 'imported once (a repository GitHub will not list is not asked again either)');
+        const p1 = hc.page({ service: 'live', limit: 2 });
+        assert.strictEqual(p1.entries.length, 2);
+        assert.ok(p1.next);
+        const p2 = hc.page({ service: 'live', limit: 2, before: p1.next });
+        assert.ok(p2.entries.length >= 1 && !p2.entries.some((e) => p1.entries.some((x) => x.sha === e.sha)), 'the next page continues without repeats');
+        const r = (await t.get(`/api/v1/changelog?limit=2&before=${encodeURIComponent(p1.next)}`)).json();
+        assert.ok(Array.isArray(r.sites) && r.sites.some((x) => x.service === 'live'), 'network-wide answers list the sites');
+        assert.ok(Array.isArray(r.posts) && r.posts.length >= 1);
+        const one = (await t.get('/api/v1/changelog?service=live&limit=1')).json();
+        assert.strictEqual(one.sites, undefined);
+        assert.ok(one.next);
     });
 
     await t.close();

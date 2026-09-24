@@ -149,6 +149,39 @@ Other tables in the same database:
 | `/auth/*` | sign-in; the same session layer as OpenVibe.Community |
 | `/api/health`, `/api/ready`, `/release.json`, `/metrics` | health, readiness and metrics; `/metrics` is loopback only |
 
+### The network changelog and patch notes
+
+`server/changelog.js` keeps what shipped on every OpenVibe site. Every 5 minutes it reads each service's
+repository and current release from OpenVibe.Network's registry and takes the new commits from GitHub's
+compare API. The first time it sees a site it also imports that site's last `CHANGELOG_HISTORY` commits
+(60 by default). Those history entries are shown in the feed but never go into a post.
+
+A **Patch notes** post on the official blog (series "Patch notes", imported authorship, grouped by
+site) is published when either of these happens:
+
+- `CHANGELOG_BATCH_SIZE` changes have gathered.
+- A large release (`CHANGELOG_MAJOR_LINES`, a version bump or `[major]`) has been quiet for 30 minutes.
+
+There is always at least a 6-hour gap between posts. An AI-written dev-blog version is filed as a draft
+for review.
+
+`GET /api/v1/changelog?service=&limit=&before=` is public (CORS `*`, cached for 60 s). It returns:
+
+| Field | Contents |
+|---|---|
+| `entries` | Each entry has its site, sha, subject, author, time and commit link |
+| `next` | The cursor for the next page |
+| `latest_post` | The newest patch notes post |
+| `posts` | The recent patch notes posts |
+| `sites` | Only without `service`: each site with its count and latest time |
+
+OpenVibe.Network proxies this feed at `openvibe.network/api/v1/changelog`. Every site shows it through
+`openvibe-shared/shipped.js`:
+
+- the "shipped X ago" line in the shared footer;
+- the home pill and the recent list;
+- the `/updates` log.
+
 ### Discoverability (roadmap §32)
 
 - Every page gets its robots meta, canonical and `X-Robots-Tag` from the
