@@ -12,7 +12,7 @@
 //   GET  /auth/callback  → server-side code exchange, set cookies
 //   POST /auth/fedcm     → the shared navbar's FedCM assertion → tokens (jwt-bearer grant)
 //   GET  /auth/logout    → clear cookies (+ best-effort refresh revoke), hint=guest
-//   GET  /auth/me        → offline-verify ov_token, return profile
+//   GET  /auth/me        → offline-verify ov_token, return profile ({ user: null } for a guest)
 //   POST /auth/refresh   → rotate tokens via refresh_token grant
 //
 // Cookies (host-only for openvibe.blog):
@@ -379,7 +379,10 @@ function createAuthRoutes(config, auth) {
         res.vary('Cookie');
         res.vary('Authorization');
         const token = extractToken(req);
-        if (!token) return res.status(401).json({ error: 'Not authenticated' });
+        // No credential at all (a guest) is signed out, not an error: the shared navbar asks this on every
+        // page view, and a 401 logged a console error on each (browser check, OpenVibe.Host). A credential
+        // that is present but invalid or expired still answers 401.
+        if (!token) return res.json({ user: null });
         const claims = await auth.verify(token);
         if (!claims) return res.status(401).json({ error: 'Invalid or expired token' });
         res.json({ user: claimsToUser(claims), expires_at: claims.exp ? claims.exp * 1000 : null });

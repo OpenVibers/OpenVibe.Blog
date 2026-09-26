@@ -61,6 +61,15 @@ const LONG = Array.from({ length: 100 }, (_, i) => `w${i}`).join(' ');
         assert.strictEqual(r.headers.get('cache-control'), 'private, no-store');
     });
 
+    await check('/auth/me: a guest is signed out (200 { user: null }), a bad credential is 401', async () => {
+        const guest = await t.get('/auth/me');
+        assert.strictEqual(guest.status, 200, 'no cookie or token at all: not an error');
+        assert.deepStrictEqual(guest.json(), { user: null });
+        assert.strictEqual(guest.headers.get('cache-control'), 'private, no-store');
+        assert.strictEqual((await t.get('/auth/me', { headers: { cookie: 'ov_token=expired.or.forged' } })).status, 401, 'a present but invalid cookie');
+        assert.strictEqual((await t.get('/auth/me', { as: 'garbage' })).status, 401, 'a present but invalid bearer token');
+    });
+
     await t.close();
     done();
 })().catch((e) => { console.error(e); process.exit(1); });
