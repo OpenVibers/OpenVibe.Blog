@@ -85,13 +85,15 @@ function createApp(opts = {}) {
             directives: {
                 defaultSrc: ["'self'"],
                 // The OpenVibe Frame (theme-loader, navbar, footer) comes from the Network; the inline init is ours.
-                scriptSrc: ["'self'", "'unsafe-inline'", 'https://openvibe.network'],
+                // Cloudflare Web Analytics: Cloudflare injects its beacon at the edge and the privacy text says it may
+                // measure performance; script-src loads the beacon, connect-src is where it reports.
+                scriptSrc: ["'self'", "'unsafe-inline'", 'https://openvibe.network', 'https://static.cloudflareinsights.com'],
                 styleSrc: ["'self'", "'unsafe-inline'", 'https://openvibe.network', 'https://fonts.googleapis.com', 'https://cdnjs.cloudflare.com'],
                 fontSrc: ["'self'", 'data:', 'https://fonts.gstatic.com', 'https://cdnjs.cloudflare.com'],
                 // Media objects are served by openvibe.media (which may redirect to object storage).
                 imgSrc: ["'self'", 'data:', 'https:'],
                 mediaSrc: ["'self'", 'https:'],
-                connectSrc: ["'self'", 'https://openvibe.network'],
+                connectSrc: ["'self'", 'https://openvibe.network', 'https://cloudflareinsights.com'],
                 frameSrc: ["'self'", 'https://openvibe.network'],
                 frameAncestors: ["'self'"],
                 objectSrc: ["'none'"],
