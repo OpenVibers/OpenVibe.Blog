@@ -74,6 +74,7 @@ function renderPage(o) {
         sessionUrl: '/auth/me',
         loginUrl: `/auth/login?next=${loginNext}`,
         logoutUrl: '/auth/logout?next={path}',   // Sign out in the shared navbar ends this site's session too
+        notificationsRealtime: true,             // the bell hears new notifications over OpenVibe.Events (Shared 1.22.0)
     };
     const footer = { service: 'blog', variant: 'full', mount: '#ov-footer', brandName: SITE_NAME, updates: '/updates' };
     const style = o.theme ? ` style="${esc(themeStyle(o.theme.vars))}" data-blog-theme="${esc(o.theme.slug)}"` : '';
