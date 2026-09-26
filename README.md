@@ -211,6 +211,7 @@ OpenVibe.Network proxies this feed at `openvibe.network/api/v1/changelog`. Every
 | `blog.post.created` | internal |
 | `blog.post.published`, `.updated`, `.unpublished`, `.deleted` | `openvibe-publishing/index-hooks` `publicationEvent`. Public visibility only for public, listable posts. The payload is the canonical URL, state and indexability, never the body. |
 | `blog.schedule.failed` | internal |
+| `blog.moderation.action` | internal. Staff unpublished (`post.unpublished`) or deleted (`post.deleted`) a post that only their staff powers let them touch, for the network's moderation audit log (ADR-022, `common.moderation-action@1`). Never the content. |
 | `blog.index_document.upserted` / `.deleted` | Documents and tombstones in `search.index-document@1` form, with a monotonic index revision (`createIndexSequencer`). Only published, public, listable posts are upserted; every other state is a tombstone. A post that was never indexed gets no tombstone. |
 
 ### Capabilities (released in openvibe-contracts v0.18.0; proposal: `docs/capabilities-proposal/`)

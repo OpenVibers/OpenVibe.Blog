@@ -9,6 +9,9 @@
  *                                        publicationEvent: canonical URL, state, indexability; public
  *                                        only for public, listable posts)
  *   blog.schedule.failed                 a scheduled publish/unpublish gave up after its retries
+ *   blog.moderation.action               staff unpublished or deleted a post only their staff powers
+ *                                        allowed (common.moderation-action@1, ADR-022), for Network's
+ *                                        moderation audit log
  *   blog.index_document.upserted|deleted the OpenVibe.Search document or tombstone (index-hooks
  *                                        indexEvent), consumed by Search's '*.index_document.*'
  *                                        subscription
@@ -53,8 +56,24 @@ function createBlogOutbox({ db, config, fetchImpl, now, log = console }) {
         return outbox.enqueue(envelope, { traceparent });
     }
 
+    /**
+     * blog.moderation.action, inside the caller's transaction. actorSubject: the staff member;
+     * target: { type, id, owner_subject? }. Never the content.
+     */
+    function moderationAction({ action, target, actorSubject, reason = null, details = {} }, { traceparent } = {}) {
+        const t = { type: target.type, id: String(target.id).slice(0, 200), owner_subject: target.owner_subject || null };
+        return emit({
+            event_type: 'blog.moderation.action',
+            actor: actorSubject ? { type: 'user', id: actorSubject } : { type: 'service', id: 'blog' },
+            subject: { type: 'moderation_action', id: `${t.type}:${t.id}`.slice(0, 200) },
+            visibility: 'internal',
+            payload: { action, target: t, actor_subject: actorSubject || null, reason: reason ? String(reason).slice(0, 500) : null, details: details || {} },
+        }, { traceparent });
+    }
+
     return {
         emit,
+        moderationAction,
         outbox,
         enabled,
         start() { if (enabled) outbox.start(); },

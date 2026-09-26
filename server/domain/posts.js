@@ -53,6 +53,12 @@ function createPosts({ store, blogs, publication, access, outbox, log = console 
                             @allow_comments, @noindex, @now, @now)`),
     };
     const blogOf = (post) => blogs.get(post.blog_id);
+    // Staff acting where only their staff powers allow it (not a role on the blog, not their own post)
+    // is moderation: it also goes to Network's moderation audit log (ADR-022).
+    const byStaff = (viewer, blog, action, post) => access.isStaff(viewer) && !access.canWrite(store, { ...viewer, staff: false }, blog, action, post);
+    const moderated = (action, post, viewer, ctx, details) => outbox.moderationAction({
+        action, target: { type: 'post', id: post.id, owner_subject: post.author_subject }, actorSubject: viewer.subject, details: { blog_id: post.blog_id, ...details },
+    }, { traceparent: ctx.traceparent });
 
     // ── Input normalisation ─────────────────────────────────
 
@@ -366,14 +372,19 @@ function createPosts({ store, blogs, publication, access, outbox, log = console 
         unpublish(viewer, post, ctx = {}) {
             actingSubject(viewer);
             if (!access.canWrite(store, viewer, blogOf(post), 'unpublish', post)) throw new ApiError(403, 'post.forbidden', 'You cannot unpublish this post');
+            const moderation = byStaff(viewer, blogOf(post), 'unpublish', post);
             return store.tx(() => {
                 store.scheduler.cancelPending(post.id);
                 const cur = q.byId.get(post.id);
+                let out;
                 if (cur.state === 'scheduled') {
                     db.prepare("UPDATE blog_posts SET state = 'draft', updated_at = ? WHERE id = ?").run(store.now(), post.id);
-                    return { changed: true, post: q.byId.get(post.id) };
+                    out = { changed: true, post: q.byId.get(post.id) };
+                } else {
+                    out = api.applyUnpublish(post.id, viewer, ctx);
                 }
-                return api.applyUnpublish(post.id, viewer, ctx);
+                if (moderation && out.changed) moderated('post.unpublished', cur, viewer, ctx, { previous: cur.state });
+                return out;
             });
         },
 
@@ -447,11 +458,14 @@ function createPosts({ store, blogs, publication, access, outbox, log = console 
             actingSubject(viewer);
             const blog = blogOf(post);
             if (!access.canWrite(store, viewer, blog, 'delete', post)) throw new ApiError(403, 'post.forbidden', 'You cannot delete this post');
+            const moderation = byStaff(viewer, blog, 'delete', post);
             return store.tx(() => {
                 store.scheduler.cancelPending(post.id);
-                const before = publication.snapshot(blog, q.byId.get(post.id));
+                const cur = q.byId.get(post.id);
+                const before = publication.snapshot(blog, cur);
                 const now = store.now();
                 db.prepare("UPDATE blog_posts SET state = 'deleted', deleted_at = ?, updated_at = ? WHERE id = ?").run(now, now, post.id);
+                if (moderation && cur.state !== 'deleted') moderated('post.deleted', cur, viewer, ctx, { previous: cur.state });
                 return publication.afterChange(before, post.id, { actor: viewer, ...ctx });
             });
         },
