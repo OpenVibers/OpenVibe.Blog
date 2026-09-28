@@ -4,8 +4,9 @@
 
 **Status:** alpha (roadmap Wave 16, Blog half). **Public at https://openvibe.blog since 2026-09-23**
 (the launch release also removed the domain from OpenVibe.Sites). Its capabilities and service
-manifest are released in openvibe-contracts v0.18.0. The only post in production is the seed post,
-which is still a draft, so nothing is published yet.
+manifest are released in openvibe-contracts v0.18.0. The network changelog publishes Patch notes
+posts on the official blog ([below](#the-network-changelog-and-patch-notes)); the seed post stays a
+draft until a person reviews it.
 **Domain:** `openvibe.blog` · **Port:** 4810 · **Service id:** `blog`
 **Plan:** OpenVibe End-to-End Realignment & Implementation Plan, revision 3 (20 Sep 2026), §12.6; roadmap §15.13, §29, §32.
 **License:** AGPL-3.0 (same as every OpenVibe service).
@@ -214,7 +215,7 @@ OpenVibe.Network proxies this feed at `openvibe.network/api/v1/changelog`. Every
 | `blog.moderation.action` | internal. Staff unpublished (`post.unpublished`) or deleted (`post.deleted`) a post that only their staff powers let them touch, for the network's moderation audit log (ADR-022, `common.moderation-action@1`). Never the content. |
 | `blog.index_document.upserted` / `.deleted` | Documents and tombstones in `search.index-document@1` form, with a monotonic index revision (`createIndexSequencer`). Only published, public, listable posts are upserted; every other state is a tombstone. A post that was never indexed gets no tombstone. |
 
-### Capabilities (released in openvibe-contracts v0.18.0; proposal: `docs/capabilities-proposal/`)
+## Capabilities (released in openvibe-contracts v0.18.0; proposal: `docs/capabilities-proposal/`)
 
 Service tokens use audience `openvibe.blog`, with one capability per route. The person the service
 acts for goes in `X-OV-Subject`, and membership still applies:
@@ -230,12 +231,19 @@ with the contracts library's matching rule (`server/auth/capabilities.js`). The 
 (proposal: `docs/service-manifest-proposal.json`) is released in openvibe-contracts v0.18.0; this
 repo pins v0.33.0.
 
+Called elsewhere, as the service principal `blog`: `identity.subject.resolve` and
+`network.integration.github.read` (Network), `events.event.publish` (Events),
+`community.comment.write` and optionally `community.comment.moderate` (Community),
+`media.object.read` (Media), `vip.resource.policy.evaluate` (VIP) and `ai.run.create` with
+`ai.run.read` (AI, for AI drafts). The list with audiences is under
+[Grants the Network must hold for client `blog`](#grants-the-network-must-hold-for-client-blog).
+
 ## Depends on
 
-- **Packages** (all pinned by release tarball): `openvibe-publishing` v0.2.1 (revisions, schedule,
+- **Packages** (all pinned by release tarball): `openvibe-publishing` v0.4.0 (revisions, schedule,
   taxonomy, citations, media, discussion, seo, authorship, index-hooks, ssr), `openvibe-contracts`
-  v0.33.0, `openvibe-shared` v1.5.1 (chrome, app icon, footer, legal, release, metrics, ready,
-  theme presets), `openvibe-sdk` v0.5.0 (events outbox, service tokens).
+  v0.53.0, `openvibe-shared` v1.22.0 (chrome, app icon, footer, legal, release, metrics, ready,
+  theme presets), `openvibe-sdk` v0.12.0 (events outbox, service tokens, per-actor limits).
 - **OpenVibe.Network:**
   - SSO: the OAuth client `blog` is already seeded with redirect
     `https://openvibe.blog/auth/callback`.
@@ -261,6 +269,10 @@ Each grant is `[client, capability, audience]`:
 - `[blog, media.object.read, openvibe.media]`, namespace `blog`. Media also needs a `blog` tenant.
 - `[blog, vip.resource.policy.evaluate, openvibe.vip]` for members-only posts (until granted, only the
   blog's members and staff read them).
+- `[blog, network.integration.github.read, openvibe.network]` (optional: the changelog reads GitHub
+  with the network's token instead of anonymously; `CHANGELOG_GITHUB_TOKEN` overrides it).
+- `[blog, ai.run.create, openvibe.ai]` and `[blog, ai.run.read, openvibe.ai]` for AI drafts (the
+  editor's "draft with AI" and the dev-blog draft of each patch notes post).
 - For OpenVibe.AI to deliver drafts: `[ai, blog.post.create, openvibe.blog]`. Add
   `[ai, blog.post.read, openvibe.blog]` if it reads the drafts back.
 
@@ -323,6 +335,8 @@ its commit or tag, date and GitHub URL, and is attached as a citation.
   the post.
 
 ## Security and threat review
+
+Reporting a vulnerability: [SECURITY.md](SECURITY.md).
 
 - **Identity:**
   - Only verified Network JWTs (offline RS256 against JWKS) and service tokens for audience
@@ -395,6 +409,16 @@ fnm exec --using=22.22.1 npm run dev       # http://localhost:4810 (set OV_OAUTH
 ```
 
 ## Deploy (for the lead)
+
+Production deploys with `sudo ovhost deploy blog` on the host (strategy `git-checkout`: fetch,
+fast-forward `/opt/openvibe.blog`, install on a lockfile change, restart, wait for `/api/ready`).
+The unit is `openvibe-blog.service` on `127.0.0.1:4810`, the env file `/etc/openvibe/blog.env`. nginx serves
+`openvibe.blog` from [deploy/nginx/openvibe.blog.conf](deploy/nginx/openvibe.blog.conf).
+Rollback: ovhost puts the previous sha back by itself when `/api/ready` does not answer 2xx after the
+restart; afterwards `sudo ovhost rollback blog --to <sha>`. Nothing blocks a rollback: the schema
+code only adds tables and columns.
+
+First install (done once; kept for a rebuild):
 
 1. **Code and config:**
    - Put the code at `/opt/openvibe.blog` and run `npm ci --omit=dev` on Node 22.

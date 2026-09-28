@@ -7,12 +7,8 @@
   "runtime": "node 22, express 4, better-sqlite3 11",
   "port": 4810,
   "domain": "openvibe.blog",
-  "packages": [
-    "openvibe-publishing v0.2.1",
-    "openvibe-contracts v0.33.0",
-    "openvibe-shared v1.5.1",
-    "openvibe-sdk v0.5.0"
-  ],
+  "contracts": "openvibe-contracts v0.53.0",
+  "packages": ["openvibe-publishing v0.4.0", "openvibe-contracts v0.53.0", "openvibe-shared v1.22.0", "openvibe-sdk v0.12.0"],
   "capabilities": [
     "blog.blog.create",
     "blog.blog.configure",
@@ -29,11 +25,27 @@
   ],
   "capabilitiesRegistered": true,
   "serviceManifestRegistered": true,
-  "entitlements": "OpenVibe.VIP in code (policies/evaluate with the blog owner and the blog:gated_post default gate, cached 30 s; teaser and join link otherwise). Not deployed yet, and the Network has not granted blog vip.resource.policy.evaluate: until both, members-only posts admit only the blog's members and staff",
-  "seedPost": "draft in production (verbatim quotes; not reviewed by a person); 0 posts published",
+  "entitlements": "OpenVibe.VIP in code (policies/evaluate with the blog owner and the blog:gated_post default gate, cached 30 s; teaser and join link otherwise). It needs the Network grant [blog, vip.resource.policy.evaluate, openvibe.vip]; without it, or when VIP is unreachable, members-only posts admit only the blog's members and staff (the gate fails closed)",
+  "seedPost": "a draft (verbatim quotes; not reviewed by a person)",
   "deployed": true,
-  "deployment": "Public at https://openvibe.blog since 2026-09-23 (~03:00 UTC): /opt/openvibe.blog at e7b4986, unit openvibe-blog on 127.0.0.1:4810 behind the openvibe.blog nginx vhost, principal blog. Production content: 1 blog (official), 1 post, which is a draft, so the public site shows nothing published yet. Restore drill passed 2026-09-23.",
+  "deployment": "Public at https://openvibe.blog since 2026-09-23 (~03:00 UTC): deployed with `sudo ovhost deploy blog`, /opt/openvibe.blog, unit openvibe-blog on 127.0.0.1:4810 behind the openvibe.blog nginx vhost, principal blog. The network changelog publishes Patch notes posts on the official blog. Restore drill passed 2026-09-23.",
   "placeholderInSites": false,
-  "updated": "2026-09-23",
-  "deployedAt": "2026-09-23"
+  "updated": "2026-09-28",
+  "deployedAt": "2026-09-23",
+  "features": [
+    "the official blog and a blog for every member, with owners, editors and authors",
+    "drafts and immutable revisions with conflict detection, diff and revert",
+    "publish, unpublish, soft delete and scheduled publishing",
+    "tags, categories, series and 301s on slug changes",
+    "Media-backed covers, inline figures and galleries",
+    "six theme presets",
+    "Community comment threads",
+    "AI drafts that need a person's review",
+    "members-only posts gated by OpenVibe.VIP (fails closed)",
+    "network changelog feed and Patch notes posts",
+    "feeds, sitemaps and server-rendered pages useful without JavaScript",
+    "/api/v1 by capability",
+    "SDK outbox events and Search index documents",
+    "per-actor limits (openvibe-sdk/limits)"
+  ]
 }
