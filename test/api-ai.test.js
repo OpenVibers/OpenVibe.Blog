@@ -48,7 +48,7 @@ const WORKFLOW = { id: 'blog.draft_post', version: 1, runId: 'run_01J8Z3K4M5N6P7
         assert.strictEqual(draft.authorship.mode, 'ai');
         assert.strictEqual(draft.authorship.workflow.id, 'blog.draft_post');
         assert.deepStrictEqual(draft.authorship.authors, [], 'AI output is never attributed to the person');
-        const created = t.events('blog.post.created')[0];
+        const created = (await t.events('blog.post.created'))[0];
         assert.deepStrictEqual(created.actor, { type: 'service', id: 'ai' });
         assert.strictEqual(created.payload.authorship, 'ai');
         const noWorkflow = await t.get('/api/v1/blogs/fay/posts', { as: ai, headers: { 'X-OV-Origin': 'ai', 'X-OV-Subject': fay.subject }, json: { title: 'No run', body: LONG } });
@@ -79,7 +79,7 @@ const WORKFLOW = { id: 'blog.draft_post', version: 1, runId: 'run_01J8Z3K4M5N6P7
         const page = await t.get('/@fay/an-ai-draft');
         assert.match(page.text, /AI-generated/);
         assert.match(page.text, /reviewed by a person/);
-        const doc = t.events('blog.index_document.upserted').pop().payload;
+        const doc = (await t.events('blog.index_document.upserted')).pop().payload;
         assert.strictEqual(doc.authorship, 'ai_generated');
         assert.ok(doc.provenance.some((r) => r.service === 'ai' && r.type === 'run' && r.id === WORKFLOW.runId));
     });

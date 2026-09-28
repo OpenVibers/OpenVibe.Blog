@@ -146,11 +146,11 @@ function startVip() {
         for (const p of ['/@carol/feed.xml', '/@carol/atom.xml', '/@carol/feed.json', '/feed.xml', '/sitemap.xml', '/sitemaps/posts.xml', '/sitemaps/blogs.xml', '/@carol', '/api/v1/blogs/carol/posts', '/api/v1/blogs/carol/feed', '/llms.txt']) {
             for (const as of [undefined, fan]) noBody((await t.get(p, { as })).text, p);
         }
-        const all = t.events();
+        const all = await t.events();
         assert.ok(all.length > 0);
         for (const e of all) noBody(JSON.stringify(e), e.event_type);
-        assert.strictEqual(t.events('blog.index_document.upserted').filter((e) => e.payload.id === mem.id).length, 0, 'Search never got the members post');
-        const doc = t.ctx.publication.documentFor(t.ctx.blogs.byHandle('carol'), t.ctx.posts.get(mem.id), { forSearch: false }).doc;
+        assert.strictEqual((await t.events('blog.index_document.upserted')).filter((e) => e.payload.id === mem.id).length, 0, 'Search never got the members post');
+        const doc = (await t.ctx.publication.documentFor(await t.ctx.blogs.byHandle('carol'), await t.ctx.posts.get(mem.id), { forSearch: false })).doc;
         assert.strictEqual(doc.body, '');
         assert.strictEqual(doc.summary, 'What happened backstage this week.');
         assert.deepStrictEqual(doc.acl.entitlements, ['vip:carol'], 'the default gate label names the blog');

@@ -16,15 +16,17 @@ const { seedOfficialPost } = require('../server/seed');
 const args = process.argv.slice(2);
 const opt = (name) => { const i = args.indexOf(`--${name}`); return i >= 0 ? args[i + 1] : null; };
 
-const { ctx } = createApp();
-try {
-    const out = seedOfficialPost(ctx, { author: opt('author'), reviewer: opt('reviewer'), publish: args.includes('--publish') });
-    console.log(`${out.created ? 'created' : 'exists'}: ${out.post.id} (${out.post.state}) ${ctx.publication.postUrl(ctx.blogs.get(out.post.blog_id), out.post)}`);
-    if (out.review) console.log(`review recorded by ${out.review.reviewer}: ${out.review.decision}`);
-    if (!out.published && out.post.state !== 'published') console.log('left as a draft: publish it after a person has checked the quotes (--publish --reviewer usr_…)');
-} catch (err) {
-    console.error(`[seed] ${err.message}`);
-    process.exitCode = 1;
-} finally {
-    ctx.store.close();
-}
+(async () => {
+    const { ctx } = await createApp();
+    try {
+        const out = await seedOfficialPost(ctx, { author: opt('author'), reviewer: opt('reviewer'), publish: args.includes('--publish') });
+        console.log(`${out.created ? 'created' : 'exists'}: ${out.post.id} (${out.post.state}) ${ctx.publication.postUrl(await ctx.blogs.get(out.post.blog_id), out.post)}`);
+        if (out.review) console.log(`review recorded by ${out.review.reviewer}: ${out.review.decision}`);
+        if (!out.published && out.post.state !== 'published') console.log('left as a draft: publish it after a person has checked the quotes (--publish --reviewer usr_…)');
+    } catch (err) {
+        console.error(`[seed] ${err.message}`);
+        process.exitCode = 1;
+    } finally {
+        await ctx.store.close();
+    }
+})();

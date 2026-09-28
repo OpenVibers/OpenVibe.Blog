@@ -37,8 +37,8 @@ const MED_B = 'med_01J8Z3K4M5N6P7Q8R9S0T1V2W4';
         assert.strictEqual(jf.items[0].id, feedIdBefore);
         assert.strictEqual(jf.items[0].url, 'https://openvibe.blog/@dan/new-name');
         assert.match((await t.get('/@dan/feed.xml')).text, new RegExp(`<guid isPermaLink="false">${feedIdBefore}</guid>`));
-        assert.strictEqual(t.events('blog.post.updated').length, 1, 'a canonical change of a published post is an update');
-        const docs = t.events('blog.index_document.upserted');
+        assert.strictEqual((await t.events('blog.post.updated')).length, 1, 'a canonical change of a published post is an update');
+        const docs = await t.events('blog.index_document.upserted');
         assert.strictEqual(docs[docs.length - 1].payload.canonical_url, 'https://openvibe.blog/@dan/new-name');
     });
 
@@ -46,7 +46,7 @@ const MED_B = 'med_01J8Z3K4M5N6P7Q8R9S0T1V2W4';
         await t.get(`/api/v1/posts/${post.id}`, { as: dan, method: 'PATCH', json: { slug: 'newest-name' } });
         assert.strictEqual((await t.get('/@dan/old-name')).headers.get('location'), '/@dan/newest-name');
         assert.strictEqual((await t.get('/@dan/new-name')).headers.get('location'), '/@dan/newest-name');
-        assert.deepStrictEqual(t.ctx.store.redirects.history(post.id).map((h) => h.path).sort(), ['/@dan/new-name', '/@dan/old-name']);
+        assert.deepStrictEqual((await t.ctx.store.redirects.history(post.id)).map((h) => h.path).sort(), ['/@dan/new-name', '/@dan/old-name']);
     });
 
     await check('a new post may take a freed slug; the redirect then yields to it', async () => {

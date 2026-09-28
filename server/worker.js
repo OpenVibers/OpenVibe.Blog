@@ -19,7 +19,7 @@ function createWorker({ config, store, posts, media, outbox, log = console }) {
         running = true;
         try {
             const summary = await posts.runScheduled(config.worker.id);
-            if (summary.done.length || summary.failed.length) outbox.kick();
+            if (summary.done.length || summary.failed.length) await outbox.kick();
             return summary;
         } catch (err) {
             log.error('[Blog] schedule tick failed:', err.message);
@@ -30,8 +30,8 @@ function createWorker({ config, store, posts, media, outbox, log = console }) {
     /** Verify the attachments of published posts (at most `limit` posts per run). */
     async function verifyMedia({ limit = 200 } = {}) {
         if (!media.enabled) return [];
-        const ids = store.db.prepare(`SELECT DISTINCT a.entity_id AS id FROM blog_post_attachments a JOIN blog_posts p ON p.id = a.entity_id
-                                      WHERE p.state = 'published' ORDER BY COALESCE(a.checked_at, 0) LIMIT ?`).all(limit).map((r) => r.id);
+        const ids = (await store.db.prepare(`SELECT a.entity_id AS id FROM blog_post_attachments a JOIN blog_posts p ON p.id = a.entity_id
+                                      WHERE p.state = 'published' GROUP BY a.entity_id ORDER BY MIN(COALESCE(a.checked_at, 0)), a.entity_id LIMIT ?`).all(limit)).map((r) => r.id);
         const out = [];
         for (const id of ids) {
             const results = await store.attachments.verify(id, { resolve: media.resolve });

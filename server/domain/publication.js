@@ -40,12 +40,12 @@ function createPublication({ store, config, outbox }) {
         return (rev && rev.meta && rev.meta.authorship) || null;
     }
 
-    function reviewOf(post, rev) {
-        return rev ? store.reviews.latest(post.id, rev.number) : null;
+    async function reviewOf(post, rev) {
+        return rev ? await store.reviews.latest(post.id, rev.number) : null;
     }
 
     /** The gate's decision for a post at one revision (the published one by default). */
-    function decide(blog, post, rev, { state } = {}) {
+    async function decide(blog, post, rev, { state } = {}) {
         const rec = authorshipOf(rev);
         const facts = {
             state: state || post.state,
@@ -54,24 +54,24 @@ function createPublication({ store, config, outbox }) {
             text: rev ? `${rev.fields.title || ''}\n${ssr.markdownToText(rev.content)}` : '',
             noindex: Boolean(post.noindex),
         };
-        if (rec) Object.assign(facts, authorship.gateFacts(rec, reviewOf(post, rev)));
+        if (rec) Object.assign(facts, authorship.gateFacts(rec, await reviewOf(post, rev)));
         return seo.evaluate(facts, { policy: POLICY, now: store.now() });
     }
 
     /** The revision readers see (published) or, for a never-published post, the head. */
-    function visibleRevision(post) {
-        return post.published_revision ? store.revisions.get(post.id, post.published_revision) : store.revisions.head(post.id);
+    async function visibleRevision(post) {
+        return post.published_revision ? await store.revisions.get(post.id, post.published_revision) : await store.revisions.head(post.id);
     }
 
-    function aclFor(blog, post) {
-        const subjects = [...new Set([...membersOf.all(blog.id).map((r) => r.subject), post.author_subject])].filter((s) => /^usr_/.test(s));
+    async function aclFor(blog, post) {
+        const subjects = [...new Set([...(await membersOf.all(blog.id)).map((r) => r.subject), post.author_subject])].filter((s) => /^usr_/.test(s));
         if (post.visibility === 'members') return { entitlements: [post.entitlement_key], subjects };
         if (post.visibility === 'private') return { subjects };
         return {};
     }
 
-    function termsOf(post) {
-        const terms = store.taxonomy.termsFor(post.id);
+    async function termsOf(post) {
+        const terms = await store.taxonomy.termsFor(post.id);
         return {
             tags: terms.filter((t) => t.vocabulary === 'tag').map((t) => t.name),
             categories: terms.filter((t) => t.vocabulary !== 'tag').map((t) => t.name),
@@ -82,16 +82,16 @@ function createPublication({ store, config, outbox }) {
      * The index document as it would describe this post (real visibility, for the product events),
      * or a tombstone when it is not published.
      */
-    function documentFor(blog, post, { forSearch }) {
-        const rev = post.published_revision ? store.revisions.get(post.id, post.published_revision) : null;
+    async function documentFor(blog, post, { forSearch }) {
+        const rev = post.published_revision ? await store.revisions.get(post.id, post.published_revision) : null;
         const identity = { owner: OWNER, type: 'post', id: post.id, revision: 0 };
-        if (!rev || post.state !== 'published') return { doc: hooks.tombstone(identity), decision: rev ? decide(blog, post, rev) : null };
-        const decision = decide(blog, post, rev);
+        if (!rev || post.state !== 'published') return { doc: hooks.tombstone(identity), decision: rev ? await decide(blog, post, rev) : null };
+        const decision = await decide(blog, post, rev);
         if (forSearch && (post.visibility !== 'public' || !decision.listable)) return { doc: hooks.tombstone(identity), decision };
-        const { tags, categories } = termsOf(post);
-        const series = post.series_id ? db.prepare('SELECT slug FROM blog_series WHERE id = ?').get(post.series_id) : null;
+        const { tags, categories } = await termsOf(post);
+        const series = post.series_id ? await db.prepare('SELECT slug FROM blog_series WHERE id = ?').get(post.series_id) : null;
         const rec = authorshipOf(rev);
-        const acl = aclFor(blog, post);
+        const acl = await aclFor(blog, post);
         // Members-only: whatever carries this document (the blog.post.* events) gets the teaser — the
         // title and the author's summary — never the body. (Search itself only ever gets a tombstone.)
         const gated = post.visibility === 'members';
@@ -107,7 +107,7 @@ function createPublication({ store, config, outbox }) {
             body: gated ? '' : ssr.markdownToText(rev.content),
             facets: { blog: blog.handle, tags, categories, ...(series ? { series: series.slug } : {}) },
             authorship: rec,
-            citations: store.citations.forRevision(post.id, rev.number),
+            citations: await store.citations.forRevision(post.id, rev.number),
             decision,
             publishedAt: post.first_published_at,
             updatedAt: rev.createdAt,
@@ -117,13 +117,13 @@ function createPublication({ store, config, outbox }) {
     }
 
     /** Stamp and enqueue the Search document when it changed. Inside the caller's transaction. */
-    function syncIndex(blog, post, { traceparent } = {}) {
-        const { doc } = documentFor(blog, post, { forSearch: true });
-        const prev = store.sequencer.current(OWNER, 'post', post.id);
+    async function syncIndex(blog, post, { traceparent } = {}) {
+        const { doc } = await documentFor(blog, post, { forSearch: true });
+        const prev = await store.sequencer.current(OWNER, 'post', post.id);
         if (doc.deleted && prev == null) return null;          // never indexed: nothing to remove
-        const stamped = store.sequencer.stamp(doc);
+        const stamped = await store.sequencer.stamp(db, doc);   // db: joins the ambient transaction
         if (prev != null && stamped.revision === prev) return null;   // unchanged: nothing to send
-        return outbox.emit(hooks.indexEvent({ document: stamped, now: store.now() }), { traceparent });
+        return await outbox.emit(hooks.indexEvent({ document: stamped, now: store.now() }), { traceparent });
     }
 
     /** Snapshot for actionFor(before, after). */
@@ -135,22 +135,22 @@ function createPublication({ store, config, outbox }) {
      * Emit the product event for a transition (blog.post.published|updated|unpublished|deleted),
      * and re-sync Search. Inside the caller's transaction, after the row changed.
      */
-    function afterChange(before, postId, { actor, traceparent } = {}) {
-        const post = db.prepare('SELECT * FROM blog_posts WHERE id = ?').get(postId);
-        const blog = blogById.get(post.blog_id);
+    async function afterChange(before, postId, { actor, traceparent } = {}) {
+        const post = await db.prepare('SELECT * FROM blog_posts WHERE id = ?').get(postId);
+        const blog = await blogById.get(post.blog_id);
         const after = snapshot(blog, post);
         let action = hooks.actionFor(before, after);
         if (!action && before && before.state === 'published' && after.state === 'published' && before.url !== after.url) action = 'updated';
         let event = null;
         if (action) {
-            const { doc, decision } = documentFor(blog, post, { forSearch: false });
-            event = outbox.emit(hooks.publicationEvent({
+            const { doc, decision } = await documentFor(blog, post, { forSearch: false });
+            event = await outbox.emit(hooks.publicationEvent({
                 product: OWNER, type: 'post', action, id: post.id, revision: post.published_revision || 0,
                 actor: actorRef(actor), document: doc, decision, now: store.now(),
                 extra: { blog: { id: blog.id, handle: blog.handle }, visibility: post.visibility },
             }), { traceparent });
         }
-        syncIndex(blog, post, { traceparent });
+        await syncIndex(blog, post, { traceparent });
         return { action, event, post, blog };
     }
 

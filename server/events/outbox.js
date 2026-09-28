@@ -61,9 +61,9 @@ function createBlogOutbox({ db, config, fetchImpl, now, log = console }) {
      * blog.moderation.action, inside the caller's transaction. actorSubject: the staff member;
      * target: { type, id, owner_subject? }. Never the content.
      */
-    function moderationAction({ action, target, actorSubject, reason = null, details = {} }, { traceparent } = {}) {
+    async function moderationAction({ action, target, actorSubject, reason = null, details = {} }, { traceparent } = {}) {
         const t = { type: target.type, id: String(target.id).slice(0, 200), owner_subject: target.owner_subject || null };
-        return emit({
+        return await emit({
             event_type: 'blog.moderation.action',
             actor: actorSubject ? { type: 'user', id: actorSubject } : { type: 'service', id: 'blog' },
             subject: { type: 'moderation_action', id: `${t.type}:${t.id}`.slice(0, 200) },

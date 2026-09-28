@@ -25,7 +25,7 @@ function createAiDrafts({ config, store, posts, access, fetchImpl = globalThis.f
 
     async function draft(viewer, blog, input = {}, { traceparent } = {}) {
         if (!viewer || !viewer.subject) throw new ApiError(401, 'subject.required', 'Sign in to ask for an AI draft');
-        if (!access.canWrite(store, viewer, blog, 'create')) throw new ApiError(403, 'blog.forbidden', 'You cannot write on this blog');
+        if (!await access.canWrite(store, viewer, blog, 'create')) throw new ApiError(403, 'blog.forbidden', 'You cannot write on this blog');
         const topic = clean(input.topic, 300);
         if (!topic) throw new ApiError(422, 'ai_draft.topic_required', 'Say what the post should be about');
         const brief = String(input.brief == null ? '' : input.brief).trim().slice(0, 4000);
@@ -49,7 +49,7 @@ function createAiDrafts({ config, store, posts, access, fetchImpl = globalThis.f
         }));
         // The member acts (their blog, their draft); the text is the AI's (authorship mode 'ai').
         const aiViewer = { kind: 'service', service: 'svc:ai', origin: 'ai', subject: viewer.subject };
-        return posts.create(aiViewer, blog, {
+        return await posts.create(aiViewer, blog, {
             title: clean(out.title, 200) || topic,
             summary: clean(out.dek, 400) || null,
             body,

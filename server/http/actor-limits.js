@@ -29,7 +29,7 @@
  * Never limited: /api/health, /api/ready, /release.json, /metrics, sign-in, and the pages and feeds
  * people read.
  */
-const { createActorLimiter, defaultActor } = require('openvibe-sdk/limits');
+const { createActorLimiter, createValkeyLimitStore, defaultActor } = require('openvibe-sdk/limits');
 
 const FIRST_PARTY = /^svc:/;
 const LOOPBACK = /^(::1$|127\.|::ffff:127\.)/;
@@ -86,7 +86,7 @@ const BUDGETS = {
  * limits(name, own) middleware for one app, plus limits.reads(name, { skip }) (the defaults on every
  * GET/HEAD, a first-party service reading for itself not counted) and limits.budget(name).
  */
-function createActorLimits({ config, now = () => Date.now(), registry = null, log = console }) {
+function createActorLimits({ config, now = () => Date.now(), registry = null, log = console, valkey = null }) {
     const refused = registry
         ? registry.counter({ name: 'blog_rate_limited_total', help: 'Requests refused 429 by a per-actor limit, by limit name and window', labelNames: ['limit', 'window'] })
         : null;
@@ -94,6 +94,8 @@ function createActorLimits({ config, now = () => Date.now(), registry = null, lo
         limits: { minute: config.limits.minute, hour: config.limits.hour },
         actor,
         now,
+        // Shared across processes on Valkey (ADR-035) when VALKEY_URL is set; in-process otherwise.
+        ...(valkey ? { store: createValkeyLimitStore(valkey) } : {}),
         onLimited(e) {
             // The actor is a subject id, a principal or an address, never a token.
             log.warn(`[Limits] ${e.name}: ${e.actor} refused, over ${e.limit} per ${e.window}`);

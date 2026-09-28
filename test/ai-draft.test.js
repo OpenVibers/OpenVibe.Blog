@@ -46,7 +46,7 @@ const LONG = Array.from({ length: 120 }, (_, i) => `word${i}`).join(' ');
         assert.deepStrictEqual(asked[0].body.on_behalf_of, { type: 'user', id: fay.subject });
         assert.strictEqual(asked[0].body.target.service, 'blog');
         assert.ok(/^Bearer /.test(asked[0].auth), 'Blog\'s service token');
-        const cites = t.ctx.posts.citations(t.ctx.store.db.prepare('SELECT * FROM blog_posts WHERE id = ?').get(draft.id) || { id: draft.id }, 1);
+        const cites = await t.ctx.posts.citations(await t.ctx.store.db.prepare('SELECT * FROM blog_posts WHERE id = ?').get(draft.id) || { id: draft.id }, 1);
         assert.ok(cites.some((c) => c.url === 'https://example.org/self-hosting'), 'the run\'s citations are on revision 1');
     });
 
@@ -65,11 +65,11 @@ const LONG = Array.from({ length: 120 }, (_, i) => `word${i}`).join(' ');
 
     await check('a failed run makes no post; a stranger cannot ask', async () => {
         mode = 'fail';
-        const before = t.ctx.store.db.prepare('SELECT count(*) AS n FROM blog_posts').get().n;
+        const before = (await t.ctx.store.db.prepare('SELECT count(*) AS n FROM blog_posts').get()).n;
         const r = await t.get('/api/v1/blogs/fay/posts/ai-draft', { as: fay, json: { topic: 'x' } });
         assert.strictEqual(r.status, 502);
         assert.strictEqual(r.json().code, 'ai.run_failed');
-        assert.strictEqual(t.ctx.store.db.prepare('SELECT count(*) AS n FROM blog_posts').get().n, before);
+        assert.strictEqual((await t.ctx.store.db.prepare('SELECT count(*) AS n FROM blog_posts').get()).n, before);
         mode = 'ok';
         const stranger = t.network.addUser('stranger');
         assert.strictEqual((await t.get('/api/v1/blogs/fay/posts/ai-draft', { as: stranger, json: { topic: 'x' } })).status, 403);

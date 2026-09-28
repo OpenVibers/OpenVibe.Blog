@@ -9,8 +9,8 @@
  */
 function createEffects({ outbox, community }) {
     return {
-        after(before, post, ctx) {
-            outbox.kick();
+        async after(before, post, ctx) {
+            await outbox.kick();
             if (!post || !before) return;
             // Public = readable by everyone: published and public. Unpublishing hides the thread too.
             const wasPublic = before.visibility === 'public' && before.state === 'published';

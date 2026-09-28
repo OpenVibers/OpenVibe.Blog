@@ -15,15 +15,15 @@ const LONG = Array.from({ length: 120 }, (_, i) => `word${i}`).join(' ');
     let post;
 
     await check('the ten charter tables exist (package tables and views included)', async () => {
-        const names = new Set(t.ctx.store.db.prepare("SELECT name FROM sqlite_master WHERE type IN ('table','view')").all().map((r) => r.name));
+        const names = new Set((await t.ctx.store.db.prepare("SELECT table_name AS name FROM information_schema.tables WHERE table_schema = current_schema()").all()).map((r) => r.name));
         for (const n of CHARTER_TABLES) assert.ok(names.has(n), `missing ${n}`);
         for (const n of ['blog_schedule_jobs', 'blog_terms', 'blog_term_links', 'blog_post_citations', 'blog_post_attachments', 'blog_index_revisions', 'event_outbox']) assert.ok(names.has(n), `missing ${n}`);
     });
 
     await check('the official blog exists at / and its owner comes from BLOG_OFFICIAL_OWNERS', async () => {
-        const blog = t.ctx.blogs.official();
+        const blog = await t.ctx.blogs.official();
         assert.strictEqual(blog.handle, 'openvibe');
-        assert.strictEqual(t.ctx.blogs.membership(blog, t.official.subject).role, 'owner');
+        assert.strictEqual((await t.ctx.blogs.membership(blog, t.official.subject)).role, 'owner');
         const r = await t.get('/');
         assert.strictEqual(r.status, 200);
         assert.match(r.text, /The OpenVibe blog/);
@@ -47,8 +47,8 @@ const LONG = Array.from({ length: 120 }, (_, i) => `word${i}`).join(' ');
         assert.strictEqual(post.state, 'draft');
         assert.strictEqual(post.revision, 1);
         assert.deepStrictEqual(post.tags, ['Astronomy', 'night sky']);
-        assert.strictEqual(t.events('blog.post.created').length, 1);
-        assert.strictEqual(t.events(/index_document/).length, 0);
+        assert.strictEqual((await t.events('blog.post.created')).length, 1);
+        assert.strictEqual((await t.events(/index_document/)).length, 0);
         assert.strictEqual((await t.get('/@alice/first-light')).status, 404);
         assert.doesNotMatch((await t.get('/@alice/feed.xml')).text, /First light/);
     });
@@ -62,7 +62,7 @@ const LONG = Array.from({ length: 120 }, (_, i) => `word${i}`).join(' ');
         assert.strictEqual(stale.json().code, 'revision.conflict');
         const missing = await t.get(`/api/v1/posts/${post.id}`, { as: alice, method: 'PATCH', json: { body: 'no base' } });
         assert.strictEqual(missing.status, 428);
-        assert.throws(() => t.ctx.store.db.prepare('UPDATE blog_post_revisions SET content = ? WHERE entity_id = ?').run('x', post.id), /immutable/);
+        await assert.rejects(t.ctx.store.db.prepare('UPDATE blog_post_revisions SET content = ? WHERE entity_id = ?').run('x', post.id), /immutable/);
     });
 
     await check('publish: page served without JavaScript, BlogPosting from real fields, events + Search document', async () => {
@@ -85,13 +85,13 @@ const LONG = Array.from({ length: 120 }, (_, i) => `word${i}`).join(' ');
         assert.strictEqual(posting.datePublished, new Date(t.clock.now()).toISOString());
         assert.strictEqual(posting.publisher, undefined, 'no publisher invented for a member blog');
         assert.strictEqual(posting.aggregateRating, undefined);
-        assert.strictEqual(t.events('blog.post.published').length, 1);
-        const idx = t.events('blog.index_document.upserted');
+        assert.strictEqual((await t.events('blog.post.published')).length, 1);
+        const idx = await t.events('blog.index_document.upserted');
         assert.strictEqual(idx.length, 1);
         assert.strictEqual(idx[0].payload.visibility, 'public');
         assert.strictEqual(idx[0].payload.canonical_url, 'https://openvibe.blog/@alice/first-light');
         assert.ok(require('openvibe-contracts').validate('search.index-document@1', idx[0].payload).valid);
-        for (const e of t.events()) assert.ok(require('openvibe-contracts').validate('events.event-envelope@1', e).valid, `${e.event_type} envelope`);
+        for (const e of await t.events()) assert.ok(require('openvibe-contracts').validate('events.event-envelope@1', e).valid, `${e.event_type} envelope`);
     });
 
     await check('feeds (RSS, Atom, JSON Feed), sitemaps, tag/category/author pages list it', async () => {
@@ -113,11 +113,11 @@ const LONG = Array.from({ length: 120 }, (_, i) => `word${i}`).join(' ');
         const r = await t.get(`/api/v1/posts/${post.id}`, { as: alice, method: 'PATCH', json: { expected_revision: 2, title: 'First light (revised)' } });
         assert.strictEqual(r.json().revision, 3);
         assert.match((await t.get('/@alice/first-light')).text, /<h1>First light<\/h1>/);
-        assert.strictEqual(t.events('blog.post.updated').length, 0);
+        assert.strictEqual((await t.events('blog.post.updated')).length, 0);
         await t.get(`/api/v1/posts/${post.id}/publish`, { as: alice, json: { revision: 3 } });
         assert.match((await t.get('/@alice/first-light')).text, /<h1>First light \(revised\)<\/h1>/);
-        assert.strictEqual(t.events('blog.post.updated').length, 1);
-        assert.strictEqual(t.events('blog.index_document.upserted').length, 2);
+        assert.strictEqual((await t.events('blog.post.updated')).length, 1);
+        assert.strictEqual((await t.events('blog.index_document.upserted')).length, 2);
     });
 
     await check('history: diff and revert as a new revision; revisions 1–3 are untouched', async () => {
@@ -130,7 +130,7 @@ const LONG = Array.from({ length: 120 }, (_, i) => `word${i}`).join(' ');
         assert.deepStrictEqual(revs.map((x) => x.number), [4, 3, 2, 1]);
         assert.strictEqual(revs[0].kind, 'revert');
         assert.strictEqual(revs[0].revertedTo, 1);
-        assert.strictEqual(t.ctx.store.revisions.get(post.id, 4).content, t.ctx.store.revisions.get(post.id, 1).content);
+        assert.strictEqual((await t.ctx.store.revisions.get(post.id, 4)).content, (await t.ctx.store.revisions.get(post.id, 1)).content);
     });
 
     await check('unpublish: gone from pages, feeds, sitemap; Search gets a tombstone', async () => {
@@ -139,10 +139,10 @@ const LONG = Array.from({ length: 120 }, (_, i) => `word${i}`).join(' ');
         assert.strictEqual((await t.get('/@alice/first-light')).status, 404);
         assert.doesNotMatch((await t.get('/@alice/feed.xml')).text, /first-light/);
         assert.doesNotMatch((await t.get('/sitemaps/posts.xml')).text, /first-light/);
-        const del = t.events('blog.index_document.deleted');
+        const del = await t.events('blog.index_document.deleted');
         assert.strictEqual(del.length, 1);
         assert.deepStrictEqual(Object.keys(del[0].payload).sort(), ['id', 'revision', 'type']);
-        assert.strictEqual(t.events('blog.post.unpublished').length, 1);
+        assert.strictEqual((await t.events('blog.post.unpublished')).length, 1);
     });
 
     await check('delete: 410 Gone for readers, blog.post.deleted, revisions kept', async () => {
@@ -152,9 +152,9 @@ const LONG = Array.from({ length: 120 }, (_, i) => `word${i}`).join(' ');
         const page = await t.get('/@alice/first-light');
         assert.strictEqual(page.status, 410);
         assert.strictEqual(page.headers.get('cache-control'), 'private, no-store');
-        assert.strictEqual(t.events('blog.post.deleted').length, 1);
-        assert.strictEqual(t.ctx.store.revisions.list(post.id).length, 4);
-        const last = t.events(/index_document/).pop();
+        assert.strictEqual((await t.events('blog.post.deleted')).length, 1);
+        assert.strictEqual((await t.ctx.store.revisions.list(post.id)).length, 4);
+        const last = (await t.events(/index_document/)).pop();
         assert.strictEqual(last.event_type, 'blog.index_document.deleted');
     });
 
@@ -169,14 +169,14 @@ const LONG = Array.from({ length: 120 }, (_, i) => `word${i}`).join(' ');
         const made = await t.get('/api/v1/blogs/alice/posts', { as: alice, json: { title: 'Cited', body: `Sources below.\n\n${LONG}`, citations: [{ url: 'https://example.org/a', title: 'A', quote: 'quoted' }] } });
         assert.strictEqual(made.status, 201, made.text);
         const id = made.json().post.id;
-        const citesAt = () => { const h = t.ctx.store.revisions.head(id); return t.ctx.store.citations.forRevision(id, h.number).map((c) => c.url); };
-        assert.deepStrictEqual(citesAt(), ['https://example.org/a']);
-        let r = await t.get(`/api/v1/posts/${id}`, { as: alice, method: 'PATCH', json: { expected_revision: t.ctx.store.revisions.head(id).number, body: `Edited in /write.\n\n${LONG}` } });
+        const citesAt = async () => { const h = await t.ctx.store.revisions.head(id); return (await t.ctx.store.citations.forRevision(id, h.number)).map((c) => c.url); };
+        assert.deepStrictEqual(await citesAt(), ['https://example.org/a']);
+        let r = await t.get(`/api/v1/posts/${id}`, { as: alice, method: 'PATCH', json: { expected_revision: (await t.ctx.store.revisions.head(id)).number, body: `Edited in /write.\n\n${LONG}` } });
         assert.strictEqual(r.status, 200, r.text);
-        assert.deepStrictEqual(citesAt(), ['https://example.org/a'], 'carried forward');
-        r = await t.get(`/api/v1/posts/${id}`, { as: alice, method: 'PATCH', json: { expected_revision: t.ctx.store.revisions.head(id).number, body: `Replaced.\n\n${LONG}`, citations: [] } });
+        assert.deepStrictEqual(await citesAt(), ['https://example.org/a'], 'carried forward');
+        r = await t.get(`/api/v1/posts/${id}`, { as: alice, method: 'PATCH', json: { expected_revision: (await t.ctx.store.revisions.head(id)).number, body: `Replaced.\n\n${LONG}`, citations: [] } });
         assert.strictEqual(r.status, 200, r.text);
-        assert.deepStrictEqual(citesAt(), [], 'an explicit empty list removes them');
+        assert.deepStrictEqual(await citesAt(), [], 'an explicit empty list removes them');
     });
 
     await t.close();

@@ -66,7 +66,7 @@ const LONG = Array.from({ length: 100 }, (_, i) => `w${i}`).join(' ');
     });
 
     await check('the events outbox carries no sentinel', async () => {
-        const text = JSON.stringify(t.events());
+        const text = JSON.stringify(await t.events());
         for (const [k, v] of Object.entries(SECRETS)) assert.ok(!text.includes(v), `outbox carries ${k}`);
     });
 

@@ -47,11 +47,12 @@ const VERSION = require('../package.json').version;
  *       entitlementCheck ({ subject, key, blog, post }) → bool (replaces VIP), log,
  *       limitsNow (the per-actor limiter's clock, tests)
  */
-function createApp(opts = {}) {
+async function createApp(opts = {}) {
     const config = opts.config || configLib.load();
     const log = opts.log || console;
     const fetchImpl = opts.fetchImpl || globalThis.fetch;
-    const store = opts.store || openStore(opts.dbPath || config.dbPath, { now: opts.now });
+    // PostgreSQL (ADR-035): opened and migrated here unless the caller (a test, a script) hands in a store.
+    const store = opts.store || await openStore(config, { now: opts.now, log });
 
     const outbox = createBlogOutbox({ db: store.db, config, fetchImpl, now: store.now, log });
     const blogs = createBlogs({ store, config });
@@ -67,7 +68,7 @@ function createApp(opts = {}) {
     const auth = opts.auth || createAuthClient(config);
     const viewers = createViewerResolver({ auth, config, people });
     const worker = createWorker({ config, store, posts, media, outbox, log });
-    blogs.ensureOfficial();
+    await blogs.ensureOfficial();
 
     const aiDrafts = opts.aiDrafts || require('./domain/ai-drafts').createAiDrafts({ config, store, posts, access, fetchImpl });
     const changelog = opts.changelog || require('./changelog').createChangelog({ config, store, blogs, posts, aiDrafts, fetchImpl, log });
@@ -82,7 +83,10 @@ function createApp(opts = {}) {
     app.locals.ctx = ctx;
     // Per-actor limits (http/actor-limits.js) for the API, the editor and comment posts, counted once each
     // router resolved req.viewer; the per-address limits below stay.
-    ctx.limits = createActorLimits({ config, now: opts.limitsNow || (() => Date.now()), registry: metrics.registry, log });
+    // Valkey (ADR-035): shared, never-authoritative state (per-actor limit counters). Optional.
+    const valkey = opts.valkey !== undefined ? opts.valkey : (config.valkey.url ? require('openvibe-sdk/valkey').createValkey({ url: config.valkey.url, prefix: config.valkey.prefix, log }) : null);
+    ctx.valkey = valkey;
+    ctx.limits = createActorLimits({ config, now: opts.limitsNow || (() => Date.now()), registry: metrics.registry, log, valkey });
 
     app.use(contracts.http.middleware());
     app.use(helmet({
@@ -117,7 +121,7 @@ function createApp(opts = {}) {
     app.get('/api/health', (_req, res) => res.json({ status: 'ok', service: 'openvibe-blog', version: VERSION }));
     // GET /release.json (ADR-016) and POST /release-metrics: open tabs' update reports into /metrics.
     release.mount(app, { registry: metrics.registry });
-    const readiness = createBlogReadiness({ store, auth, outbox, release: release.release });
+    const readiness = createBlogReadiness({ store, auth, outbox, release: release.release, valkey: ctx.valkey });
     app.get('/api/ready', readiness.handler);
 
     // ── Sign-in (OAuth2 client of OpenVibe.Network) ─────────

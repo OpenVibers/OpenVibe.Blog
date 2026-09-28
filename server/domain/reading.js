@@ -24,8 +24,8 @@ function createReading({ store, blogs, posts: postsApi, publication, people, med
         feed: (blog, kind) => `${blog.kind === 'official' ? '' : base(blog)}/${{ rss: 'feed.xml', atom: 'atom.xml', json: 'feed.json' }[kind]}`,
     };
 
-    function feedsOf(blog) {
-        const s = blogs.feedSettings(blog);
+    async function feedsOf(blog) {
+        const s = await blogs.feedSettings(blog);
         const out = [];
         if (s.rss) out.push({ type: 'rss', href: urls.feed(blog, 'rss'), title: `${blog.title} (RSS)`, label: 'RSS', mime: 'application/rss+xml' });
         if (s.atom) out.push({ type: 'atom', href: urls.feed(blog, 'atom'), title: `${blog.title} (Atom)`, label: 'Atom', mime: 'application/atom+xml' });
@@ -33,49 +33,61 @@ function createReading({ store, blogs, posts: postsApi, publication, people, med
         return out;
     }
 
-    function termsView(post, blog, { networkTags = false } = {}) {
-        const terms = store.taxonomy.termsFor(post.id);
+    async function termsView(post, blog, { networkTags = false } = {}) {
+        const terms = await store.taxonomy.termsFor(post.id);
         return {
             tags: terms.filter((t) => t.vocabulary === 'tag').map((t) => ({ ...t, url: urls.tag(t, networkTags ? null : blog) })),
             categories: terms.filter((t) => t.vocabulary !== 'tag').map((t) => ({ ...t, url: urls.category(blog, t) })),
         };
     }
 
-    /** List items for rows of published posts (possibly from several blogs). */
+    /** Blogs of these rows, one lookup per distinct blog. */
+    async function blogsFor(rows) {
+        const out = new Map();
+        for (const id of new Set(rows.map((p) => p.blog_id))) out.set(id, await blogs.get(id));
+        return out;
+    }
+    const revRefs = (rows) => rows.map((p) => ({ entityId: p.id, revision: p.published_revision }));
+
+    /** List items for rows of published posts (possibly from several blogs): revisions in one query (no N+1). */
     async function listItems(rows, { perBlogLinks = true } = {}) {
-        const who = await people.many(rows.map((p) => p.author_subject));
-        return rows.map((post) => {
-            const blog = blogs.get(post.blog_id);
-            const rev = store.revisions.get(post.id, post.published_revision);
+        const [who, revs, blogById] = await Promise.all([people.many(rows.map((p) => p.author_subject)), store.revisions.getMany(revRefs(rows)), blogsFor(rows)]);
+        const out = [];
+        for (const [i, post] of rows.entries()) {
+            const rev = revs[i];
+            if (!rev) continue;
+            const blog = blogById.get(post.blog_id);
             const person = who.get(post.author_subject);
-            const { tags } = termsView(post, blog, { networkTags: !perBlogLinks });
-            return {
+            const { tags } = await termsView(post, blog, { networkTags: !perBlogLinks });
+            out.push({
                 post, rev, blog,
                 url: publication.postPath(blog, post),
                 author: person ? { name: person.name, url: urls.author(person, blog) } : null,
                 tags,
                 badge: { members: 'Members only', private: 'Private' }[post.visibility] || null,
-            };
-        }).filter((it) => it.rev);
+            });
+        }
+        return out;
     }
 
-    function categoriesTree(blog) {
-        return store.taxonomy.tree(blogs.categoryVocabulary(blog));
+    async function categoriesTree(blog) {
+        return await store.taxonomy.tree(blogs.categoryVocabulary(blog));
     }
 
     /** Feed items (openvibe-publishing/seo feed builders skip anything the gate does not list). */
     async function feedItems(blog, { limit, fullContent }) {
-        const { posts: rows } = postsApi.listPublished({ blogId: blog.id, limit, restricted: false });
-        const who = await people.many(rows.map((p) => p.author_subject));
-        return rows.map((post) => {
-            const rev = store.revisions.get(post.id, post.published_revision);
-            if (!rev) return null;
-            const decision = publication.decide(blog, post, rev);
+        const { posts: rows } = await postsApi.listPublished({ blogId: blog.id, limit, restricted: false });
+        const [who, revs] = await Promise.all([people.many(rows.map((p) => p.author_subject)), store.revisions.getMany(revRefs(rows))]);
+        const out = [];
+        for (const [i, post] of rows.entries()) {
+            const rev = revs[i];
+            if (!rev) continue;
+            const decision = await publication.decide(blog, post, rev);
             const person = who.get(post.author_subject);
-            const atts = store.attachments.list(post.id);
+            const atts = await store.attachments.list(post.id);
             const cover = atts.find((a) => a.role === 'cover' && !a.broken);
             const rel = blog.kind === 'official' ? 'noopener' : 'nofollow ugc noopener';
-            return {
+            out.push({
                 id: publication.feedId(post),
                 url: publication.postUrl(blog, post),
                 title: rev.fields.title,
@@ -85,18 +97,19 @@ function createReading({ store, blogs, posts: postsApi, publication, people, med
                 updated: rev.createdAt,
                 decision,
                 authors: person && person.known ? [{ name: person.name, url: publication.abs(urls.author(person, blog)) }] : [],
-                tags: termsView(post, blog).tags.map((t) => t.name),
+                tags: (await termsView(post, blog)).tags.map((t) => t.name),
                 image: cover ? media.urlFor(cover.mediaId) : null,
-            };
-        }).filter(Boolean);
+            });
+        }
+        return out;
     }
 
     /** The machine-readable representation of a post (same content as the page). */
-    function postJson({ blog, post, rev, person, decision }) {
+    async function postJson({ blog, post, rev, person, decision }) {
         const rec = publication.authorshipOf(rev);
-        const review = publication.reviewOf(post, rev);
-        const { tags, categories } = termsView(post, blog);
-        const series = blogs.seriesById(post.series_id);
+        const review = await publication.reviewOf(post, rev);
+        const { tags, categories } = await termsView(post, blog);
+        const series = await blogs.seriesById(post.series_id);
         return {
             id: post.id,
             url: publication.postUrl(blog, post),
@@ -114,8 +127,8 @@ function createReading({ store, blogs, posts: postsApi, publication, people, med
             tags: tags.map((t) => t.name),
             categories: categories.map((c) => c.name),
             series: series ? { title: series.title, url: publication.abs(urls.series(blog, series)), position: post.series_position } : null,
-            media: store.attachments.list(post.id).map((a) => ({ media_id: a.mediaId, role: a.role, alt: a.alt, caption: a.caption, state: a.state, broken_reason: a.brokenReason, url: a.broken ? null : media.urlFor(a.mediaId) })),
-            citations: store.citations.forRevision(post.id, rev.number).map((c) => ({ url: c.url, title: c.title, source_item_id: c.sourceItemId, retrieved_at: c.retrievedAt, quote: c.quote ? c.quote.text : null })),
+            media: (await store.attachments.list(post.id)).map((a) => ({ media_id: a.mediaId, role: a.role, alt: a.alt, caption: a.caption, state: a.state, broken_reason: a.brokenReason, url: a.broken ? null : media.urlFor(a.mediaId) })),
+            citations: (await store.citations.forRevision(post.id, rev.number)).map((c) => ({ url: c.url, title: c.title, source_item_id: c.sourceItemId, retrieved_at: c.retrievedAt, quote: c.quote ? c.quote.text : null })),
             indexability: { indexable: decision.indexable, robots: decision.robots, reasons: decision.codes },
         };
     }
@@ -147,7 +160,7 @@ function createReading({ store, blogs, posts: postsApi, publication, people, med
      * OpenVibe.VIP. The official blog has no VIP owner: no join link.
      */
     async function teaser(blog, post, { reason = null } = {}) {
-        const rev = post.published_revision ? store.revisions.get(post.id, post.published_revision) : null;
+        const rev = post.published_revision ? await store.revisions.get(post.id, post.published_revision) : null;
         const owner = blog.owner_subject ? await people.one(blog.owner_subject) : null;
         return {
             id: post.id,

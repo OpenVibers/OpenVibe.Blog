@@ -54,7 +54,7 @@ function createCommunity({ store, config, fetchImpl = globalThis.fetch }) {
         /** The stored thread id, or resolve it once through Community. Public posts only. */
         async threadFor(post, label, ctx) {
             if (post.visibility !== 'public') return null;
-            const known = store.discussion.get(post.id);
+            const known = await store.discussion.get(post.id);
             if (known) return known.threadId;
             if (!discussion) return null;
             const out = await store.discussion.threadFor(post.id, refFor(post, label), { client: discussion, traceparent: ctx && ctx.traceparent, requestId: ctx && ctx.requestId });
@@ -64,13 +64,13 @@ function createCommunity({ store, config, fetchImpl = globalThis.fetch }) {
         /** { thread, comments, next_cursor } read as an anonymous visitor (public data only). */
         async readThread(threadId, { after, ctx } = {}) {
             const qs = after ? `?after=${encodeURIComponent(after)}` : '';
-            return call('GET', `/api/v1/comments/threads/${encodeURIComponent(threadId)}${qs}`, { ctx });
+            return await call('GET', `/api/v1/comments/threads/${encodeURIComponent(threadId)}${qs}`, { ctx });
         },
 
         /** Comment as the signed-in member. */
         async comment(threadId, subject, { message, parentId } = {}, ctx) {
             if (!writeTokens) { const e = new Error('comments are not configured'); e.status = 503; throw e; }
-            return call('POST', `/api/v1/comments/threads/${encodeURIComponent(threadId)}/comments`, {
+            return await call('POST', `/api/v1/comments/threads/${encodeURIComponent(threadId)}/comments`, {
                 tokens: writeTokens, subject, body: { message, ...(parentId ? { parent_id: parentId } : {}) }, ctx,
             });
         },
@@ -80,7 +80,7 @@ function createCommunity({ store, config, fetchImpl = globalThis.fetch }) {
          * again when it is public again. Needs community.comment.moderate.
          */
         async setThreadVisibility(post, visibility, ctx) {
-            const known = store.discussion.get(post.id);
+            const known = await store.discussion.get(post.id);
             if (!known || !modTokens) return false;
             try {
                 await call('PUT', `/api/v1/comments/threads/${encodeURIComponent(known.threadId)}/visibility`, { tokens: modTokens, body: { visibility }, ctx });

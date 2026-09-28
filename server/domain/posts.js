@@ -52,11 +52,11 @@ function createPosts({ store, blogs, publication, access, outbox, log = console 
                             VALUES (@id, @blog_id, @slug, 'draft', @visibility, @entitlement_key, @author_subject, @series_id, @series_position,
                             @allow_comments, @noindex, @now, @now)`),
     };
-    const blogOf = (post) => blogs.get(post.blog_id);
+    const blogOf = async (post) => await blogs.get(post.blog_id);
     // Staff acting where only their staff powers allow it (not a role on the blog, not their own post)
     // is moderation: it also goes to Network's moderation audit log (ADR-022).
-    const byStaff = (viewer, blog, action, post) => access.isStaff(viewer) && !access.canWrite(store, { ...viewer, staff: false }, blog, action, post);
-    const moderated = (action, post, viewer, ctx, details) => outbox.moderationAction({
+    const byStaff = async (viewer, blog, action, post) => access.isStaff(viewer) && !await access.canWrite(store, { ...viewer, staff: false }, blog, action, post);
+    const moderated = async (action, post, viewer, ctx, details) => await outbox.moderationAction({
         action, target: { type: 'post', id: post.id, owner_subject: post.author_subject }, actorSubject: viewer.subject, details: { blog_id: post.blog_id, ...details },
     }, { traceparent: ctx.traceparent });
 
@@ -86,13 +86,13 @@ function createPosts({ store, blogs, publication, access, outbox, log = console 
         if (!KEY_RE.test(k)) throw new ApiError(422, 'post.invalid_entitlement', 'entitlement key must match ^[a-z][a-z0-9_.:-]{0,127}$');
         return { visibility: vis, entitlement_key: k };
     }
-    function slugFor(blog, wanted, postId = null) {
+    async function slugFor(blog, wanted, postId = null) {
         let base;
         try { base = slugify(wanted); } catch { throw new ApiError(422, 'post.invalid_slug', 'That title or slug has no letters or digits to make a URL from'); }
         if (!SLUG_RE.test(base)) throw new ApiError(422, 'post.invalid_slug', 'slug must be lowercase letters, digits and dashes');
         for (let i = 1; i < 1000; i++) {
             const s = i === 1 ? base : `${base.slice(0, 75)}-${i}`;
-            const hit = q.slugTaken.get(blog.id, s);
+            const hit = await q.slugTaken.get(blog.id, s);
             if (!hit || hit.id === postId) return s;
         }
         throw new ApiError(409, 'post.slug_taken', 'No free slug for that title');
@@ -127,12 +127,12 @@ function createPosts({ store, blogs, publication, access, outbox, log = console 
         return viewer.subject;
     }
 
-    function setTerms(blog, post, input) {
+    async function setTerms(blog, post, input) {
         if (input.tags !== undefined) {
             const tags = listOf(input.tags);
             if (tags.length > MAX_TAGS) throw new ApiError(422, 'post.too_many_tags', `At most ${MAX_TAGS} tags`);
             for (const t of tags) if (t.length > 50) throw new ApiError(422, 'post.invalid_tag', 'A tag is at most 50 characters');
-            store.taxonomy.setTerms(post.id, 'tag', tags);
+            await store.taxonomy.setTerms(post.id, 'tag', tags);
         }
         if (input.categories !== undefined) {
             const vocab = blogs.categoryVocabulary(blog);
@@ -141,20 +141,20 @@ function createPosts({ store, blogs, publication, access, outbox, log = console 
             for (const pathText of listOf(input.categories).slice(0, 10)) {
                 let parentId = null;
                 for (const name of pathText.split('>').map((s) => s.trim()).filter(Boolean).slice(0, 4)) {
-                    const term = store.taxonomy.ensureTerm({ vocabulary: vocab, name: name.slice(0, 80), parentId });
+                    const term = await store.taxonomy.ensureTerm({ vocabulary: vocab, name: name.slice(0, 80), parentId });
                     parentId = term.id;
                 }
                 if (parentId != null) termIds.push(parentId);
             }
-            store.taxonomy.setTerms(post.id, vocab, termIds);
+            await store.taxonomy.setTerms(post.id, vocab, termIds);
         }
     }
 
-    function seriesOf(blog, input, current) {
+    async function seriesOf(blog, input, current) {
         if (input.series === undefined && input.seriesId === undefined && input.series_id === undefined) return current;
         const v = input.seriesId ?? input.series_id ?? input.series;
         if (v == null || v === '') return { series_id: null, series_position: null };
-        let series = typeof v === 'string' && v.startsWith('ser_') ? blogs.seriesById(v) : blogs.ensureSeries(blog, typeof v === 'object' ? v.title : v);
+        let series = typeof v === 'string' && v.startsWith('ser_') ? await blogs.seriesById(v) : await blogs.ensureSeries(blog, typeof v === 'object' ? v.title : v);
         if (!series || series.blog_id !== blog.id) throw new ApiError(422, 'post.invalid_series', 'That series is not on this blog');
         const posRaw = input.seriesPosition ?? input.series_position;
         const pos = posRaw == null || posRaw === '' ? null : parseInt(posRaw, 10);
@@ -162,9 +162,9 @@ function createPosts({ store, blogs, publication, access, outbox, log = console 
         return { series_id: series.id, series_position: pos };
     }
 
-    function attachCitations(post, revision, list) {
+    async function attachCitations(post, revision, list) {
         if (!Array.isArray(list) || !list.length) return;
-        store.citations.attachMany(post.id, revision, list.slice(0, 100).map((c) => ({
+        await store.citations.attachMany(post.id, revision, list.slice(0, 100).map((c) => ({
             url: c.url || null, sourceItemId: c.sourceItemId || c.source_item_id || null, title: c.title || null,
             retrievedAt: c.retrievedAt || c.retrieved_at || null,
             quote: c.quote ? (typeof c.quote === 'string' ? { text: c.quote } : c.quote) : null,
@@ -177,14 +177,14 @@ function createPosts({ store, blogs, publication, access, outbox, log = console 
     const api = {
         VISIBILITIES, MEDIA_ROLES,
 
-        get: (id) => q.byId.get(String(id || '')) || null,
-        bySlug: (blog, slug) => q.bySlug.get(blog.id, String(slug || '')) || null,
-        deletedBySlug: (blog, slug) => q.deletedBySlug.get(blog.id, String(slug || '')) || null,
+        get: async (id) => await q.byId.get(String(id || '')) || null,
+        bySlug: async (blog, slug) => await q.bySlug.get(blog.id, String(slug || '')) || null,
+        deletedBySlug: async (blog, slug) => await q.deletedBySlug.get(blog.id, String(slug || '')) || null,
         blogOf,
 
         /** Must exist and not be deleted, else 404. */
-        mustGet(id) {
-            const p = api.get(id);
+        async mustGet(id) {
+            const p = await api.get(id);
             if (!p || p.state === 'deleted') throw new ApiError(404, 'post.not_found', 'No such post');
             return p;
         },
@@ -194,7 +194,7 @@ function createPosts({ store, blogs, publication, access, outbox, log = console 
          * member of the blog or staff). Unlisted posts are never listed.
          * filters: blogId, termIds (any), seriesId, authorSubject, restricted, limit, offset
          */
-        listPublished({ blogId = null, termIds = null, seriesId = null, authorSubject = null, restricted = false, limit = 20, offset = 0, order = 'recent' } = {}) {
+        async listPublished({ blogId = null, termIds = null, seriesId = null, authorSubject = null, restricted = false, limit = 20, offset = 0, order = 'recent' } = {}) {
             const where = ["p.state = 'published'"];
             const args = [];
             if (restricted) where.push("p.visibility IN ('public','members','private')");
@@ -209,63 +209,63 @@ function createPosts({ store, blogs, publication, access, outbox, log = console 
             }
             where.push("EXISTS (SELECT 1 FROM blogs b WHERE b.id = p.blog_id AND b.status = 'active')");
             const w = where.join(' AND ');
-            const total = db.prepare(`SELECT COUNT(*) AS n FROM blog_posts p WHERE ${w}`).get(...args).n;
+            const total = (await db.prepare(`SELECT COUNT(*) AS n FROM blog_posts p WHERE ${w}`).get(...args)).n;
             const orderBy = order === 'series' ? 'COALESCE(p.series_position, 1e9), p.first_published_at, p.id' : 'p.published_at DESC, p.id DESC';
-            const posts = db.prepare(`SELECT p.* FROM blog_posts p WHERE ${w} ORDER BY ${orderBy} LIMIT ? OFFSET ?`).all(...args, limit, offset);
+            const posts = await db.prepare(`SELECT p.* FROM blog_posts p WHERE ${w} ORDER BY ${orderBy} LIMIT ? OFFSET ?`).all(...args, limit, offset);
             return { total, posts };
         },
 
         /** Every non-deleted post of a blog, for its members' dashboard (authors: their own). */
-        listForDashboard(blog, viewer) {
-            const role = access.effectiveRole(store, viewer, blog);
+        async listForDashboard(blog, viewer) {
+            const role = await access.effectiveRole(store, viewer, blog);
             if (!role && !access.isStaff(viewer)) return [];
             const own = role === 'author' ? ' AND author_subject = ?' : '';
             const args = role === 'author' ? [blog.id, viewer.subject] : [blog.id];
-            return db.prepare(`SELECT * FROM blog_posts WHERE blog_id = ? AND state <> 'deleted'${own} ORDER BY updated_at DESC LIMIT 500`).all(...args);
+            return await db.prepare(`SELECT * FROM blog_posts WHERE blog_id = ? AND state <> 'deleted'${own} ORDER BY updated_at DESC LIMIT 500`).all(...args);
         },
 
-        head: (post) => store.revisions.head(post.id),
-        revision: (post, n) => store.revisions.get(post.id, n),
-        revisions: (post, opts) => store.revisions.list(post.id, opts),
-        diff: (post, from, to, mode) => store.revisions.diff(post.id, from, to, { mode: mode === 'word' ? 'word' : 'line' }),
-        pendingJobs: (post) => store.scheduler.jobs(post.id).filter((j) => j.status === 'pending' || j.status === 'running'),
-        attachments: (post) => store.attachments.list(post.id),
-        citations: (post, rev) => (rev ? store.citations.forRevision(post.id, rev) : []),
+        head: async (post) => await store.revisions.head(post.id),
+        revision: async (post, n) => await store.revisions.get(post.id, n),
+        revisions: async (post, opts) => await store.revisions.list(post.id, opts),
+        diff: async (post, from, to, mode) => await store.revisions.diff(post.id, from, to, { mode: mode === 'word' ? 'word' : 'line' }),
+        pendingJobs: async (post) => (await store.scheduler.jobs(post.id)).filter((j) => j.status === 'pending' || j.status === 'running'),
+        attachments: async (post) => await store.attachments.list(post.id),
+        citations: async (post, rev) => (rev ? await store.citations.forRevision(post.id, rev) : []),
 
         // ── Writes ──────────────────────────────────────────
 
         /** A new draft (revision 1). Returns { post, revision }. */
-        create(viewer, blog, input = {}, { traceparent } = {}) {
+        async create(viewer, blog, input = {}, { traceparent } = {}) {
             const subject = actingSubject(viewer);
-            if (!access.canWrite(store, viewer, blog, 'create')) throw new ApiError(403, 'blog.forbidden', 'You cannot write on this blog');
+            if (!await access.canWrite(store, viewer, blog, 'create')) throw new ApiError(403, 'blog.forbidden', 'You cannot write on this blog');
             const t = title(input.title);
             const content = body(input.body);
             const vis = visibilityOf(blog, input.visibility, input.entitlementKey ?? input.entitlement_key);
             const rec = authorshipFor(viewer, input, null);
-            return store.tx(() => {
+            return await store.tx(async () => {
                 const now = store.now();
                 const id = newPostId(now);
-                const slug = slugFor(blog, input.slug || t);
-                store.redirects.release(publication.postPath(blog, { slug }));   // a live post owns its path
-                const ser = seriesOf(blog, input, { series_id: null, series_position: null });
-                q.insert.run({
+                const slug = await slugFor(blog, input.slug || t);
+                await store.redirects.release(publication.postPath(blog, { slug }));   // a live post owns its path
+                const ser = await seriesOf(blog, input, { series_id: null, series_position: null });
+                await q.insert.run({
                     id, blog_id: blog.id, slug, ...vis, author_subject: subject, ...ser,
                     allow_comments: input.allowComments === undefined && input.allow_comments === undefined ? 1 : (truthy(input.allowComments ?? input.allow_comments) ? 1 : 0),
                     noindex: truthy(input.noindex) ? 1 : 0, now,
                 });
-                const { revision } = store.revisions.create({
+                const { revision } = await store.revisions.create({
                     entityId: id, expectedRevision: 0, content, fields: { title: t, summary: summary(input.summary) },
                     meta: { authorship: rec }, author: authorLabel(viewer), message: input.message || 'First draft',
                 });
-                attachCitations({ id }, revision.number, input.citations);
-                const post = q.byId.get(id);
-                setTerms(blog, post, input);
-                outbox.emit({
+                await attachCitations({ id }, revision.number, input.citations);
+                const post = await q.byId.get(id);
+                await setTerms(blog, post, input);
+                await outbox.emit({
                     event_type: 'blog.post.created', actor: actorRef(viewer), visibility: 'internal', priority: 'low',
                     subject: { type: 'post', id, revision: revision.number },
                     payload: { blog: { id: blog.id, handle: blog.handle }, state: 'draft', visibility: post.visibility, authorship: rec.mode, ...(rec.workflow ? { workflow: rec.workflow } : {}) },
                 }, { traceparent });
-                return { post: q.byId.get(id), revision };
+                return { post: await q.byId.get(id), revision };
             });
         },
 
@@ -274,14 +274,14 @@ function createPosts({ store, blogs, publication, access, outbox, log = console 
          * on conflict); slug, visibility, taxonomy, series and flags change the post row. A slug
          * change leaves a 301 from the old path.
          */
-        update(viewer, post, input = {}, { traceparent } = {}) {
+        async update(viewer, post, input = {}, { traceparent } = {}) {
             actingSubject(viewer);
-            const blog = blogOf(post);
-            if (!access.canWrite(store, viewer, blog, 'edit', post)) throw new ApiError(403, 'post.forbidden', 'You cannot edit this post');
+            const blog = await blogOf(post);
+            if (!await access.canWrite(store, viewer, blog, 'edit', post)) throw new ApiError(403, 'post.forbidden', 'You cannot edit this post');
             if (post.state === 'deleted') throw new ApiError(404, 'post.not_found', 'No such post');
-            return store.tx(() => {
+            return await store.tx(async () => {
                 const before = publication.snapshot(blog, post);
-                const head = store.revisions.head(post.id);
+                const head = await store.revisions.head(post.id);
                 let revision = head;
                 let created = false;
                 const contentChange = input.title !== undefined || input.body !== undefined || input.summary !== undefined;
@@ -293,7 +293,7 @@ function createPosts({ store, blogs, publication, access, outbox, log = console 
                         summary: input.summary !== undefined ? summary(input.summary) : (head.fields.summary || null),
                     };
                     const rec = authorshipFor(viewer, input, publication.authorshipOf(head));
-                    const out = store.revisions.create({
+                    const out = await store.revisions.create({
                         entityId: post.id, expectedRevision: parseInt(expected, 10), content: input.body !== undefined ? body(input.body) : head.content,
                         fields, meta: { authorship: rec }, author: authorLabel(viewer), message: input.message || null,
                     });
@@ -302,88 +302,88 @@ function createPosts({ store, blogs, publication, access, outbox, log = console 
                     if (created) {
                         // An edit that does not send citations keeps the ones it had (the /write editor does not
                         // resend them); sending a list, even an empty one, replaces them.
-                        if (input.citations !== undefined) attachCitations(post, revision.number, input.citations);
-                        else store.citations.carryForward({ entityId: post.id, fromRevision: head.number, toRevision: revision.number, attachedBy: viewer.subject });
+                        if (input.citations !== undefined) await attachCitations(post, revision.number, input.citations);
+                        else await store.citations.carryForward({ entityId: post.id, fromRevision: head.number, toRevision: revision.number, attachedBy: viewer.subject });
                     }
                 }
                 const sets = {};
                 if (input.slug !== undefined && input.slug !== '' && input.slug !== post.slug) {
-                    const slug = slugFor(blog, input.slug, post.id);
+                    const slug = await slugFor(blog, input.slug, post.id);
                     if (slug !== post.slug) {
-                        store.redirects.recordMove(post.id, publication.postPath(blog, post), publication.postPath(blog, { ...post, slug }), { reason: 'slug_changed' });
+                        await store.redirects.recordMove(post.id, publication.postPath(blog, post), publication.postPath(blog, { ...post, slug }), { reason: 'slug_changed' });
                         sets.slug = slug;
                     }
                 }
                 if (input.visibility !== undefined || input.entitlementKey !== undefined || input.entitlement_key !== undefined) {
                     Object.assign(sets, visibilityOf(blog, input.visibility ?? post.visibility, input.entitlementKey ?? input.entitlement_key ?? post.entitlement_key));
                 }
-                Object.assign(sets, seriesOf(blog, input, { series_id: post.series_id, series_position: post.series_position }));
+                Object.assign(sets, await seriesOf(blog, input, { series_id: post.series_id, series_position: post.series_position }));
                 if (input.allowComments !== undefined || input.allow_comments !== undefined) sets.allow_comments = truthy(input.allowComments ?? input.allow_comments) ? 1 : 0;
                 if (input.noindex !== undefined) sets.noindex = truthy(input.noindex) ? 1 : 0;
                 const keys = Object.keys(sets);
-                db.prepare(`UPDATE blog_posts SET ${keys.map((k) => `${k} = @${k}`).concat('updated_at = @now').join(', ')} WHERE id = @id`)
+                await db.prepare(`UPDATE blog_posts SET ${keys.map((k) => `${k} = @${k}`).concat('updated_at = @now').join(', ')} WHERE id = @id`)
                     .run({ ...sets, now: store.now(), id: post.id });
-                setTerms(blog, post, input);
-                const { post: after } = publication.afterChange(before, post.id, { actor: viewer, traceparent });
+                await setTerms(blog, post, input);
+                const { post: after } = await publication.afterChange(before, post.id, { actor: viewer, traceparent });
                 return { post: after, revision, created };
             });
         },
 
         /** The idempotent effect: revision N is the published one. Returns { changed, post }. */
-        applyPublish(postId, revisionNumber, actor, { traceparent } = {}) {
-            return store.tx(() => {
-                const post = q.byId.get(postId);
+        async applyPublish(postId, revisionNumber, actor, { traceparent } = {}) {
+            return await store.tx(async () => {
+                const post = await q.byId.get(postId);
                 if (!post || post.state === 'deleted') throw new ApiError(409, 'post.deleted', 'The post was deleted');
-                const rev = revisionNumber ? store.revisions.get(post.id, revisionNumber) : store.revisions.head(post.id);
+                const rev = revisionNumber ? await store.revisions.get(post.id, revisionNumber) : await store.revisions.head(post.id);
                 if (!rev) throw new ApiError(404, 'revision.not_found', `No revision ${revisionNumber} of this post`);
                 if (post.state === 'published' && post.published_revision === rev.number) return { changed: false, post };
-                const ok = authorship.canPublish(publication.authorshipOf(rev) || { mode: 'human' }, publication.reviewOf(post, rev));
+                const ok = authorship.canPublish(publication.authorshipOf(rev) || { mode: 'human' }, await publication.reviewOf(post, rev));
                 if (!ok.ok) throw new ApiError(409, 'post.review_required', `Revision ${rev.number} is AI-generated and needs a person's review before it can be published (${ok.reason})`);
-                const before = publication.snapshot(blogOf(post), post);
+                const before = publication.snapshot(await blogOf(post), post);
                 const now = store.now();
-                db.prepare(`UPDATE blog_posts SET state = 'published', published_revision = ?, first_published_at = COALESCE(first_published_at, ?),
+                await db.prepare(`UPDATE blog_posts SET state = 'published', published_revision = ?, first_published_at = COALESCE(first_published_at, ?),
                             published_at = ?, updated_at = ? WHERE id = ?`).run(rev.number, now, now, now, post.id);
-                const out = publication.afterChange(before, post.id, { actor, traceparent });
+                const out = await publication.afterChange(before, post.id, { actor, traceparent });
                 return { changed: true, post: out.post };
             });
         },
 
-        applyUnpublish(postId, actor, { traceparent } = {}) {
-            return store.tx(() => {
-                const post = q.byId.get(postId);
+        async applyUnpublish(postId, actor, { traceparent } = {}) {
+            return await store.tx(async () => {
+                const post = await q.byId.get(postId);
                 if (!post || post.state === 'deleted') throw new ApiError(409, 'post.deleted', 'The post was deleted');
                 if (post.state !== 'published') return { changed: false, post };
-                const before = publication.snapshot(blogOf(post), post);
-                db.prepare("UPDATE blog_posts SET state = 'unpublished', updated_at = ? WHERE id = ?").run(store.now(), post.id);
-                return { changed: true, post: publication.afterChange(before, post.id, { actor, traceparent }).post };
+                const before = publication.snapshot(await blogOf(post), post);
+                await db.prepare("UPDATE blog_posts SET state = 'unpublished', updated_at = ? WHERE id = ?").run(store.now(), post.id);
+                return { changed: true, post: (await publication.afterChange(before, post.id, { actor, traceparent })).post };
             });
         },
 
-        publish(viewer, post, { revision } = {}, ctx = {}) {
+        async publish(viewer, post, { revision } = {}, ctx = {}) {
             actingSubject(viewer);
-            if (!access.canWrite(store, viewer, blogOf(post), 'publish', post)) throw new ApiError(403, 'post.forbidden', 'You cannot publish this post');
+            if (!await access.canWrite(store, viewer, await blogOf(post), 'publish', post)) throw new ApiError(403, 'post.forbidden', 'You cannot publish this post');
             const n = revision == null || revision === '' ? null : parseInt(revision, 10);
-            return store.tx(() => {
-                store.scheduler.cancelPending(post.id, 'publish');
-                return api.applyPublish(post.id, n, viewer, ctx);
+            return await store.tx(async () => {
+                await store.scheduler.cancelPending(post.id, 'publish');
+                return await api.applyPublish(post.id, n, viewer, ctx);
             });
         },
 
-        unpublish(viewer, post, ctx = {}) {
+        async unpublish(viewer, post, ctx = {}) {
             actingSubject(viewer);
-            if (!access.canWrite(store, viewer, blogOf(post), 'unpublish', post)) throw new ApiError(403, 'post.forbidden', 'You cannot unpublish this post');
-            const moderation = byStaff(viewer, blogOf(post), 'unpublish', post);
-            return store.tx(() => {
-                store.scheduler.cancelPending(post.id);
-                const cur = q.byId.get(post.id);
+            if (!await access.canWrite(store, viewer, await blogOf(post), 'unpublish', post)) throw new ApiError(403, 'post.forbidden', 'You cannot unpublish this post');
+            const moderation = await byStaff(viewer, await blogOf(post), 'unpublish', post);
+            return await store.tx(async () => {
+                await store.scheduler.cancelPending(post.id);
+                const cur = await q.byId.get(post.id);
                 let out;
                 if (cur.state === 'scheduled') {
-                    db.prepare("UPDATE blog_posts SET state = 'draft', updated_at = ? WHERE id = ?").run(store.now(), post.id);
-                    out = { changed: true, post: q.byId.get(post.id) };
+                    await db.prepare("UPDATE blog_posts SET state = 'draft', updated_at = ? WHERE id = ?").run(store.now(), post.id);
+                    out = { changed: true, post: await q.byId.get(post.id) };
                 } else {
-                    out = api.applyUnpublish(post.id, viewer, ctx);
+                    out = await api.applyUnpublish(post.id, viewer, ctx);
                 }
-                if (moderation && out.changed) moderated('post.unpublished', cur, viewer, ctx, { previous: cur.state });
+                if (moderation && out.changed) await moderated('post.unpublished', cur, viewer, ctx, { previous: cur.state });
                 return out;
             });
         },
@@ -392,38 +392,38 @@ function createPosts({ store, blogs, publication, access, outbox, log = console 
          * Schedule a publish (of revision N, default the head) or an unpublish at a future time.
          * Idempotent: the same (post, action, time, revision) is one job.
          */
-        schedule(viewer, post, { at, revision, action = 'publish' } = {}) {
+        async schedule(viewer, post, { at, revision, action = 'publish' } = {}) {
             actingSubject(viewer);
-            const blog = blogOf(post);
-            if (!access.canWrite(store, viewer, blog, action === 'unpublish' ? 'unpublish' : 'publish', post)) throw new ApiError(403, 'post.forbidden', 'You cannot schedule this post');
+            const blog = await blogOf(post);
+            if (!await access.canWrite(store, viewer, blog, action === 'unpublish' ? 'unpublish' : 'publish', post)) throw new ApiError(403, 'post.forbidden', 'You cannot schedule this post');
             if (!['publish', 'unpublish'].includes(action)) throw new ApiError(422, 'schedule.invalid_action', 'action is publish or unpublish');
             const t = at instanceof Date ? at.getTime() : typeof at === 'number' ? at : Date.parse(at);
             if (!Number.isFinite(t)) throw new ApiError(422, 'schedule.invalid_time', 'at must be an ISO 8601 time');
             if (t <= store.now()) throw new ApiError(422, 'schedule.in_past', 'Scheduled time must be in the future');
-            const rev = action === 'publish' ? (revision ? store.revisions.get(post.id, parseInt(revision, 10)) : store.revisions.head(post.id)) : null;
+            const rev = action === 'publish' ? (revision ? await store.revisions.get(post.id, parseInt(revision, 10)) : await store.revisions.head(post.id)) : null;
             if (action === 'publish') {
                 if (!rev) throw new ApiError(404, 'revision.not_found', 'No such revision');
-                const ok = authorship.canPublish(publication.authorshipOf(rev) || { mode: 'human' }, publication.reviewOf(post, rev));
+                const ok = authorship.canPublish(publication.authorshipOf(rev) || { mode: 'human' }, await publication.reviewOf(post, rev));
                 if (!ok.ok) throw new ApiError(409, 'post.review_required', `Revision ${rev.number} needs a person's review before it can be scheduled (${ok.reason})`);
             }
-            return store.tx(() => {
-                const { job, created } = store.scheduler.schedule({ entityId: post.id, action, runAt: t, revision: rev ? rev.number : null });
-                const cur = q.byId.get(post.id);
+            return await store.tx(async () => {
+                const { job, created } = await store.scheduler.schedule({ entityId: post.id, action, runAt: t, revision: rev ? rev.number : null });
+                const cur = await q.byId.get(post.id);
                 if (action === 'publish' && (cur.state === 'draft' || cur.state === 'unpublished')) {
-                    db.prepare("UPDATE blog_posts SET state = 'scheduled', updated_at = ? WHERE id = ?").run(store.now(), post.id);
+                    await db.prepare("UPDATE blog_posts SET state = 'scheduled', updated_at = ? WHERE id = ?").run(store.now(), post.id);
                 }
-                return { job, created, post: q.byId.get(post.id) };
+                return { job, created, post: await q.byId.get(post.id) };
             });
         },
 
-        cancelSchedule(viewer, post) {
+        async cancelSchedule(viewer, post) {
             actingSubject(viewer);
-            if (!access.canWrite(store, viewer, blogOf(post), 'publish', post)) throw new ApiError(403, 'post.forbidden', 'You cannot change this post');
-            return store.tx(() => {
-                const n = store.scheduler.cancelPending(post.id);
-                const cur = q.byId.get(post.id);
-                if (cur.state === 'scheduled') db.prepare("UPDATE blog_posts SET state = 'draft', updated_at = ? WHERE id = ?").run(store.now(), post.id);
-                return { cancelled: n, post: q.byId.get(post.id) };
+            if (!await access.canWrite(store, viewer, await blogOf(post), 'publish', post)) throw new ApiError(403, 'post.forbidden', 'You cannot change this post');
+            return await store.tx(async () => {
+                const n = await store.scheduler.cancelPending(post.id);
+                const cur = await q.byId.get(post.id);
+                if (cur.state === 'scheduled') await db.prepare("UPDATE blog_posts SET state = 'draft', updated_at = ? WHERE id = ?").run(store.now(), post.id);
+                return { cancelled: n, post: await q.byId.get(post.id) };
             });
         },
 
@@ -434,15 +434,15 @@ function createPosts({ store, blogs, publication, access, outbox, log = console 
         async runScheduled(worker) {
             const summary = await store.scheduler.runDue({
                 worker,
-                handler: (job) => (job.action === 'publish'
-                    ? api.applyPublish(job.entityId, job.revision, null).changed
-                    : api.applyUnpublish(job.entityId, null).changed),
+                handler: async (job) => (job.action === 'publish'
+                    ? (await api.applyPublish(job.entityId, job.revision, null)).changed
+                    : (await api.applyUnpublish(job.entityId, null)).changed),
             });
             for (const job of summary.failed) {
-                store.tx(() => {
-                    const post = q.byId.get(job.entityId);
-                    if (post && post.state === 'scheduled') db.prepare("UPDATE blog_posts SET state = 'draft', updated_at = ? WHERE id = ?").run(store.now(), post.id);
-                    outbox.emit({
+                await store.tx(async () => {
+                    const post = await q.byId.get(job.entityId);
+                    if (post && post.state === 'scheduled') await db.prepare("UPDATE blog_posts SET state = 'draft', updated_at = ? WHERE id = ?").run(store.now(), post.id);
+                    await outbox.emit({
                         event_type: 'blog.schedule.failed', actor: { type: 'service', id: 'blog' }, visibility: 'internal', priority: 'important',
                         subject: { type: 'post', id: job.entityId, ...(job.revision ? { revision: job.revision } : {}) },
                         payload: { job_id: job.id, action: job.action, revision: job.revision, run_at: job.runAt, attempts: job.attempts, error: job.lastError, blog_id: post ? post.blog_id : null },
@@ -454,68 +454,68 @@ function createPosts({ store, blogs, publication, access, outbox, log = console 
         },
 
         /** Soft delete: readers get 410, Search a tombstone, revisions are kept. */
-        remove(viewer, post, ctx = {}) {
+        async remove(viewer, post, ctx = {}) {
             actingSubject(viewer);
-            const blog = blogOf(post);
-            if (!access.canWrite(store, viewer, blog, 'delete', post)) throw new ApiError(403, 'post.forbidden', 'You cannot delete this post');
-            const moderation = byStaff(viewer, blog, 'delete', post);
-            return store.tx(() => {
-                store.scheduler.cancelPending(post.id);
-                const cur = q.byId.get(post.id);
+            const blog = await blogOf(post);
+            if (!await access.canWrite(store, viewer, blog, 'delete', post)) throw new ApiError(403, 'post.forbidden', 'You cannot delete this post');
+            const moderation = await byStaff(viewer, blog, 'delete', post);
+            return await store.tx(async () => {
+                await store.scheduler.cancelPending(post.id);
+                const cur = await q.byId.get(post.id);
                 const before = publication.snapshot(blog, cur);
                 const now = store.now();
-                db.prepare("UPDATE blog_posts SET state = 'deleted', deleted_at = ?, updated_at = ? WHERE id = ?").run(now, now, post.id);
-                if (moderation && cur.state !== 'deleted') moderated('post.deleted', cur, viewer, ctx, { previous: cur.state });
-                return publication.afterChange(before, post.id, { actor: viewer, ...ctx });
+                await db.prepare("UPDATE blog_posts SET state = 'deleted', deleted_at = ?, updated_at = ? WHERE id = ?").run(now, now, post.id);
+                if (moderation && cur.state !== 'deleted') await moderated('post.deleted', cur, viewer, ctx, { previous: cur.state });
+                return await publication.afterChange(before, post.id, { actor: viewer, ...ctx });
             });
         },
 
         /** Revert = a new revision copying revision N (content, fields and its authorship). */
-        revert(viewer, post, { toRevision, expectedRevision } = {}) {
+        async revert(viewer, post, { toRevision, expectedRevision } = {}) {
             actingSubject(viewer);
-            if (!access.canWrite(store, viewer, blogOf(post), 'edit', post)) throw new ApiError(403, 'post.forbidden', 'You cannot edit this post');
-            const target = store.revisions.get(post.id, parseInt(toRevision, 10));
+            if (!await access.canWrite(store, viewer, await blogOf(post), 'edit', post)) throw new ApiError(403, 'post.forbidden', 'You cannot edit this post');
+            const target = await store.revisions.get(post.id, parseInt(toRevision, 10));
             if (!target) throw new ApiError(404, 'revision.not_found', `No revision ${toRevision}`);
-            return store.tx(() => {
-                const { revision } = store.revisions.revert({
+            return await store.tx(async () => {
+                const { revision } = await store.revisions.revert({
                     entityId: post.id, toRevision: target.number, expectedRevision: parseInt(expectedRevision, 10),
                     author: authorLabel(viewer), meta: { authorship: publication.authorshipOf(target) },
                 });
-                store.citations.carryForward({ entityId: post.id, fromRevision: target.number, toRevision: revision.number, attachedBy: viewer.subject });
-                db.prepare('UPDATE blog_posts SET updated_at = ? WHERE id = ?').run(store.now(), post.id);
-                return { revision, post: q.byId.get(post.id) };
+                await store.citations.carryForward({ entityId: post.id, fromRevision: target.number, toRevision: revision.number, attachedBy: viewer.subject });
+                await db.prepare('UPDATE blog_posts SET updated_at = ? WHERE id = ?').run(store.now(), post.id);
+                return { revision, post: await q.byId.get(post.id) };
             });
         },
 
         /** A person's review of one revision (what lets an AI draft be published and indexed). */
-        review(viewer, post, { revision, decision, note } = {}, ctx = {}) {
+        async review(viewer, post, { revision, decision, note } = {}, ctx = {}) {
             if (!viewer || viewer.kind !== 'user' || !viewer.subject) throw new ApiError(403, 'review.person_required', 'Only a signed-in person can review a revision');
-            const blog = blogOf(post);
-            if (!access.canWrite(store, viewer, blog, 'publish', post)) throw new ApiError(403, 'post.forbidden', 'You cannot review this post');
+            const blog = await blogOf(post);
+            if (!await access.canWrite(store, viewer, blog, 'publish', post)) throw new ApiError(403, 'post.forbidden', 'You cannot review this post');
             const n = parseInt(revision, 10);
-            if (!store.revisions.get(post.id, n)) throw new ApiError(404, 'revision.not_found', `No revision ${revision}`);
-            return store.tx(() => {
+            if (!await store.revisions.get(post.id, n)) throw new ApiError(404, 'revision.not_found', `No revision ${revision}`);
+            return await store.tx(async () => {
                 const before = publication.snapshot(blog, post);
-                const row = store.reviews.record({ entityId: post.id, revision: n, reviewer: viewer.subject, decision, note });
-                publication.afterChange(before, post.id, { actor: viewer, ...ctx });
+                const row = await store.reviews.record({ entityId: post.id, revision: n, reviewer: viewer.subject, decision, note });
+                await publication.afterChange(before, post.id, { actor: viewer, ...ctx });
                 return row;
             });
         },
 
-        attach(viewer, post, { mediaId, role = 'inline', alt = null, caption = null, position = 0 } = {}) {
+        async attach(viewer, post, { mediaId, role = 'inline', alt = null, caption = null, position = 0 } = {}) {
             actingSubject(viewer);
-            if (!access.canWrite(store, viewer, blogOf(post), 'edit', post)) throw new ApiError(403, 'post.forbidden', 'You cannot edit this post');
+            if (!await access.canWrite(store, viewer, await blogOf(post), 'edit', post)) throw new ApiError(403, 'post.forbidden', 'You cannot edit this post');
             const id = String(mediaId || '').trim();
             if (!isMediaId(id) || !id.startsWith('med_')) throw new ApiError(422, 'media.invalid_id', 'Attach an OpenVibe.Media object id (med_…)');
             if (!MEDIA_ROLES.includes(role)) throw new ApiError(422, 'media.invalid_role', `role must be one of ${MEDIA_ROLES.join(', ')}`);
             const pos = parseInt(position, 10);
-            return store.attachments.attach({ entityId: post.id, mediaId: id, role, alt: alt || null, caption: caption || null, position: Number.isInteger(pos) ? pos : 0 });
+            return await store.attachments.attach({ entityId: post.id, mediaId: id, role, alt: alt || null, caption: caption || null, position: Number.isInteger(pos) ? pos : 0 });
         },
 
-        detach(viewer, post, attachmentId) {
+        async detach(viewer, post, attachmentId) {
             actingSubject(viewer);
-            if (!access.canWrite(store, viewer, blogOf(post), 'edit', post)) throw new ApiError(403, 'post.forbidden', 'You cannot edit this post');
-            return store.attachments.detach(post.id, attachmentId);
+            if (!await access.canWrite(store, viewer, await blogOf(post), 'edit', post)) throw new ApiError(403, 'post.forbidden', 'You cannot edit this post');
+            return await store.attachments.detach(post.id, attachmentId);
         },
     };
     return api;

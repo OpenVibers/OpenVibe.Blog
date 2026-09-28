@@ -22,16 +22,22 @@ function createDiscoveryRoutes({ config, store, blogs, publication, reading }) {
     const { db } = store;
     const abs = (p) => seo.canonicalUrl(config.baseUrl, p);
 
-    const publicPosts = () => db.prepare(`SELECT p.* FROM blog_posts p JOIN blogs b ON b.id = p.blog_id
+    const publicPosts = async () => await db.prepare(`SELECT p.* FROM blog_posts p JOIN blogs b ON b.id = p.blog_id
                                           WHERE p.state = 'published' AND p.visibility = 'public' AND b.status = 'active'
                                           ORDER BY p.published_at DESC LIMIT 50000`).all();
 
-    function postEntries() {
-        return publicPosts().map((post) => {
-            const blog = blogs.get(post.blog_id);
-            const rev = store.revisions.get(post.id, post.published_revision);
-            return { post, blog, rev, decision: publication.decide(blog, post, rev) };
-        });
+    async function postEntries() {
+        // Revisions in one query and each blog once, whatever the number of posts (no N+1).
+        const rows = await publicPosts();
+        const revs = await store.revisions.getMany(rows.map((p) => ({ entityId: p.id, revision: p.published_revision })));
+        const blogById = new Map();
+        for (const id of new Set(rows.map((p) => p.blog_id))) blogById.set(id, await blogs.get(id));
+        const out = [];
+        for (const [i, post] of rows.entries()) {
+            const blog = blogById.get(post.blog_id);
+            out.push({ post, blog, rev: revs[i], decision: await publication.decide(blog, post, revs[i]) });
+        }
+        return out;
     }
 
     const xml = (res, body) => res.type('application/xml').set('Cache-Control', 'public, max-age=300').send(body);
@@ -46,8 +52,8 @@ function createDiscoveryRoutes({ config, store, blogs, publication, reading }) {
         res.type('text/plain').set('Cache-Control', 'public, max-age=3600').send(body);
     });
 
-    router.get('/llms.txt', (_req, res) => {
-        const official = blogs.official();
+    router.get('/llms.txt', async (_req, res) => {
+        const official = await blogs.official();
         res.type('text/plain').set('Cache-Control', 'public, max-age=3600').send(sharedSeo.llmsTxt({
             name: 'OpenVibe.Blog',
             summary: 'The official OpenVibe blog and a blog for every OpenVibe member: server-rendered posts with feeds, sitemaps and a JSON representation of every post.',
@@ -66,8 +72,8 @@ function createDiscoveryRoutes({ config, store, blogs, publication, reading }) {
         }));
     });
 
-    router.get('/sitemap.xml', (_req, res) => {
-        const entries = postEntries().filter((e) => e.decision.indexable);
+    router.get('/sitemap.xml', async (_req, res) => {
+        const entries = (await postEntries()).filter((e) => e.decision.indexable);
         const newest = entries.length ? entries.map((e) => e.rev.createdAt).sort().pop() : null;
         xml(res, seo.sitemapIndex([
             { loc: abs('/sitemaps/posts.xml'), ...(newest ? { lastmod: newest } : {}) },
@@ -75,15 +81,15 @@ function createDiscoveryRoutes({ config, store, blogs, publication, reading }) {
         ]));
     });
 
-    router.get('/sitemaps/posts.xml', (_req, res) => {
-        const out = seo.sitemap(postEntries().map((e) => ({ loc: publication.postUrl(e.blog, e.post), lastmod: e.rev.createdAt, decision: e.decision })));
+    router.get('/sitemaps/posts.xml', async (_req, res) => {
+        const out = seo.sitemap((await postEntries()).map((e) => ({ loc: publication.postUrl(e.blog, e.post), lastmod: e.rev.createdAt, decision: e.decision })));
         xml(res, out.files[0]);
     });
 
-    router.get('/sitemaps/blogs.xml', (_req, res) => {
+    router.get('/sitemaps/blogs.xml', async (_req, res) => {
         const byBlog = new Map();
         const bySeries = new Map();
-        for (const e of postEntries()) {
+        for (const e of await postEntries()) {
             if (!e.decision.indexable) continue;
             const t = e.rev.createdAt;
             if (!byBlog.has(e.blog.id) || byBlog.get(e.blog.id).lastmod < t) byBlog.set(e.blog.id, { blog: e.blog, lastmod: t });
@@ -96,7 +102,7 @@ function createDiscoveryRoutes({ config, store, blogs, publication, reading }) {
             entries.push({ loc: abs(path), lastmod, decision: listing(path) });
         }
         for (const [id, { blog, lastmod }] of bySeries) {
-            const s = blogs.seriesById(id);
+            const s = await blogs.seriesById(id);
             if (!s) continue;
             const path = reading.urls.series(blog, s);
             entries.push({ loc: abs(path), lastmod, decision: listing(path) });

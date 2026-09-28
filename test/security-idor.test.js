@@ -36,16 +36,16 @@ const LONG = Array.from({ length: 100 }, (_, i) => `w${i}`).join(' ');
     await mk(bob, 'bob', 'Bob Post');
 
     const db = t.ctx.store.db;
-    const tables = db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name NOT IN ('event_outbox')").all().map((r) => r.name);
-    const snapshot = () => Object.fromEntries(tables.map((n) => [n, db.prepare(`SELECT * FROM "${n}"`).all()]));
-    const same = (before, label) => { const after = snapshot(); for (const n of tables) assert.deepStrictEqual(after[n], before[n], `${label}: ${n} changed`); };
+    const tables = (await db.prepare("SELECT table_name AS name FROM information_schema.tables WHERE table_schema = current_schema() AND table_type = 'BASE TABLE' AND table_name NOT IN ('event_outbox', 'ov_migrations')").all()).map((r) => r.name);
+    const snapshot = async () => Object.fromEntries(await Promise.all(tables.map(async (n) => [n, await db.prepare(`SELECT * FROM "${n}"`).all()])));
+    const same = async (before, label) => { const after = await snapshot(); for (const n of tables) assert.deepStrictEqual(after[n], before[n], `${label}: ${n} changed`); };
     const refused = (r, what) => assert.ok([401, 403, 404, 409].includes(r.status), `${what}: ${r.status} ${r.text.slice(0, 160)}`);
     const api = (method, p, json, as = bob) => t.get(`/api/v1${p}`, { as, method, json: json || {}, headers: { 'x-forwarded-for': nextAddress() } });
     // The editor's forms live under /write.
     const form = (p, fields, as = bob) => t.get(`/write${p}`, { as, form: { _csrf: t.csrf(as), ...fields }, headers: { origin: 'https://openvibe.blog', 'x-forwarded-for': nextAddress() } });
 
     await check('API: Bob cannot touch Ann\'s posts by id or her blog by handle', async () => {
-        const before = snapshot();
+        const before = await snapshot();
         for (const p of [annPost, annPrivate, annDraft]) {
             refused(await api('PATCH', `/posts/${p.id}`, { title: 'pwned', body: `${LONG} pwned`, visibility: 'public', expected_revision: 1 }), `PATCH ${p.title}`);
             refused(await api('POST', `/posts/${p.id}/publish`, {}), `publish ${p.title}`);
@@ -63,11 +63,11 @@ const LONG = Array.from({ length: 100 }, (_, i) => `w${i}`).join(' ');
         refused(await api('PUT', '/blogs/ann/theme', { theme: 'dark' }), 'theme');
         refused(await api('POST', '/blogs/ann/posts', { title: 'Bob in Ann', body: LONG }), 'post into Ann\'s blog');
         refused(await api('POST', '/blogs/ann/posts/ai-draft', { prompt: 'x' }), 'AI draft into Ann\'s blog');
-        same(before, 'API');
+        await same(before, 'API');
     });
 
     await check('forms: Bob, with his own valid form token, cannot post to Ann\'s posts or blog', async () => {
-        const before = snapshot();
+        const before = await snapshot();
         for (const p of [annPost, annPrivate, annDraft]) {
             refused(await form(`/posts/${p.id}`, { title: 'pwned', body: `${LONG} pwned`, expectedRevision: '1', visibility: 'public' }), `edit form ${p.title}`);
             for (const a of ['publish', 'unpublish', 'delete', 'revert', 'review', 'schedule', 'unschedule']) {
@@ -79,7 +79,7 @@ const LONG = Array.from({ length: 100 }, (_, i) => `w${i}`).join(' ');
         refused(await form('/@ann/members', { username: 'cat', role: 'editor' }), 'members form');
         refused(await form('/@ann/members/remove', { subject: ann.subject }), 'remove-member form');
         refused(await form('/@ann/ai-draft', { prompt: 'x' }), 'AI-draft form');
-        same(before, 'forms');
+        await same(before, 'forms');
     });
 
     await check('controls: Ann can do what Bob could not', async () => {

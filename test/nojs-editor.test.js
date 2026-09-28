@@ -39,7 +39,7 @@ const idFrom = (location) => (location.match(/\/write\/posts\/(pst_[0-9A-Z]+)/) 
     await check('a form without the token is refused', async () => {
         const r = await t.get('/write/@eve/new', { as: eve, form: { title: 'No token', body: 'x' } });
         assert.strictEqual(r.status, 403);
-        assert.strictEqual(t.ctx.store.db.prepare('SELECT COUNT(*) AS n FROM blog_posts').get().n, 0);
+        assert.strictEqual((await t.ctx.store.db.prepare('SELECT COUNT(*) AS n FROM blog_posts').get()).n, 0);
     });
 
     await check('new draft, edit and publish with forms', async () => {
@@ -68,7 +68,7 @@ const idFrom = (location) => (location.match(/\/write\/posts\/(pst_[0-9A-Z]+)/) 
         const r = await t.get(`/write/posts/${postId}`, { as: eve, form: { _csrf: csrf, expectedRevision: '1', title: 'Stale', body: 'stale' } });
         assert.strictEqual(r.status, 412);
         assert.match(r.text, /Someone saved revision 2/);
-        assert.strictEqual(t.ctx.store.revisions.head(postId).fields.title, 'Notes without script');
+        assert.strictEqual((await t.ctx.store.revisions.head(postId)).fields.title, 'Notes without script');
     });
 
     await check('history, diff and preview are plain pages', async () => {
@@ -92,7 +92,7 @@ const idFrom = (location) => (location.match(/\/write\/posts\/(pst_[0-9A-Z]+)/) 
         assert.deepStrictEqual(thread.ref, { service: 'blog', type: 'post', id: postId, label: 'Notes without script' });
         const posted = t.community.calls.find((c) => c.method === 'POST' && /\/comments$/.test(c.url));
         assert.strictEqual(posted.subject, eve.subject, 'commented as the member (X-OV-Subject)');
-        const cols = t.ctx.store.db.prepare("SELECT name FROM pragma_table_info('blog_post_discussion_refs')").all().map((c) => c.name);
+        const cols = (await t.ctx.store.db.prepare("SELECT column_name AS name FROM information_schema.columns WHERE table_schema = current_schema() AND table_name = 'blog_post_discussion_refs'").all()).map((c) => c.name);
         assert.deepStrictEqual(cols.sort(), ['entity_id', 'ref', 'resolved_at', 'thread_id'], 'only the reference is stored');
     });
 
@@ -125,14 +125,14 @@ const idFrom = (location) => (location.match(/\/write\/posts\/(pst_[0-9A-Z]+)/) 
         await t.get('/write', { as: mallory });   // signs in once: now known by username
         let r = await t.get('/write/@eve/settings', { as: eve, form: { _csrf: csrf, title: 'Eve’s notes', description: 'Field notes', language: 'en', theme: 'paper', rss: '1', atom: '1', itemCount: '10', fullContent: '1' } });
         assert.strictEqual(r.status, 303, r.text);
-        const blog = t.ctx.blogs.byHandle('eve');
+        const blog = await t.ctx.blogs.byHandle('eve');
         assert.strictEqual(blog.theme, 'paper');
-        assert.strictEqual(t.ctx.blogs.feedSettings(blog).json, 0);
+        assert.strictEqual((await t.ctx.blogs.feedSettings(blog)).json, 0);
         assert.strictEqual((await t.get('/@eve/feed.json')).status, 404);
         assert.match((await t.get('/@eve')).text, /data-blog-theme="paper"/);
         r = await t.get('/write/@eve/members', { as: eve, form: { _csrf: csrf, member: 'mallory', role: 'author' } });
         assert.strictEqual(r.status, 303, r.text);
-        assert.strictEqual(t.ctx.blogs.membership(blog, mallory.subject).role, 'author');
+        assert.strictEqual((await t.ctx.blogs.membership(blog, mallory.subject)).role, 'author');
         const bad = await t.get('/write/@eve/settings', { as: eve, form: { _csrf: csrf, title: 'x', theme: 'my-own-css-engine' } });
         assert.strictEqual(bad.status, 422);
         const notOwner = await t.get('/write/@eve/settings', { as: mallory });

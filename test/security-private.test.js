@@ -93,7 +93,7 @@ const LONG = Array.from({ length: 100 }, (_, i) => `w${i}`).join(' ');
     });
 
     await check('public events and Search documents carry none of it', async () => {
-        const text = JSON.stringify(t.events().filter((e) => e.visibility === 'public' || /index_document\.upserted$/.test(e.event_type)));
+        const text = JSON.stringify((await t.events()).filter((e) => e.visibility === 'public' || /index_document\.upserted$/.test(e.event_type)));
         assert.ok(text.includes('Open Post') || text.includes('open-control-words'), 'the open post is there (control)');
         const hits = Object.entries(SECRET).filter(([, w]) => text.includes(w)).map(([k]) => k);
         assert.deepStrictEqual(hits, []);

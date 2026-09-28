@@ -20,8 +20,8 @@ const LONG = Array.from({ length: 100 }, (_, i) => `w${i}`).join(' ');
         assert.strictEqual((await t.get(`/api/v1/posts/${p.id}/publish`, { as: dana, json: {} })).status, 200);
         return p;
     };
-    const moderation = () => t.ctx.store.db.prepare('SELECT envelope FROM event_outbox ORDER BY id').all()
-        .map((r) => JSON.parse(r.envelope)).filter((e) => e.event_type === 'blog.moderation.action');
+    const moderation = async () => await (await t.ctx.store.db.prepare('SELECT envelope FROM event_outbox ORDER BY id').all())
+        .map((r) => (typeof r.envelope === 'string' ? JSON.parse(r.envelope) : r.envelope)).filter((e) => e.event_type === 'blog.moderation.action');
     const valid = (e) => {
         assert.strictEqual(contracts.validate('events.event-envelope@1', e).valid, true, JSON.stringify(e));
         const r = contracts.validate('blog.moderation.action@1', e.payload);
@@ -37,14 +37,14 @@ const LONG = Array.from({ length: 100 }, (_, i) => `w${i}`).join(' ');
         const b = await make('Own delete');
         assert.strictEqual((await t.get(`/api/v1/posts/${a.id}/unpublish`, { as: dana, json: {} })).status, 200);
         assert.strictEqual((await t.get(`/api/v1/posts/${b.id}`, { as: dana, method: 'DELETE' })).status < 300, true);
-        assert.strictEqual(moderation().length, 0);
+        assert.strictEqual((await moderation()).length, 0);
     });
 
     await check('staff unpublishing someone else\'s post: exactly one valid event', async () => {
         const p = await make('Staff unpublish');
         const r = await t.get(`/api/v1/posts/${p.id}/unpublish`, { as: admin, json: {} });
         assert.strictEqual(r.status, 200, r.text);
-        const ev = moderation();
+        const ev = await moderation();
         assert.strictEqual(ev.length, 1);
         valid(ev[0]);
         assert.deepStrictEqual(ev[0].subject, { type: 'moderation_action', id: `post:${p.id}` });
@@ -53,14 +53,14 @@ const LONG = Array.from({ length: 100 }, (_, i) => `w${i}`).join(' ');
         assert.strictEqual(ev[0].payload.details.previous, 'published');
         const again = await t.get(`/api/v1/posts/${p.id}/unpublish`, { as: admin, json: {} });
         assert.strictEqual(again.status, 200);
-        assert.strictEqual(moderation().length, 1, 'nothing changed, nothing reported');
+        assert.strictEqual((await moderation()).length, 1, 'nothing changed, nothing reported');
     });
 
     await check('staff deleting someone else\'s post: exactly one valid event', async () => {
         const p = await make('Staff delete');
         const r = await t.get(`/api/v1/posts/${p.id}`, { as: admin, method: 'DELETE' });
         assert.ok(r.status < 300, r.text);
-        const ev = moderation();
+        const ev = await moderation();
         assert.strictEqual(ev.length, 2);
         valid(ev[1]);
         assert.strictEqual(ev[1].payload.action, 'post.deleted');

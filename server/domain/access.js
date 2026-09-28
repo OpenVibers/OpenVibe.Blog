@@ -30,15 +30,15 @@
 
 const ROLE_RANK = { author: 1, editor: 2, owner: 3 };
 
-function roleOf(store, blogId, subject) {
+async function roleOf(store, blogId, subject) {
     if (!subject) return null;
-    const row = store.db.prepare('SELECT role FROM blog_memberships WHERE blog_id = ? AND subject = ?').get(blogId, subject);
+    const row = await store.db.prepare('SELECT role FROM blog_memberships WHERE blog_id = ? AND subject = ?').get(blogId, subject);
     return row ? row.role : null;
 }
 
 /** Effective role of the viewer on a blog, staff included ('owner' of the official blog with staff.editorial.manage). */
-function effectiveRole(store, viewer, blog) {
-    const role = roleOf(store, blog.id, viewer && viewer.subject);
+async function effectiveRole(store, viewer, blog) {
+    const role = await roleOf(store, blog.id, viewer && viewer.subject);
     if (viewer && viewer.editorial && blog.kind === 'official') return 'owner';
     return role;
 }
@@ -48,8 +48,8 @@ const atLeast = (role, min) => Boolean(role) && ROLE_RANK[role] >= ROLE_RANK[min
 function isStaff(viewer) { return Boolean(viewer && viewer.staff); }
 
 /** Is this viewer a member of the blog who may see this (unpublished or restricted) post? */
-function memberCanSee(store, viewer, blog, post) {
-    const role = effectiveRole(store, viewer, blog);
+async function memberCanSee(store, viewer, blog, post) {
+    const role = await effectiveRole(store, viewer, blog);
     if (!role) return false;
     if (atLeast(role, 'editor')) return true;
     return post.author_subject === viewer.subject;
@@ -103,7 +103,7 @@ function createEntitlementChecker({ provider = 'none', check = null, vip = null 
 async function canReadPost(store, viewer, blog, post, entitlements) {
     if (!post || post.state === 'deleted') return { allowed: false, status: 404, reason: 'not_found' };
     if (blog.status !== 'active' && !isStaff(viewer)) return { allowed: false, status: 404, reason: 'blog_suspended' };
-    const member = memberCanSee(store, viewer, blog, post) || isStaff(viewer);
+    const member = await memberCanSee(store, viewer, blog, post) || isStaff(viewer);
     if (post.state !== 'published') return member ? { allowed: true, status: 200, reason: 'member' } : { allowed: false, status: 404, reason: 'not_published' };
     if (post.visibility === 'public' || post.visibility === 'unlisted') return { allowed: true, status: 200, reason: 'public' };
     if (member) return { allowed: true, status: 200, reason: 'member' };
@@ -115,10 +115,10 @@ async function canReadPost(store, viewer, blog, post, entitlements) {
 }
 
 /** Write decisions. action ∈ create | edit | publish | delete | configure | members. */
-function canWrite(store, viewer, blog, action, post = null) {
+async function canWrite(store, viewer, blog, action, post = null) {
     if (!viewer || !viewer.subject) return false;
     if (blog.status !== 'active' && !isStaff(viewer)) return false;
-    const role = effectiveRole(store, viewer, blog);
+    const role = await effectiveRole(store, viewer, blog);
     switch (action) {
     case 'create': return atLeast(role, 'author');
     case 'edit':

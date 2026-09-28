@@ -92,9 +92,9 @@ function assertPrivate(r, what) {
     });
 
     await check('Search receives only the public post; the others were never sent', async () => {
-        const ids = t.events('blog.index_document.upserted').map((e) => e.payload.id);
+        const ids = (await t.events('blog.index_document.upserted')).map((e) => e.payload.id);
         assert.deepStrictEqual(ids, [pub.id]);
-        const published = t.events('blog.post.published');
+        const published = await t.events('blog.post.published');
         assert.strictEqual(published.length, 4);
         for (const e of published) {
             if (e.subject.id === pub.id) assert.strictEqual(e.visibility, 'public');
@@ -106,12 +106,12 @@ function assertPrivate(r, what) {
     await check('public → members: a Search tombstone, gone from feeds/sitemaps, anonymous 403, no public cache', async () => {
         const r = await t.get(`/api/v1/posts/${pub.id}`, { as: carol, method: 'PATCH', json: { visibility: 'members', entitlement_key: 'vip:carol' } });
         assert.strictEqual(r.status, 200, r.text);
-        const del = t.events('blog.index_document.deleted');
+        const del = await t.events('blog.index_document.deleted');
         assert.strictEqual(del.length, 1);
         assert.strictEqual(del[0].payload.id, pub.id);
-        const up = t.events('blog.index_document.upserted').find((e) => e.payload.id === pub.id);
+        const up = (await t.events('blog.index_document.upserted')).find((e) => e.payload.id === pub.id);
         assert.ok(del[0].payload.revision > up.payload.revision, 'the tombstone outranks the old document');
-        assert.strictEqual(t.events('blog.post.updated').length, 1);
+        assert.strictEqual((await t.events('blog.post.updated')).length, 1);
         const a = await t.get('/@carol/open-post');
         assert.strictEqual(a.status, 403);
         assertPrivate(a, 'after privatising');
@@ -121,16 +121,16 @@ function assertPrivate(r, what) {
 
     await check('members → public again: re-indexed with a higher revision', async () => {
         await t.get(`/api/v1/posts/${pub.id}`, { as: carol, method: 'PATCH', json: { visibility: 'public' } });
-        const ups = t.events('blog.index_document.upserted').filter((e) => e.payload.id === pub.id);
-        const del = t.events('blog.index_document.deleted')[0];
+        const ups = (await t.events('blog.index_document.upserted')).filter((e) => e.payload.id === pub.id);
+        const del = (await t.events('blog.index_document.deleted'))[0];
         assert.strictEqual(ups.length, 2);
         assert.ok(ups[1].payload.revision > del.payload.revision);
     });
 
     await check('without an entitlement service the check fails closed', async () => {
         const { createEntitlementChecker } = require('../server/domain/access');
-        const blog = t.ctx.blogs.byHandle('carol');
-        const post = t.ctx.posts.get(mem.id);
+        const blog = await t.ctx.blogs.byHandle('carol');
+        const post = await t.ctx.posts.get(mem.id);
         const args = { subject: vip.subject, blog, post };
         const none = createEntitlementChecker({ provider: 'none' });
         assert.strictEqual(await none.has(args), false);

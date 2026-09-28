@@ -21,26 +21,26 @@ const { seedOfficialPost, loadFacts, SLUG } = require('../server/seed');
     });
 
     await check('the seed creates a DRAFT on the official blog, with one citation per quote', async () => {
-        const out = seedOfficialPost(t.ctx, {});
+        const out = await seedOfficialPost(t.ctx, {});
         assert.strictEqual(out.created, true);
         assert.strictEqual(out.post.state, 'draft');
         assert.strictEqual(out.post.author_subject, t.official.subject);
-        const rev = t.ctx.store.revisions.head(out.post.id);
+        const rev = await t.ctx.store.revisions.head(out.post.id);
         for (const it of facts.items) assert.ok(rev.content.includes(`> ${it.quote}`), `quote verbatim: ${it.repo}`);
-        const cites = t.ctx.store.citations.forRevision(out.post.id, rev.number);
+        const cites = await t.ctx.store.citations.forRevision(out.post.id, rev.number);
         assert.strictEqual(cites.length, facts.items.length);
         assert.ok(cites.every((c) => c.retrievedAt === new Date(facts.collected_at).toISOString() && c.quote && c.quote.text));
         assert.strictEqual(rev.meta.authorship.mode, 'imported');
         assert.doesNotMatch(rev.content, /\bfree\b|\$0/i);
         assert.strictEqual((await t.get(`/@openvibe/${SLUG}`)).status, 404, 'not public');
-        assert.strictEqual(t.events(/index_document/).length, 0);
-        assert.strictEqual(seedOfficialPost(t.ctx, {}).created, false, 'idempotent');
+        assert.strictEqual((await t.events(/index_document/)).length, 0);
+        assert.strictEqual((await seedOfficialPost(t.ctx, {})).created, false, 'idempotent');
     });
 
     await check('publishing the seed needs a named reviewer; with one it is published and cites its sources', async () => {
-        assert.throws(() => seedOfficialPost(t.ctx, { publish: true }), /reviewer/);
+        await assert.rejects(async () => await seedOfficialPost(t.ctx, { publish: true }), /reviewer/);
         const reviewer = t.network.addUser('reviewer');
-        const out = seedOfficialPost(t.ctx, { publish: true, reviewer: reviewer.subject });
+        const out = await seedOfficialPost(t.ctx, { publish: true, reviewer: reviewer.subject });
         assert.strictEqual(out.published, true);
         assert.strictEqual(out.review.reviewer, reviewer.subject);
         const page = await t.get(`/@openvibe/${SLUG}`);

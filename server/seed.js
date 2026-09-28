@@ -48,19 +48,19 @@ function composeBody(facts) {
  * Create the draft (idempotent by slug). opts: author (usr_ subject accountable for the post;
  * default the first official owner), reviewer (usr_), publish (bool), facts (parsed file).
  */
-function seedOfficialPost(ctx, { author, reviewer = null, publish = false, facts = loadFacts() } = {}) {
+async function seedOfficialPost(ctx, { author, reviewer = null, publish = false, facts = loadFacts() } = {}) {
     const { blogs, posts, store } = ctx;
-    const blog = blogs.ensureOfficial();
-    const owners = blogs.members(blog).filter((m) => m.role === 'owner').map((m) => m.subject);
+    const blog = await blogs.ensureOfficial();
+    const owners = (await blogs.members(blog)).filter((m) => m.role === 'owner').map((m) => m.subject);
     const subject = author || owners[0];
     if (!ids.isSubjectId('user', subject)) throw new Error('The seed needs an accountable author: set BLOG_OFFICIAL_OWNERS or pass --author usr_…');
     if (publish && !ids.isSubjectId('user', reviewer)) throw new Error('Publishing the seed needs the person who reviewed it: --reviewer usr_…');
     const actor = { kind: 'user', subject, staff: true, editorial: true, user: {} };
 
-    let post = posts.bySlug(blog, SLUG);
+    let post = await posts.bySlug(blog, SLUG);
     let created = false;
     if (!post) {
-        const out = posts.create(actor, blog, {
+        const out = await posts.create(actor, blog, {
             title: `Released in the OpenVibe repositories, ${facts.week.from.slice(8)}–${facts.week.to.slice(8)} September 2026`,
             slug: SLUG,
             summary: `Commit messages and release notes quoted from the OpenVibers repositories for ${facts.week.from} to ${facts.week.to}, each with a link to its source.`,
@@ -77,11 +77,11 @@ function seedOfficialPost(ctx, { author, reviewer = null, publish = false, facts
     let review = null;
     let published = false;
     if (publish) {
-        const head = store.revisions.head(post.id);
-        review = posts.review({ kind: 'user', subject: reviewer, staff: true, editorial: true, user: {} }, post, { revision: head.number, decision: 'approved', note: 'Seed post reviewed: every quote checked against its source.' });
-        published = posts.publish(actor, posts.get(post.id), { revision: head.number }).changed;
+        const head = await store.revisions.head(post.id);
+        review = await posts.review({ kind: 'user', subject: reviewer, staff: true, editorial: true, user: {} }, post, { revision: head.number, decision: 'approved', note: 'Seed post reviewed: every quote checked against its source.' });
+        published = (await posts.publish(actor, await posts.get(post.id), { revision: head.number })).changed;
     }
-    return { post: posts.get(post.id), created, review, published };
+    return { post: await posts.get(post.id), created, review, published };
 }
 
 module.exports = { seedOfficialPost, loadFacts, composeBody, SLUG };

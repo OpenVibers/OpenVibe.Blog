@@ -14,7 +14,7 @@
 const { createReadiness } = require('openvibe-shared/ready');
 const { CHARTER_TABLES } = require('./db');
 
-function createBlogReadiness({ store, auth, outbox, release = null }) {
+function createBlogReadiness({ store, auth, outbox, valkey = null, release = null }) {
     const { db } = store;
     return createReadiness({
         service: 'blog',
@@ -22,12 +22,16 @@ function createBlogReadiness({ store, auth, outbox, release = null }) {
         checks: [
             {
                 name: 'db', required: true,
-                check: () => {
-                    const names = new Set(db.prepare("SELECT name FROM sqlite_master WHERE type IN ('table','view')").all().map((r) => r.name));
+                check: async () => {
+                    // A real round trip that names the store (postgresql / pglite), and the charter tables and views present.
+                    const r = await db.ready();
+                    if (!r.ok) return r.error;
+                    const names = new Set((await db.prepare('SELECT table_name AS name FROM information_schema.tables WHERE table_schema = current_schema()').all()).map((x) => x.name));
                     const missing = CHARTER_TABLES.filter((t) => !names.has(t));
-                    return missing.length ? `missing ${missing.join(', ')}` : true;
+                    return missing.length ? `missing ${missing.join(', ')} (migrations did not run)` : { ok: true, detail: r.detail };
                 },
             },
+            { name: 'valkey', required: false, check: async () => (valkey ? valkey.ready() : { skipped: 'VALKEY_URL not set: per-actor limits count in this process only' }) },
             {
                 name: 'network_jwks', required: false,
                 check: () => {
@@ -38,8 +42,8 @@ function createBlogReadiness({ store, auth, outbox, release = null }) {
             },
             {
                 name: 'events_relay', required: false,
-                check: () => {
-                    const s = outbox.status();
+                check: async () => {
+                    const s = await outbox.status();
                     if (!s.enabled) return `relay off (EVENTS_URL or OV_OAUTH_CLIENT_SECRET unset); ${s.pending} events waiting`;
                     if (s.rejected) return `${s.rejected} events rejected by OpenVibe.Events`;
                     return { ok: true, detail: { pending: s.pending } };
@@ -47,9 +51,9 @@ function createBlogReadiness({ store, auth, outbox, release = null }) {
             },
             {
                 name: 'scheduler', required: false,
-                check: () => {
-                    const failed = db.prepare("SELECT COUNT(*) AS n FROM blog_schedule_jobs WHERE status = 'failed' AND updated_at > ?").get(store.now() - 24 * 3600 * 1000).n;
-                    const overdue = db.prepare("SELECT COUNT(*) AS n FROM blog_schedule_jobs WHERE status = 'pending' AND run_at < ?").get(store.now() - 5 * 60 * 1000).n;
+                check: async () => {
+                    const failed = (await db.prepare("SELECT COUNT(*) AS n FROM blog_schedule_jobs WHERE status = 'failed' AND updated_at > ?").get(store.now() - 24 * 3600 * 1000)).n;
+                    const overdue = (await db.prepare("SELECT COUNT(*) AS n FROM blog_schedule_jobs WHERE status = 'pending' AND run_at < ?").get(store.now() - 5 * 60 * 1000)).n;
                     if (failed || overdue) return `${failed} failed in the last 24 h, ${overdue} overdue`;
                     return true;
                 },

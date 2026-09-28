@@ -31,50 +31,8 @@ const { serviceAuth } = require('openvibe-contracts');
 const GITHUB = 'https://api.github.com';
 const clean = (s, n) => String(s == null ? '' : s).replace(/\s+/g, ' ').trim().slice(0, n);
 
-function ensureSchema(db) {
-    db.exec(`
-        CREATE TABLE IF NOT EXISTS changelog_state (
-            service    TEXT PRIMARY KEY,
-            release    TEXT NOT NULL,
-            head       TEXT,
-            checked_at INTEGER NOT NULL
-        );
-        CREATE TABLE IF NOT EXISTS changelog_entries (
-            id           INTEGER PRIMARY KEY AUTOINCREMENT,
-            service      TEXT NOT NULL,
-            repo         TEXT NOT NULL,
-            sha          TEXT NOT NULL,
-            subject      TEXT NOT NULL,
-            committed_at TEXT,
-            deployed_at  TEXT NOT NULL,
-            release      TEXT NOT NULL,
-            release_lines INTEGER NOT NULL DEFAULT 0,
-            major        INTEGER NOT NULL DEFAULT 0,
-            post_id      TEXT,
-            UNIQUE (service, sha)
-        );
-        CREATE INDEX IF NOT EXISTS idx_changelog_pending ON changelog_entries(post_id, deployed_at);
-        CREATE TABLE IF NOT EXISTS changelog_posts (
-            post_id     TEXT PRIMARY KEY,
-            blog_id     TEXT NOT NULL,
-            entries     INTEGER NOT NULL,
-            from_at     TEXT,
-            to_at       TEXT,
-            reason      TEXT NOT NULL,
-            ai_draft_id TEXT,
-            created_at  INTEGER NOT NULL
-        );
-        CREATE TABLE IF NOT EXISTS changelog_history (
-            service     TEXT PRIMARY KEY,
-            imported    INTEGER NOT NULL,
-            imported_at INTEGER NOT NULL
-        );
-        CREATE INDEX IF NOT EXISTS idx_changelog_service ON changelog_entries(service, deployed_at);
-    `);
-    // Added after the first release: who wrote each change (the commit's author name).
-    const cols = db.prepare('PRAGMA table_info(changelog_entries)').all().map((c) => c.name);
-    if (!cols.includes('author')) db.exec('ALTER TABLE changelog_entries ADD COLUMN author TEXT');
-}
+/** The changelog tables are in migrations/0001_initial.sql (PostgreSQL, ADR-035); kept for callers of the old helper. */
+async function ensureSchema() {}
 
 /** The feed's page cursor: "<deployed_at>|<id>" of the last entry shown. */
 function encodeCursor(e) { return Buffer.from(`${e.deployed_at}|${e.id}`).toString('base64url'); }
@@ -98,7 +56,6 @@ const isNoise = (subject) => /^Merge (branch|pull request|remote)/i.test(subject
 function createChangelog({ config, store, blogs, posts, aiDrafts = null, fetchImpl = globalThis.fetch, log = console }) {
     const c = config.changelog;
     const db = store.db;
-    ensureSchema(db);
     const nowMs = () => store.now();
     const stats = { runs: 0, entries: 0, posts: 0, lastError: null, lastRunAt: null };
 
@@ -106,11 +63,11 @@ function createChangelog({ config, store, blogs, posts, aiDrafts = null, fetchIm
         state: db.prepare('SELECT * FROM changelog_state WHERE service = ?'),
         putState: db.prepare(`INSERT INTO changelog_state (service, release, head, checked_at) VALUES (@service, @release, @head, @at)
             ON CONFLICT(service) DO UPDATE SET release = excluded.release, head = excluded.head, checked_at = excluded.checked_at`),
-        insert: db.prepare(`INSERT OR IGNORE INTO changelog_entries (service, repo, sha, subject, author, committed_at, deployed_at, release, release_lines, major, post_id)
-            VALUES (@service, @repo, @sha, @subject, @author, @committed_at, @deployed_at, @release, @release_lines, @major, @post_id)`),
+        insert: db.prepare(`INSERT INTO changelog_entries (service, repo, sha, subject, author, committed_at, deployed_at, release, release_lines, major, post_id)
+            VALUES (@service, @repo, @sha, @subject, @author, @committed_at, @deployed_at, @release, @release_lines, @major, @post_id) ON CONFLICT (service, sha) DO NOTHING`),
         fillAuthor: db.prepare('UPDATE changelog_entries SET author = ? WHERE service = ? AND sha = ? AND author IS NULL'),
         history: db.prepare('SELECT * FROM changelog_history WHERE service = ?'),
-        putHistory: db.prepare('INSERT OR REPLACE INTO changelog_history (service, imported, imported_at) VALUES (?, ?, ?)'),
+        putHistory: db.prepare('INSERT INTO changelog_history (service, imported, imported_at) VALUES (?, ?, ?) ON CONFLICT (service) DO UPDATE SET imported = excluded.imported, imported_at = excluded.imported_at'),
         recentPosts: db.prepare('SELECT * FROM changelog_posts ORDER BY created_at DESC LIMIT ?'),
         sites: db.prepare(`SELECT service, COUNT(*) AS entries, MAX(deployed_at) AS latest_at FROM changelog_entries GROUP BY service ORDER BY latest_at DESC`),
         pending: db.prepare('SELECT * FROM changelog_entries WHERE post_id IS NULL ORDER BY deployed_at, committed_at, id'),
@@ -184,7 +141,7 @@ function createChangelog({ config, store, blogs, posts, aiDrafts = null, fetchIm
     // history: the commits a site shipped before the changelog watched it, so its updates page is not
     // empty on day one. They carry post_id 'history' (never pending, never in a patch notes post) and
     // their commit time stands in for the deploy time nobody recorded.
-    function addEntries(svc, commits, { releaseLines = 0, major = false, history = false } = {}) {
+    async function addEntries(svc, commits, { releaseLines = 0, major = false, history = false } = {}) {
         const deployedAt = svc.releasedAt || new Date(nowMs()).toISOString();
         let n = 0;
         for (const cm of commits) {
@@ -194,12 +151,12 @@ function createChangelog({ config, store, blogs, posts, aiDrafts = null, fetchIm
             const committedAt = (cm.commit && cm.commit.author && cm.commit.author.date) || null;
             if (history && !committedAt) continue;
             const author = authorOf(cm);
-            const added = q.insert.run({
+            const added = (await q.insert.run({
                 service: svc.id, repo: svc.repo, sha: cm.sha, subject, author, committed_at: committedAt,
                 deployed_at: history ? new Date(committedAt).toISOString() : deployedAt, release: svc.release, release_lines: releaseLines, major: flagged ? 1 : 0,
                 post_id: history ? 'history' : null,
-            }).changes;
-            if (!added && author) q.fillAuthor.run(author, svc.id, cm.sha);
+            })).changes;
+            if (!added && author) await q.fillAuthor.run(author, svc.id, cm.sha);
             n += added;
         }
         return n;
@@ -207,36 +164,36 @@ function createChangelog({ config, store, blogs, posts, aiDrafts = null, fetchIm
 
     /** Once per service: its last c.history commits on the deployed release. */
     async function importHistory(svc) {
-        if (!(c.history > 0) || q.history.get(svc.id)) return 0;
+        if (!(c.history > 0) || await q.history.get(svc.id)) return 0;
         let list;
         try { list = await gh(`/repos/${svc.repo}/commits?sha=${svc.release}&per_page=${Math.min(c.history, 100)}`); } catch (err) {
             // A repository GitHub will not list (private, empty, gone) is not asked again; anything else is.
-            if ([404, 409, 422].includes(err.status)) { q.putHistory.run(svc.id, 0, nowMs()); return 0; }
+            if ([404, 409, 422].includes(err.status)) { await q.putHistory.run(svc.id, 0, nowMs()); return 0; }
             throw err;
         }
-        const n = addEntries(svc, Array.isArray(list) ? list : [], { history: true });
-        q.putHistory.run(svc.id, n, nowMs());
+        const n = await addEntries(svc, Array.isArray(list) ? list : [], { history: true });
+        await q.putHistory.run(svc.id, n, nowMs());
         return n;
     }
 
     async function collectOne(svc) {
-        const st = q.state.get(svc.id);
+        const st = await q.state.get(svc.id);
         if (st && st.release === svc.release) return 0;
         if (!st) {
             let n = 0;
             if (c.since) {
                 const list = await gh(`/repos/${svc.repo}/commits?sha=${svc.release}&since=${encodeURIComponent(c.since)}&per_page=100`);
-                n = addEntries(svc, (Array.isArray(list) ? list : []).slice().reverse());
+                n = await addEntries(svc, (Array.isArray(list) ? list : []).slice().reverse());
             }
-            q.putState.run({ service: svc.id, release: svc.release, head: null, at: nowMs() });
+            await q.putState.run({ service: svc.id, release: svc.release, head: null, at: nowMs() });
             return n;
         }
         const cmp = await gh(`/repos/${svc.repo}/compare/${st.head || st.release}...${svc.release}`);
         const commits = Array.isArray(cmp.commits) ? cmp.commits : [];
         const lines = (Array.isArray(cmp.files) ? cmp.files : []).reduce((a, f) => a + (Number(f.additions) || 0) + (Number(f.deletions) || 0), 0);
-        const n = cmp.status === 'behind' ? 0 : addEntries(svc, commits, { releaseLines: lines, major: lines >= c.majorLines });
+        const n = cmp.status === 'behind' ? 0 : await addEntries(svc, commits, { releaseLines: lines, major: lines >= c.majorLines });
         const head = commits.length ? commits[commits.length - 1].sha : st.head;
-        q.putState.run({ service: svc.id, release: svc.release, head, at: nowMs() });
+        await q.putState.run({ service: svc.id, release: svc.release, head, at: nowMs() });
         return n;
     }
 
@@ -247,7 +204,7 @@ function createChangelog({ config, store, blogs, posts, aiDrafts = null, fetchIm
             try {
                 added += await collectOne(svc);
                 // A few history imports per run keep an unauthenticated GitHub budget intact.
-                if (histories < 6 && !q.history.get(svc.id)) { histories++; await importHistory(svc); }
+                if (histories < 6 && !await q.history.get(svc.id)) { histories++; await importHistory(svc); }
             } catch (err) {
                 stats.lastError = `${svc.id}: ${err.message}`;
                 if (err.status === 403 || err.status === 429) break;     // GitHub's rate limit: try again next run
@@ -258,9 +215,9 @@ function createChangelog({ config, store, blogs, posts, aiDrafts = null, fetchIm
     }
 
     /** { due, reason } for the pending entries. */
-    function due(list, at = nowMs()) {
+    async function due(list, at = nowMs()) {
         if (!list.length) return { due: false, reason: 'nothing pending' };
-        const last = q.lastPost.get();
+        const last = await q.lastPost.get();
         const sinceLast = last ? at - last.created_at : Infinity;
         const newest = Math.max(...list.map((e) => Date.parse(e.deployed_at) || 0));
         const oldest = Math.min(...list.map((e) => Date.parse(e.deployed_at) || at));
@@ -307,19 +264,19 @@ function createChangelog({ config, store, blogs, posts, aiDrafts = null, fetchIm
     }
 
     async function publish(list, reason) {
-        const blog = blogs.byHandle(c.blogHandle) || (c.blogHandle === config.official.handle ? blogs.ensureOfficial() : null);
+        const blog = await blogs.byHandle(c.blogHandle) || (c.blogHandle === config.official.handle ? await blogs.ensureOfficial() : null);
         const owner = config.official.owners.find((s) => /^usr_/.test(s));
         if (!blog || !owner) { stats.lastError = !blog ? `no blog @${c.blogHandle}` : 'BLOG_OFFICIAL_OWNERS names no owner to publish as'; return null; }
         const services = new Map((await registry().catch(() => [])).map((s) => [s.id, s]));
         for (const e of list) if (!services.has(e.service)) services.set(e.service, { id: e.service, name: e.service, repo: e.repo, origin: null });
         const doc = render(list, services);
         const viewer = { kind: 'user', subject: owner, staff: false };
-        const { post } = posts.create(viewer, blog, {
+        const { post } = await posts.create(viewer, blog, {
             title: doc.title, summary: doc.summary, body: doc.body, tags: doc.tags.filter((t) => t.length <= 50).slice(0, 20), series: 'Patch notes',
             authorship: { mode: 'imported', importedFrom: { label: 'Commit messages from the OpenVibers repositories on GitHub', originalAuthor: 'OpenVibers' } },
             message: `Patch notes from ${list.length} commits (${reason})`,
         });
-        posts.publish(viewer, posts.get ? posts.get(post.id) || post : post);
+        await posts.publish(viewer, posts.get ? await posts.get(post.id) || post : post);
         let aiDraftId = null;
         if (c.aiDraft && aiDrafts && aiDrafts.enabled) {
             try {
@@ -328,9 +285,9 @@ function createChangelog({ config, store, blogs, posts, aiDrafts = null, fetchIm
                 aiDraftId = d.post.id;
             } catch (err) { log.warn && log.warn(`[changelog] AI dev-blog draft not made: ${err.message}`); }
         }
-        store.tx(() => {
-            for (const e of list) q.mark.run(post.id, e.id);
-            q.putPost.run({ post_id: post.id, blog_id: blog.id, entries: list.length, from_at: doc.from, to_at: doc.to, reason, ai_draft_id: aiDraftId, created_at: nowMs() });
+        await store.tx(async () => {
+            for (const e of list) await q.mark.run(post.id, e.id);
+            await q.putPost.run({ post_id: post.id, blog_id: blog.id, entries: list.length, from_at: doc.from, to_at: doc.to, reason, ai_draft_id: aiDraftId, created_at: nowMs() });
         });
         stats.posts++;
         log.log && log.log(`[changelog] published ${post.id} (${list.length} entries, ${reason})`);
@@ -341,8 +298,8 @@ function createChangelog({ config, store, blogs, posts, aiDrafts = null, fetchIm
         stats.runs++; stats.lastRunAt = new Date(nowMs()).toISOString();
         try {
             await collect();
-            const list = q.pending.all();
-            const d = due(list);
+            const list = await q.pending.all();
+            const d = await due(list);
             if (d.due) return await publish(list.slice(0, c.batchSize * 3), d.reason);
             return null;
         } catch (err) { stats.lastError = err.message; log.warn && log.warn(`[changelog] ${err.message}`); return null; }
@@ -359,14 +316,14 @@ function createChangelog({ config, store, blogs, posts, aiDrafts = null, fetchIm
     function stop() { if (timer) clearInterval(timer); timer = null; }
 
     /** The public feed, newest first: { entries, next } (next = the cursor for the page after, or null). */
-    function page({ service = null, limit = 20, before = null } = {}) {
+    async function page({ service = null, limit = 20, before = null } = {}) {
         const n = Math.min(Math.max(parseInt(limit, 10) || 20, 1), 100);
         const cur = decodeCursor(before);
         const where = [];
         const args = [];
         if (service) { where.push('service = ?'); args.push(String(service)); }
         if (cur) { where.push('(deployed_at < ? OR (deployed_at = ? AND id < ?))'); args.push(cur.at, cur.at, cur.id); }
-        const rows = db.prepare(`SELECT * FROM changelog_entries ${where.length ? `WHERE ${where.join(' AND ')}` : ''} ORDER BY deployed_at DESC, id DESC LIMIT ?`).all(...args, n + 1);
+        const rows = await db.prepare(`SELECT * FROM changelog_entries ${where.length ? `WHERE ${where.join(' AND ')}` : ''} ORDER BY deployed_at DESC, id DESC LIMIT ?`).all(...args, n + 1);
         const more = rows.length > n;
         const shown = rows.slice(0, n);
         return {
@@ -377,13 +334,13 @@ function createChangelog({ config, store, blogs, posts, aiDrafts = null, fetchIm
             next: more && shown.length ? encodeCursor(shown[shown.length - 1]) : null,
         };
     }
-    function entries(opts = {}) { return page(opts).entries; }
-    function latestPost() { return q.lastPost.get() || null; }
-    function recentPosts(limit = 5) { return q.recentPosts.all(Math.min(Math.max(parseInt(limit, 10) || 5, 1), 20)); }
+    async function entries(opts = {}) { return (await page(opts)).entries; }
+    async function latestPost() { return await q.lastPost.get() || null; }
+    async function recentPosts(limit = 5) { return await q.recentPosts.all(Math.min(Math.max(parseInt(limit, 10) || 5, 1), 20)); }
     /** Every site with entries: [{ service, entries, latest_at }], most recently shipped first. */
-    function sites() { return q.sites.all(); }
+    async function sites() { return await q.sites.all(); }
 
-    return { tick, collect, due, render, publish, start, stop, entries, page, latestPost, recentPosts, sites, importHistory, stats: () => ({ enabled: c.enabled, ...stats, github_token: cachedToken.source, pending: q.pending.all().length }) };
+    return { tick, collect, due, render, publish, start, stop, entries, page, latestPost, recentPosts, sites, importHistory, stats: async () => ({ enabled: c.enabled, ...stats, github_token: cachedToken.source, pending: (await q.pending.all()).length }) };
 }
 
 /** A stable id for a batch (tests). */

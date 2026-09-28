@@ -7,11 +7,12 @@
  */
 const { createApp } = require('./app');
 
-const { app, ctx } = createApp();
+(async () => {
+const { app, ctx } = await createApp();
 const { config } = ctx;
 
 const server = app.listen(config.port, config.host, () => {
-    console.log(`[Blog] ${config.nodeEnv} on http://${config.host}:${config.port} → ${config.baseUrl} (db ${config.dbPath})`);
+    console.log(`[Blog] ${config.nodeEnv} on http://${config.host}:${config.port} → ${config.baseUrl} (db ${ctx.store.db.store})`);
     console.log(`[Blog] events relay ${ctx.outbox.enabled ? `on → ${config.events.url}` : 'off (events wait in event_outbox)'}; worker ${config.worker.enabled ? 'on' : 'off'}`);
 });
 server.keepAliveTimeout = 65_000;
@@ -26,10 +27,11 @@ function shutdown(signal) {
     ctx.changelog.stop();
     server.close(async () => {
         try { await ctx.outbox.stop(); } catch { /* best effort */ }
-        try { ctx.store.close(); } catch { /* already closed */ }
+        try { await ctx.store.close(); } catch { /* already closed */ }
         process.exit(0);
     });
     setTimeout(() => process.exit(0), 5000).unref();
 }
 process.on('SIGTERM', () => shutdown('SIGTERM'));
 process.on('SIGINT', () => shutdown('SIGINT'));
+})().catch((err) => { console.error('[Blog] failed to start:', err); process.exit(1); });

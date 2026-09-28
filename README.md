@@ -25,7 +25,7 @@ It also uses:
 
 ## Owns
 
-The ten charter tables live in Blog's own SQLite (`BLOG_DB_PATH`). Where a publishing package
+The ten charter tables live in Blog's own PostgreSQL database (`ov_blog` on the host's data role, ADR-035; schema in [migrations/](migrations/)). Where a publishing package
 applies, it creates the table with the `blog` prefix:
 
 | Charter table | What it is |
@@ -240,10 +240,12 @@ Called elsewhere, as the service principal `blog`: `identity.subject.resolve` an
 
 ## Depends on
 
-- **Packages** (all pinned by release tarball): `openvibe-publishing` v0.4.0 (revisions, schedule,
-  taxonomy, citations, media, discussion, seo, authorship, index-hooks, ssr), `openvibe-contracts`
-  v0.53.0, `openvibe-shared` v1.25.0 (chrome, app icon, footer, legal, release, metrics, ready,
-  theme presets), `openvibe-sdk` v0.12.0 (events outbox, service tokens, per-actor limits).
+- **PostgreSQL 18 and Valkey 9** (OpenVibe.Host `roles/data/`, ADR-035): every read and write is async through
+  `openvibe-sdk/db`; Valkey holds the per-actor limit counters (optional: without `VALKEY_URL` they count per process).
+- **Packages** (all pinned by release tarball): `openvibe-publishing` v1.0.0 (async PostgreSQL stores: revisions,
+  schedule, taxonomy, citations, media, discussion, seo, authorship, index-hooks, ssr), `openvibe-contracts`
+  v0.76.0, `openvibe-shared` v1.25.0 (Frame, app icon, footer, legal, release, metrics, ready, theme presets),
+  `openvibe-sdk` v0.19.0 (db, PostgreSQL events outbox, service tokens, per-actor limits, testing).
 - **OpenVibe.Network:**
   - SSO: the OAuth client `blog` is already seeded with redirect
     `https://openvibe.blog/auth/callback`.
@@ -412,7 +414,11 @@ fnm exec --using=22.22.1 npm run dev       # http://localhost:4810 (set OV_OAUTH
 
 Production deploys with `sudo ovhost deploy blog` on the host (strategy `git-checkout`: fetch,
 fast-forward `/opt/openvibe.blog`, install on a lockfile change, restart, wait for `/api/ready`).
-The unit is `openvibe-blog.service` on `127.0.0.1:4810`, the env file `/etc/openvibe/blog.env`. nginx serves
+The unit is `openvibe-blog.service` on `127.0.0.1:4810`, the env file `/etc/openvibe/blog.env`. The database is
+`ov_blog` on the host's data role (`sudo /opt/openvibe.host/roles/data/add-service.sh blog` writes its settings); the
+release migrates it at boot. The one-time move from SQLite is `scripts/migrate-to-postgres.js` (openvibe-sdk
+`runSqliteMigration`, with a `--pglite` rehearsal mode), run while the service is stopped; the old
+`/var/lib/openvibe-blog/blog.db` stays read-only for 7 days as the rollback. nginx serves
 `openvibe.blog` from [deploy/nginx/openvibe.blog.conf](deploy/nginx/openvibe.blog.conf).
 Rollback: ovhost puts the previous sha back by itself when `/api/ready` does not answer 2xx after the
 restart; afterwards `sudo ovhost rollback blog --to <sha>`. Nothing blocks a rollback: the schema

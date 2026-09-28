@@ -20,10 +20,10 @@ const LONG = Array.from({ length: 100 }, (_, i) => `w${i}`).join(' ');
     const secret = (await t.get('/api/v1/blogs/carol/posts', { as: carol, json: { title: 'Private minutes', body: `Minutes ${LONG}`, visibility: 'private' } })).json().post;
     const caps = ['blog.post.read', 'blog.post.create'];
     const token = (sub, actorType, extra) => t.network.signService({ sub, actorType, aud: ['openvibe.blog'], cap: caps, extra });
-    const postsOf = () => t.ctx.store.db.prepare('SELECT COUNT(*) AS n FROM blog_posts').get().n;
+    const postsOf = async () => (await t.ctx.store.db.prepare('SELECT COUNT(*) AS n FROM blog_posts').get()).n;
 
     await check('an app or module cannot act for someone else by naming them in X-OV-Subject', async () => {
-        const before = postsOf();
+        const before = await postsOf();
         for (const [sub, type] of [[APP, 'app'], [MOD, 'mod']]) {
             for (const extra of [{ on_behalf_of: appUser.subject }, {}]) {
                 const read = await t.get(`/api/v1/posts/${secret.id}`, { as: token(sub, type, extra), headers: { 'x-ov-subject': carol.subject } });
@@ -34,7 +34,7 @@ const LONG = Array.from({ length: 100 }, (_, i) => `w${i}`).join(' ');
                 assert.strictEqual(write.status, 403, `${type} write: ${write.text}`);
             }
         }
-        assert.strictEqual(postsOf(), before, 'nothing written as carol');
+        assert.strictEqual(await postsOf(), before, 'nothing written as carol');
     });
 
     await check('an app acts for its on_behalf_of person, with that person\'s rights', async () => {
