@@ -242,7 +242,7 @@ Called elsewhere, as the service principal `blog`: `identity.subject.resolve` an
 
 - **Packages** (all pinned by release tarball): `openvibe-publishing` v0.4.0 (revisions, schedule,
   taxonomy, citations, media, discussion, seo, authorship, index-hooks, ssr), `openvibe-contracts`
-  v0.53.0, `openvibe-shared` v1.22.0 (chrome, app icon, footer, legal, release, metrics, ready,
+  v0.53.0, `openvibe-shared` v1.25.0 (chrome, app icon, footer, legal, release, metrics, ready,
   theme presets), `openvibe-sdk` v0.12.0 (events outbox, service tokens, per-actor limits).
 - **OpenVibe.Network:**
   - SSO: the OAuth client `blog` is already seeded with redirect
