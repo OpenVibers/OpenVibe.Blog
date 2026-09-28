@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * Blog's own SQLite database: created on boot, idempotently. Nothing here is shared with another
+ * Blog's own PostgreSQL database (ADR-035, roadmap WS-X2): the schema is migrations/NNNN_*.sql, applied at boot. Nothing here is shared with another
  * service; the publishing packages create their tables inside this database with Blog's prefixes.
  *
  * The ten charter tables (roadmap §15.13):
@@ -22,12 +22,12 @@
  *
  * Also here: the package's companions (blog_post_drafts, blog_post_revision_purges,
  * blog_post_citations, blog_post_attachments, blog_post_reviews, blog_post_discussion_refs,
- * blog_index_revisions), the SDK's event_outbox, and subject_projections (a display cache of
+ * blog_index_revisions), the SDK's PostgreSQL event_outbox, the changelog tables, and subject_projections (a display cache of
  * Network names, never authority).
  */
 const fs = require('fs');
 const path = require('path');
-const Database = require('better-sqlite3');
+const { createDb } = require('openvibe-sdk/db');
 const { createRevisionStore } = require('openvibe-publishing/revisions');
 const { createCitationStore } = require('openvibe-publishing/citations');
 const { createTaxonomy } = require('openvibe-publishing/taxonomy');
@@ -38,122 +38,35 @@ const { createReviewLog } = require('openvibe-publishing/authorship');
 const { createRedirectStore } = require('openvibe-publishing/seo');
 const { createIndexSequencer } = require('openvibe-publishing/index-hooks');
 
-const SCHEMA = `
-CREATE TABLE IF NOT EXISTS blogs (
-    id            TEXT PRIMARY KEY,                     -- blg_<ULID>
-    kind          TEXT NOT NULL CHECK (kind IN ('official','member')),
-    handle        TEXT NOT NULL UNIQUE,                 -- /@handle; the official blog is 'openvibe' and served at /
-    owner_subject TEXT,                                 -- usr_… (NULL for the official blog: its owners are memberships)
-    title         TEXT NOT NULL,
-    description   TEXT,
-    theme         TEXT NOT NULL DEFAULT 'vibe',         -- an openvibe-shared theme preset slug
-    language      TEXT NOT NULL DEFAULT 'en',
-    status        TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','suspended')),
-    created_at    INTEGER NOT NULL,
-    updated_at    INTEGER NOT NULL
-);
-CREATE UNIQUE INDEX IF NOT EXISTS blogs_owner ON blogs (owner_subject) WHERE kind = 'member';
-
-CREATE TABLE IF NOT EXISTS blog_memberships (
-    blog_id     TEXT NOT NULL REFERENCES blogs(id),
-    subject     TEXT NOT NULL,                          -- usr_…
-    role        TEXT NOT NULL CHECK (role IN ('owner','editor','author')),
-    added_by    TEXT,
-    created_at  INTEGER NOT NULL,
-    updated_at  INTEGER NOT NULL,
-    PRIMARY KEY (blog_id, subject)
-);
-CREATE INDEX IF NOT EXISTS blog_memberships_subject ON blog_memberships (subject);
-
-CREATE TABLE IF NOT EXISTS blog_series (
-    id          TEXT PRIMARY KEY,                       -- ser_<ULID>
-    blog_id     TEXT NOT NULL REFERENCES blogs(id),
-    slug        TEXT NOT NULL,
-    title       TEXT NOT NULL,
-    description TEXT,
-    created_at  INTEGER NOT NULL,
-    updated_at  INTEGER NOT NULL,
-    UNIQUE (blog_id, slug)
-);
-
-CREATE TABLE IF NOT EXISTS blog_posts (
-    id                  TEXT PRIMARY KEY,               -- pst_<ULID>
-    blog_id             TEXT NOT NULL REFERENCES blogs(id),
-    slug                TEXT NOT NULL,
-    state               TEXT NOT NULL DEFAULT 'draft'
-                        CHECK (state IN ('draft','scheduled','published','unpublished','deleted')),
-    visibility          TEXT NOT NULL DEFAULT 'public'
-                        CHECK (visibility IN ('public','unlisted','members','private')),
-    entitlement_key     TEXT,                           -- members (VIP) posts: the entitlement that may read it
-    author_subject      TEXT NOT NULL,                  -- usr_… accountable for the post
-    series_id           TEXT REFERENCES blog_series(id),
-    series_position     INTEGER,
-    published_revision  INTEGER,                        -- which revision readers see (NULL: never published)
-    first_published_at  INTEGER,
-    published_at        INTEGER,                        -- the latest publication of published_revision
-    allow_comments      INTEGER NOT NULL DEFAULT 1,
-    noindex             INTEGER NOT NULL DEFAULT 0,     -- the author asked search engines not to index it
-    created_at          INTEGER NOT NULL,
-    updated_at          INTEGER NOT NULL,
-    deleted_at          INTEGER,
-    CHECK (visibility <> 'members' OR entitlement_key IS NOT NULL)
-);
-CREATE UNIQUE INDEX IF NOT EXISTS blog_posts_slug ON blog_posts (blog_id, slug) WHERE state <> 'deleted';
-CREATE INDEX IF NOT EXISTS blog_posts_listing ON blog_posts (blog_id, state, visibility, published_at);
-CREATE INDEX IF NOT EXISTS blog_posts_author ON blog_posts (author_subject, state);
-CREATE INDEX IF NOT EXISTS blog_posts_series ON blog_posts (series_id, series_position);
-
-CREATE TABLE IF NOT EXISTS blog_feed_settings (
-    blog_id       TEXT PRIMARY KEY REFERENCES blogs(id),
-    rss           INTEGER NOT NULL DEFAULT 1,
-    atom          INTEGER NOT NULL DEFAULT 1,
-    json          INTEGER NOT NULL DEFAULT 1,
-    item_count    INTEGER NOT NULL DEFAULT 20 CHECK (item_count BETWEEN 1 AND 50),
-    full_content  INTEGER NOT NULL DEFAULT 1,
-    updated_at    INTEGER NOT NULL
-);
-
--- Display cache of Network names for subjects (from sign-in claims or identity.subject.resolve).
-CREATE TABLE IF NOT EXISTS subject_projections (
-    subject       TEXT PRIMARY KEY,
-    username      TEXT,
-    display_name  TEXT,
-    avatar_url    TEXT,
-    refreshed_at  INTEGER NOT NULL
-);
-CREATE INDEX IF NOT EXISTS subject_projections_username ON subject_projections (username);
-`;
-
-// Charter names over the package tables (created after the stores, which create the tables).
-const VIEWS = `
-CREATE VIEW IF NOT EXISTS blog_taxonomy AS
-    SELECT t.id, CASE WHEN t.vocabulary = 'tag' THEN 'tag' ELSE 'category' END AS kind,
-           b.id AS blog_id, t.vocabulary, t.slug, t.name, t.parent_id, t.description, t.created_at
-      FROM blog_terms t
-      LEFT JOIN blogs b ON t.vocabulary = 'category_' || lower(substr(b.id, 5));
-CREATE VIEW IF NOT EXISTS blog_post_terms AS
-    SELECT l.entity_id AS post_id, l.term_id, t.vocabulary, l.position, l.created_at
-      FROM blog_term_links l JOIN blog_terms t ON t.id = l.term_id;
-CREATE VIEW IF NOT EXISTS blog_schedules AS
-    SELECT id, idem_key, entity_id AS post_id, action, revision, run_at, status, attempts,
-           lease_owner, lease_until, last_error, result, created_at, updated_at
-      FROM blog_schedule_jobs;
-`;
+const MIGRATIONS = path.join(__dirname, '..', 'migrations');
+const DEV_PGLITE = path.join(__dirname, '..', 'data', 'pglite');
 
 /**
- * Open (or create) the database and every store on it.
- * opts.now — injectable clock (epoch ms) shared by the stores, so tests and replays are deterministic.
+ * The serving handle (ADR-035): DATABASE_URL through PgBouncer; in development without it, an embedded PGlite
+ * database in data/pglite. Migrations run first, as the owner (DATABASE_DIRECT_URL), or on the embedded handle.
  */
-function openStore(dbPath, { now = () => Date.now(), leaseMs = 60000 } = {}) {
-    if (dbPath !== ':memory:') fs.mkdirSync(path.dirname(path.resolve(dbPath)), { recursive: true });
-    const db = new Database(dbPath);
-    db.pragma('journal_mode = WAL');
-    db.pragma('foreign_keys = ON');
-    db.pragma('busy_timeout = 5000');
-    db.exec(SCHEMA);
+async function openDb(config, { log = console, registry } = {}) {
+    if (!config.db.url) {
+        if (config.isProduction) throw new Error('DATABASE_URL is not set: production serves from PostgreSQL (OpenVibe.Host roles/data add-service.sh blog)');
+        log.warn(`[Blog] DATABASE_URL unset: embedded PGlite database in ${DEV_PGLITE} (development only, one process)`);
+        fs.mkdirSync(DEV_PGLITE, { recursive: true });
+        const db = createDb({ pglite: DEV_PGLITE, service: 'blog', registry, log });
+        await db.migrate({ dir: MIGRATIONS, log });
+        return db;
+    }
+    if (!config.db.directUrl) throw new Error('DATABASE_DIRECT_URL is not set: migrations run with the owner role on a direct connection');
+    const owner = createDb({ url: config.db.directUrl, service: 'blog-migrate', max: 1, log });
+    try { await owner.migrate({ dir: MIGRATIONS, log }); } finally { await owner.close(); }
+    return createDb({ url: config.db.url, service: 'blog', registry, log });
+}
 
+/**
+ * Every store on a migrated database handle. opts.now — injectable clock (epoch ms) shared by the stores, so tests
+ * and replays are deterministic. store.tx(fn) is a transaction; inside it, plain db calls join it (ambient).
+ */
+function createStore(db, { now = () => Date.now(), leaseMs = 60000 } = {}) {
     const revisions = createRevisionStore(db, { prefix: 'blog_post', now });
-    const store = {
+    return {
         db,
         now,
         revisions,
@@ -166,14 +79,17 @@ function openStore(dbPath, { now = () => Date.now(), leaseMs = 60000 } = {}) {
         reviews: createReviewLog(db, { prefix: 'blog_post', now }),
         redirects: createRedirectStore(db, { prefix: 'blog', now }),
         sequencer: createIndexSequencer(db, { prefix: 'blog', now }),
-        tx: (fn) => db.transaction(fn)(),
+        tx: async (fn) => await db.tx(() => fn()),
         close: () => db.close(),
     };
-    db.exec(VIEWS);
-    return store;
+}
+
+/** openDb + createStore. */
+async function openStore(config, { now, leaseMs, log } = {}) {
+    return createStore(await openDb(config, { log }), { now, leaseMs });
 }
 
 const CHARTER_TABLES = ['blogs', 'blog_memberships', 'blog_posts', 'blog_post_revisions', 'blog_series',
     'blog_taxonomy', 'blog_post_terms', 'blog_schedules', 'blog_redirects', 'blog_feed_settings'];
 
-module.exports = { openStore, CHARTER_TABLES };
+module.exports = { openDb, openStore, createStore, CHARTER_TABLES, MIGRATIONS };
