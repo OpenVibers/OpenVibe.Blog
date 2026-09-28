@@ -34,7 +34,7 @@ function formInput(body) {
 }
 
 function createEditorRoutes(ctx) {
-    const { config, store, blogs, posts, publication, access, people, viewers, effects, publicRoutes } = ctx;
+    const { config, store, blogs, posts, publication, access, people, viewers, effects, publicRoutes, limits } = ctx;
     const router = express.Router();
     const form = express.urlencoded({ extended: false, limit: '600kb' });
     router.use(viewers.middleware({ services: false }));
@@ -49,6 +49,18 @@ function createEditorRoutes(ctx) {
         if (!req.viewer.subject) return publicRoutes.messagePage(req, res, 403, 'Account not ready', 'Your OpenVibe sign-in did not include an account id. Sign out and in again.');
         next();
     });
+    // Per-actor limits (http/actor-limits.js), for a signed-in member and before the form is read: each
+    // form shares its budget with the API route that does the same thing.
+    const B = (name) => limits.budget(name);
+    router.post('/start', B('blog.blog.create'));
+    router.post('/@:handle/ai-draft', B('blog.post.ai_draft'));
+    router.post('/@:handle/new', B('blog.post.create'));
+    router.post('/@:handle/settings', B('blog.blog.configure'));
+    router.post(['/@:handle/members', '/@:handle/members/remove'], B('blog.member.manage'));
+    router.post(['/posts/:id', '/posts/:id/revert'], B('blog.post.update'));
+    router.post(['/posts/:id/publish', '/posts/:id/schedule', '/posts/:id/unschedule', '/posts/:id/unpublish', '/posts/:id/review'], B('blog.post.publish'));
+    router.post('/posts/:id/delete', B('blog.post.delete'));
+    router.post(['/posts/:id/media', '/posts/:id/media/:aid/remove'], B('blog.post.media'));
     router.post('*', form, (req, res, next) => {
         if (!checkCsrf(config, req.viewer, req.body && one(req.body._csrf))) return publicRoutes.messagePage(req, res, 403, 'Form expired', 'Reload the page and submit it again.');
         next();

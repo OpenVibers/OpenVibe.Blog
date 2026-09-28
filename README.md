@@ -347,13 +347,44 @@ its commit or tag, date and GitHub URL, and is attached as a citation.
 - **AI:** output is never attributed to a person. It needs a person's (`usr_`) review before
   publication or indexing, and only a signed-in person can record a review.
 - **Abuse:** rate limits on `/auth`, `/write` and `/api/v1`, both in Express and in the nginx
-  reference.
+  reference, and per-actor limits (below).
 - **Known gaps:**
   - Uploads go through OpenVibe.Media. The editor attaches existing `med_…` ids and doesn't
     upload.
   - Media publishes no deletion event yet, so broken assets are found by polling (the worker
     interval).
   - The Community thread visibility sync is best effort and needs `community.comment.moderate`.
+
+### Per-actor limits
+
+`/api/v1`, the editor and comment posts also limit who calls them, once `req.viewer` is resolved and
+before any work (before the body is read): `server/http/actor-limits.js`, openvibe-sdk/limits,
+roadmap WS-R task 4. Counted: a person as `user:usr_…` (their own token or cookie, named by a service
+in `X-OV-Subject`, or an app's `on_behalf_of`); a first-party service relaying a signed-out visitor by
+the address it forwards; a service or app acting as itself by its principal; a signed-out caller by
+address. A first-party service reading for itself is not counted on reads, and neither is
+`GET /api/v1/changelog`, which OpenVibe.Network reads for every site's "shipped" widget from loopback
+without a token (it would count as one caller for the whole network). Past a limit: `429`
+problem+json `rate_limited` with `Retry-After`, one `[Limits]` log line and
+`blog_rate_limited_total{limit,window}`. An editor form and the API route that do the same thing share
+one budget.
+
+| Routes (API and editor) | Per caller, a minute / an hour |
+|---|---|
+| API reads | `BLOG_LIMITS_MINUTE` / `BLOG_LIMITS_HOUR` (120 / 3000) |
+| Blog create (`POST /blogs`, `/write/start`) | 10 / 60 |
+| Blog settings and theme; members | 30 / 300 each |
+| Post create (`POST /blogs/:handle/posts`, `/write/@:handle/new`) | 30 / 300 |
+| Post edit and revert (`PATCH /posts/:id`, `/revert`, `/write/posts/:id`) | 30 / 600 |
+| AI draft (`…/posts/ai-draft`, `/write/@:handle/ai-draft`: an OpenVibe.AI run) | 5 / 30 |
+| Publish, schedule, unschedule, unpublish, reviews | 30 / 300 |
+| Delete | 30 / 300 |
+| Media attach and remove | 20 / 200 |
+| API diffs | 30 / 600 |
+| Comments (`POST /@:handle/:slug/comments`, sent to Community) | 20 / 300 |
+
+Never limited per actor: `/api/health`, `/api/ready`, `/release.json`, `/metrics`, sign-in, and the
+pages and feeds people read. `test/actor-limits.test.js`.
 
 ## Development
 

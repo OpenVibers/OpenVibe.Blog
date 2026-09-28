@@ -34,6 +34,7 @@ const { createPublicRoutes } = require('./http/public');
 const { createEditorRoutes } = require('./http/editor');
 const { createApi } = require('./http/api');
 const { createDiscoveryRoutes } = require('./http/discovery');
+const { createActorLimits } = require('./http/actor-limits');
 const { createBlogReadiness } = require('./observability');
 const { createWorker } = require('./worker');
 const { assetVersion } = require('./render/layout');
@@ -43,7 +44,8 @@ const VERSION = require('../package.json').version;
 
 /**
  * opts: config, store | dbPath, now (clock), fetchImpl, auth (a createAuthClient-like object),
- *       entitlementCheck ({ subject, key, blog, post }) → bool (replaces VIP), log
+ *       entitlementCheck ({ subject, key, blog, post }) → bool (replaces VIP), log,
+ *       limitsNow (the per-actor limiter's clock, tests)
  */
 function createApp(opts = {}) {
     const config = opts.config || configLib.load();
@@ -78,6 +80,9 @@ function createApp(opts = {}) {
     const metrics = require('openvibe-shared/metrics').instrument(app, { service: 'blog', release: release.release });
     app.locals.metrics = metrics.registry;
     app.locals.ctx = ctx;
+    // Per-actor limits (http/actor-limits.js) for the API, the editor and comment posts, counted once each
+    // router resolved req.viewer; the per-address limits below stay.
+    ctx.limits = createActorLimits({ config, now: opts.limitsNow || (() => Date.now()), registry: metrics.registry, log });
 
     app.use(contracts.http.middleware());
     app.use(helmet({

@@ -29,7 +29,7 @@ const { csrfToken, checkCsrf } = require('../auth/forms');
 const PER_PAGE = 15;
 
 function createPublicRoutes(ctx) {
-    const { config, store, blogs, posts, publication, reading, people, community, media, access, entitlements, viewers } = ctx;
+    const { config, store, blogs, posts, publication, reading, people, community, media, access, entitlements, viewers, limits } = ctx;
     const router = express.Router();
     router.use(viewers.middleware({ services: false }));
 
@@ -378,7 +378,9 @@ function createPublicRoutes(ctx) {
         return renderPost(req, res, { blog, post, rev });
     }));
 
-    router.post('/@:handle/:slug/comments', express.urlencoded({ extended: false, limit: '32kb' }), wrap(async (req, res) => {
+    // Per-actor limit (http/actor-limits.js) before the form is read: the comment goes to Community in
+    // the person's name.
+    router.post('/@:handle/:slug/comments', limits.budget('blog.comment.create'), express.urlencoded({ extended: false, limit: '32kb' }), wrap(async (req, res) => {
         const blog = activeBlog(req);
         const post = blog && posts.bySlug(blog, req.params.slug);
         if (!post || post.state !== 'published' || post.visibility !== 'public') return notFound(req, res);

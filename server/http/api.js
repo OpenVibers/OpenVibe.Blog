@@ -53,10 +53,15 @@ function cors(origins) {
 }
 
 function createApi(ctx) {
-    const { config, store, blogs, posts, publication, reading, access, entitlements, viewers, effects, people } = ctx;
+    const { config, store, blogs, posts, publication, reading, access, entitlements, viewers, effects, people, limits } = ctx;
     const router = express.Router();
     router.use(cors(config.apiCorsOrigins));
     router.use(viewers.middleware());
+    // Per-actor limits (http/actor-limits.js), once req.viewer is resolved: every read takes the defaults
+    // (not the changelog, which Network reads for every site from loopback); each write names its budget
+    // after its capability guard and before its body is read.
+    router.use(limits.reads('blog.read', { skip: (req) => req.path === '/changelog' }));
+    const B = (name) => limits.budget(name);
     router.use((req, res, next) => { privateNoStore(res); res.set('X-Robots-Tag', 'noindex'); next(); });
 
     const tp = (req) => ({ traceparent: req.ov && req.ov.traceparent });
@@ -124,14 +129,14 @@ function createApi(ctx) {
         return { blog: blogDto(blog, { full: isMember(blog, req.viewer) }) };
     }));
 
-    router.post('/blogs', guard('blog.blog.create'), jsonBody, run((req) => {
+    router.post('/blogs', guard('blog.blog.create'), B('blog.blog.create'), jsonBody, run((req) => {
         const b = req.body || {};
         const username = req.viewer.kind === 'user' && req.viewer.user ? req.viewer.user.username : null;
         const { blog, created } = blogs.ensureMemberBlog({ subject: req.viewer.subject, username, handle: b.handle, title: b.title, description: b.description });
         return { blog: blogDto(blog, { full: true }), created };
     }, (out) => (out.created ? 201 : 200)));
 
-    router.patch('/blogs/:handle', guard('blog.blog.configure'), jsonBody, run((req) => {
+    router.patch('/blogs/:handle', guard('blog.blog.configure'), B('blog.blog.configure'), jsonBody, run((req) => {
         const blog = mustBlog(req);
         if (!access.canWrite(store, req.viewer, blog, 'configure')) throw new ApiError(403, 'blog.forbidden', 'Only an owner can configure this blog');
         const b = req.body || {};
@@ -143,7 +148,7 @@ function createApi(ctx) {
         return { blog: blogDto(updated, { full: true }) };
     }));
 
-    router.put('/blogs/:handle/theme', guard('blog.theme.set'), jsonBody, run((req) => {
+    router.put('/blogs/:handle/theme', guard('blog.theme.set'), B('blog.blog.configure'), jsonBody, run((req) => {
         const blog = mustBlog(req);
         if (!access.canWrite(store, req.viewer, blog, 'configure')) throw new ApiError(403, 'blog.forbidden', 'Only an owner can change the theme');
         return { blog: blogDto(blogs.setTheme(blog, String((req.body || {}).theme || '')), { full: true }), themes: blogs.THEME_PRESETS };
@@ -157,13 +162,13 @@ function createApi(ctx) {
         return { members: list.map((m) => ({ subject: m.subject, role: m.role, name: who.get(m.subject).known ? who.get(m.subject).name : null, username: who.get(m.subject).username })) };
     }));
 
-    router.put('/blogs/:handle/members/:subject', guard('blog.member.manage'), jsonBody, run((req) => {
+    router.put('/blogs/:handle/members/:subject', guard('blog.member.manage'), B('blog.member.manage'), jsonBody, run((req) => {
         const blog = mustBlog(req);
         if (!access.canWrite(store, req.viewer, blog, 'members')) throw new ApiError(403, 'blog.forbidden', 'Only an owner can manage members');
         return { member: blogs.setMember(blog, req.params.subject, (req.body || {}).role, req.viewer.subject) };
     }));
 
-    router.delete('/blogs/:handle/members/:subject', guard('blog.member.manage'), run((req) => {
+    router.delete('/blogs/:handle/members/:subject', guard('blog.member.manage'), B('blog.member.manage'), run((req) => {
         const blog = mustBlog(req);
         if (!access.canWrite(store, req.viewer, blog, 'members')) throw new ApiError(403, 'blog.forbidden', 'Only an owner can manage members');
         return { removed: blogs.removeMember(blog, req.params.subject) };
@@ -203,7 +208,7 @@ function createApi(ctx) {
     }));
 
     // Draft with AI: OpenVibe.AI's blog.draft_post writes a draft (AI-authored, noindex until reviewed).
-    router.post('/blogs/:handle/posts/ai-draft', guard('blog.post.create'), jsonBody, run(async (req) => {
+    router.post('/blogs/:handle/posts/ai-draft', guard('blog.post.create'), B('blog.post.ai_draft'), jsonBody, run(async (req) => {
         const blog = mustBlog(req);
         if (!ctx.aiDrafts || !ctx.aiDrafts.enabled) throw new ApiError(503, 'ai.not_configured', 'Drafting with AI is not available on this blog right now');
         const { post, revision } = await ctx.aiDrafts.draft(req.viewer, blog, req.body || {}, tp(req));
@@ -211,7 +216,7 @@ function createApi(ctx) {
         return { post: postDto(post, { full: true }), revision: revision.number };
     }, 201));
 
-    router.post('/blogs/:handle/posts', guard('blog.post.create'), jsonBody, run((req) => {
+    router.post('/blogs/:handle/posts', guard('blog.post.create'), B('blog.post.create'), jsonBody, run((req) => {
         const blog = mustBlog(req);
         const { post, revision } = posts.create(req.viewer, blog, req.body || {}, tp(req));
         after(null, post.id, req);
@@ -239,7 +244,7 @@ function createApi(ctx) {
         return { post: postDto(post) };
     }));
 
-    const write = (method, path, capGuard, fn, status = 200) => router[method](path, capGuard, jsonBody, run(async (req) => {
+    const write = (method, path, capGuard, limit, fn, status = 200) => router[method](path, capGuard, limit, jsonBody, run(async (req) => {
         const { post } = mustPost(req);
         const before = { ...post };
         const out = await fn(req, post, req.body || {});
@@ -247,46 +252,46 @@ function createApi(ctx) {
         return out;
     }, status));
 
-    write('patch', '/posts/:id', guard('blog.post.update'), (req, post, b) => {
+    write('patch', '/posts/:id', guard('blog.post.update'), B('blog.post.update'), (req, post, b) => {
         const input = { ...b, expectedRevision: b.expected_revision ?? b.expectedRevision };
         const out = posts.update(req.viewer, post, input, tp(req));
         return { post: postDto(out.post, { full: true }), revision: out.revision.number, created: out.created };
     });
-    write('post', '/posts/:id/publish', guard('blog.post.publish'), (req, post, b) => {
+    write('post', '/posts/:id/publish', guard('blog.post.publish'), B('blog.post.publish'), (req, post, b) => {
         const out = posts.publish(req.viewer, post, { revision: b.revision }, tp(req));
         return { post: postDto(out.post, { full: true }), changed: out.changed };
     });
-    write('post', '/posts/:id/schedule', guard('blog.post.schedule'), (req, post, b) => {
+    write('post', '/posts/:id/schedule', guard('blog.post.schedule'), B('blog.post.publish'), (req, post, b) => {
         const out = posts.schedule(req.viewer, post, { at: b.at, revision: b.revision, action: b.action || 'publish' });
         return { job: out.job, created: out.created, post: postDto(out.post, { full: true }) };
     }, 201);
-    write('delete', '/posts/:id/schedule', guard('blog.post.schedule'), (req, post) => {
+    write('delete', '/posts/:id/schedule', guard('blog.post.schedule'), B('blog.post.publish'), (req, post) => {
         const out = posts.cancelSchedule(req.viewer, post);
         return { cancelled: out.cancelled, post: postDto(out.post, { full: true }) };
     });
-    write('post', '/posts/:id/unpublish', guard('blog.post.unpublish'), (req, post) => {
+    write('post', '/posts/:id/unpublish', guard('blog.post.unpublish'), B('blog.post.publish'), (req, post) => {
         const out = posts.unpublish(req.viewer, post, tp(req));
         return { post: postDto(out.post, { full: true }), changed: out.changed };
     });
-    write('delete', '/posts/:id', guard('blog.post.delete'), (req, post) => {
+    write('delete', '/posts/:id', guard('blog.post.delete'), B('blog.post.delete'), (req, post) => {
         posts.remove(req.viewer, post, tp(req));
         return { deleted: true, id: post.id };
     });
-    write('post', '/posts/:id/revert', guard('blog.post.update'), (req, post, b) => {
+    write('post', '/posts/:id/revert', guard('blog.post.update'), B('blog.post.update'), (req, post, b) => {
         const out = posts.revert(req.viewer, post, { toRevision: b.to_revision ?? b.toRevision, expectedRevision: b.expected_revision ?? b.expectedRevision });
         return { revision: out.revision.number, post: postDto(out.post, { full: true }) };
     }, 201);
-    router.post('/posts/:id/reviews', jsonBody, run(async (req) => {
+    router.post('/posts/:id/reviews', B('blog.post.publish'), jsonBody, run(async (req) => {
         const { post } = mustPost(req);
         const b = req.body || {};
         const review = posts.review(req.viewer, post, { revision: b.revision, decision: b.decision, note: b.note }, tp(req));
         after({ ...post }, post.id, req);
         return { review };
     }, 201));
-    write('post', '/posts/:id/attachments', guard('blog.post.update'), (req, post, b) => ({
+    write('post', '/posts/:id/attachments', guard('blog.post.update'), B('blog.post.media'), (req, post, b) => ({
         attachment: posts.attach(req.viewer, post, { mediaId: b.media_id ?? b.mediaId, role: b.role, alt: b.alt, caption: b.caption, position: b.position }),
     }), 201);
-    write('delete', '/posts/:id/attachments/:aid', guard('blog.post.update'), (req, post) => ({ removed: posts.detach(req.viewer, post, req.params.aid) }));
+    write('delete', '/posts/:id/attachments/:aid', guard('blog.post.update'), B('blog.post.media'), (req, post) => ({ removed: posts.detach(req.viewer, post, req.params.aid) }));
 
     function readable(req) {
         const { post, blog } = mustPost(req);
@@ -303,7 +308,7 @@ function createApi(ctx) {
         if (!rev) throw new ApiError(404, 'revision.not_found', 'No such revision');
         return { revision: rev, citations: posts.citations(post, rev.number) };
     }));
-    router.get('/posts/:id/diff', guard('blog.post.read'), run((req) => {
+    router.get('/posts/:id/diff', guard('blog.post.read'), B('blog.post.diff'), run((req) => {
         const post = readable(req);
         return { diff: posts.diff(post, parseInt(req.query.from, 10), parseInt(req.query.to, 10), req.query.mode) };
     }));

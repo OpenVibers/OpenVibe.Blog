@@ -44,7 +44,7 @@ async function boot(opts = {}) {
     let built = null;
     async function start() {
         const config = configLib.load(env);
-        built = createApp({ config, now: clock.now, log: quiet, entitlementCheck: opts.entitlementCheck });
+        built = createApp({ config, now: clock.now, log: opts.log || quiet, entitlementCheck: opts.entitlementCheck, limitsNow: opts.limitsNow });
         await built.ctx.auth.ensureKey();
         server = await new Promise((resolve) => { const s = http.createServer(built.app); s.listen(0, '127.0.0.1', () => resolve(s)); });
         t.base = `http://127.0.0.1:${server.address().port}`;
