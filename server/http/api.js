@@ -181,10 +181,10 @@ function createApi(ctx) {
         if (req.query.all === '1') {
             if (req.viewer.kind === 'service' && !checkCapability(req.viewer.claims, 'blog.post.read').allowed) throw new ApiError(403, 'capability.denied', 'blog.post.read not granted');
             if (!await isMember(blog, req.viewer)) throw new ApiError(403, 'blog.forbidden', 'Only the blog’s members can list its drafts');
-            return { posts: await Promise.all((await posts.listForDashboard(blog, req.viewer)).slice(offset, offset + limit).map((p) => postDto(p, { full: false }))) };
+            return { posts: await Promise.all((await posts.listForDashboard(blog, req.viewer)).slice(offset, offset + limit).map(async (p) => await postDto(p, { full: false }))) };
         }
         const { total, posts: rows } = await posts.listPublished({ blogId: blog.id, restricted: await isMember(blog, req.viewer), limit, offset });
-        return { total, posts: await Promise.all(rows.map((p) => postDto(p))) };
+        return { total, posts: await Promise.all(rows.map(async (p) => await postDto(p))) };
     }));
 
     // The network changelog (server/changelog.js): what shipped on every OpenVibe site, newest first, and
