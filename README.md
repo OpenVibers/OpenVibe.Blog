@@ -196,6 +196,15 @@ OpenVibe.Network proxies this feed at `openvibe.network/api/v1/changelog`. Every
   never appear in feeds, sitemaps or Search. Feeds and sitemaps are never built for a particular
   viewer.
 
+### IndexNow (openvibe-shared/indexnow)
+
+- With `INDEXNOW_KEY` set, the key file is served at `/<key>.txt` as `text/plain`.
+- Publishing, updating (a new revision or a slug change), unpublishing and deleting ping
+  `api.indexnow.org` with the post's canonical URL and `/sitemap.xml`; the module batches and
+  debounces (one POST per 30s window). A failed ping never takes a publish down.
+- Drafts, scheduled, unlisted, members-only, private and noindex posts never ping. Unset key: off —
+  no key file, no requests.
+
 ### Caching (no leaks through shared caches)
 
 - All HTML and JSON varies on `Cookie` and `Authorization`.
@@ -293,6 +302,7 @@ Each grant is `[client, capability, audience]`:
 | Capability-guarded service tokens, X-OV-Subject membership, AI drafts that need a person's review, and problem+json with request ids. | `test/api-ai.test.js` |
 | The seed post, readiness, release, robots, llms.txt and the sitemap index. | `test/seed-ops.test.js` |
 | The contract proposals are valid against the released schemas and match the code. | `test/contracts.test.js` |
+| IndexNow: off without `INDEXNOW_KEY` (no key route, nothing sent); with one the key file is served at `/<key>.txt` as `text/plain` and a publish or unpublish pings the post path and the sitemap; a draft never pings. | `test/indexnow.test.js` |
 
 ## Launch rule
 

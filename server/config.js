@@ -63,6 +63,11 @@ function load(env = process.env) {
         },
         // OpenVibe.AI for "Draft with AI" (server/domain/ai-drafts.js); empty = the button is not offered.
         aiUrl: trim(env.OV_AI_INTERNAL_URL || ''),
+
+        // IndexNow (openvibe-shared/indexnow): a key makes search engines recrawl a page the moment
+        // it appears, changes or leaves the index (the key file is served at /<key>.txt). Unset →
+        // off: no key file, nothing sent. Tests and drills never set it.
+        indexnow: { key: String(env.INDEXNOW_KEY || '').trim() },
         oauth: {
             clientId: env.OV_OAUTH_CLIENT_ID || 'blog',
             clientSecret: env.OV_OAUTH_CLIENT_SECRET || '',

@@ -31,6 +31,7 @@ const { createCommunity } = require('./clients/community');
 const { createMedia } = require('./clients/media');
 const { createVip } = require('./clients/vip');
 const { createServiceOutbox } = require('openvibe-sdk/events');
+const { createIndexNow } = require('openvibe-shared/indexnow');
 const { createPublicRoutes } = require('./http/public');
 const { createEditorRoutes } = require('./http/editor');
 const { createApi } = require('./http/api');
@@ -62,8 +63,13 @@ async function createApp(opts = {}) {
         clientId: config.oauth.clientId, clientSecret: config.oauth.clientSecret, intervalMs: config.events.intervalMs,
         now: store.now, fetch: fetchImpl, log,
     });
+    // IndexNow (openvibe-shared/indexnow): created once at boot from INDEXNOW_KEY. Unset → off, nothing
+    // mounted, nothing sent; tests and drills never set it.
+    const indexnow = opts.indexnow !== undefined ? opts.indexnow : createIndexNow({
+        host: config.baseUrl, key: config.indexnow.key, ...(fetchImpl ? { fetch: fetchImpl } : {}), log,
+    });
     const blogs = createBlogs({ store, config });
-    const publication = createPublication({ store, config, outbox });
+    const publication = createPublication({ store, config, outbox, indexnow });
     const posts = createPosts({ store, blogs, publication, access, outbox, log });
     const people = createPeople({ store, config, fetchImpl });
     const community = createCommunity({ store, config, fetchImpl });
@@ -88,7 +94,7 @@ async function createApp(opts = {}) {
 
     const aiDrafts = opts.aiDrafts || require('./domain/ai-drafts').createAiDrafts({ config, store, posts, access, fetchImpl });
     const changelog = opts.changelog || require('./changelog').createChangelog({ config, store, blogs, posts, aiDrafts, fetchImpl, log });
-    const ctx = { config, store, outbox, blogs, publication, posts, people, community, media, reading, effects, entitlements, vip, auth, viewers, access, worker, aiDrafts, changelog };
+    const ctx = { config, store, outbox, blogs, publication, posts, people, community, media, reading, effects, entitlements, vip, auth, viewers, access, worker, aiDrafts, changelog, indexnow };
 
     const app = express();
     app.disable('x-powered-by');
@@ -158,6 +164,9 @@ async function createApp(opts = {}) {
     });
     app.use('/auth', sso.router(express));
     { const legal = require('openvibe-shared/legal'); app.get(legal.PATHS, legal.handler({ id: 'blog', service: 'blog', host: 'openvibe.blog', name: 'OpenVibe.Blog', profile: 'ugc' })); }
+
+    // GET /<key>.txt — the IndexNow key file (mounted only when a key is configured; it serves itself).
+    if (indexnow.enabled) app.use(indexnow.keyFile);
 
     // ── Static assets (content-hashed ?v= → immutable) ──────
     // This site's own pinned copy of the OpenVibe Frame's browser files (openvibe-shared/serve).

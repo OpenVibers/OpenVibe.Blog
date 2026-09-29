@@ -25,7 +25,7 @@ const OWNER = 'blog';
 /** Blog visibility → the gate's vocabulary (members = entitlement-gated). */
 const GATE_VISIBILITY = { public: 'public', unlisted: 'unlisted', members: 'gated', private: 'private' };
 
-function createPublication({ store, config, outbox }) {
+function createPublication({ store, config, outbox, indexnow }) {
     const { db } = store;
     const blogById = db.prepare('SELECT * FROM blogs WHERE id = ?');
     const membersOf = db.prepare('SELECT subject FROM blog_memberships WHERE blog_id = ? ORDER BY subject');
@@ -149,6 +149,13 @@ function createPublication({ store, config, outbox }) {
                 actor: actorRef(actor), document: doc, decision, now: store.now(),
                 extra: { blog: { id: blog.id, handle: blog.handle }, visibility: post.visibility },
             }), { traceparent });
+            // IndexNow: tell the engines a public, indexable page appeared, changed or went away;
+            // never for drafts, private or noindex pages. The sitemap is pinged alongside the page.
+            if (indexnow && indexnow.enabled) {
+                const sitemap = abs('/sitemap.xml');
+                if (after && after.state === 'published' && decision && decision.indexable) indexnow.pingSoon([after.url, sitemap]);
+                else if (before && before.state === 'published') indexnow.pingSoon([before.url, sitemap]);
+            }
         }
         await syncIndex(blog, post, { traceparent });
         return { action, event, post, blog };
