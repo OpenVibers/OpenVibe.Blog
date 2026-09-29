@@ -46,7 +46,8 @@ async function boot(opts = {}) {
     async function start() {
         const config = configLib.load(env);
         built = await createApp({ config, store: createStore(testdb.db, { now: clock.now }), now: clock.now, log: opts.log || quiet, entitlementCheck: opts.entitlementCheck, limitsNow: opts.limitsNow });
-        await built.ctx.auth.ensureKey();
+        // Warm the shared JWKS cache so an immediately-verified token does not race the first fetch.
+        await require('openvibe-sdk/auth').jwksClient(`${network.url}/api/.well-known/jwks`).keysForKid(null);
         server = await new Promise((resolve) => { const s = http.createServer(built.app); s.listen(0, '127.0.0.1', () => resolve(s)); });
         t.base = `http://127.0.0.1:${server.address().port}`;
         t.app = built.app;

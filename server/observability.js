@@ -12,9 +12,10 @@
  * Request metrics come from openvibe-shared/metrics in app.js; content counts are not metrics.
  */
 const { createReadiness } = require('openvibe-shared/ready');
+const { jwksStatus, jwksClient } = require('openvibe-sdk/auth');
 const { CHARTER_TABLES } = require('./db');
 
-function createBlogReadiness({ store, auth, outbox, valkey = null, release = null }) {
+function createBlogReadiness({ store, auth, outbox, valkey = null, release = null, jwksUrl = null }) {
     const { db } = store;
     return createReadiness({
         service: 'blog',
@@ -35,8 +36,9 @@ function createBlogReadiness({ store, auth, outbox, valkey = null, release = nul
             {
                 name: 'network_jwks', required: false,
                 check: () => {
-                    if (auth.client.publicKey) return true;
-                    auth.ensureKey().catch(() => {});
+                    const st = jwksUrl ? jwksStatus().find((s) => s.url === jwksUrl) : null;
+                    if (st && st.ready) return true;
+                    if (jwksUrl) jwksClient(jwksUrl).keysForKid(null).catch(() => {});
                     return 'Network signing key not loaded yet: sign-in and service calls are unavailable';
                 },
             },

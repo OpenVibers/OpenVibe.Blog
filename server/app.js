@@ -17,7 +17,8 @@ const contracts = require('openvibe-contracts');
 
 const configLib = require('./config');
 const { openStore } = require('./db');
-const { createAuthClient, createAuthRoutes } = require('./auth/sso');
+const { createSsoClient, claimsToUser } = require('openvibe-sdk/sso');
+const { jwksClient } = require('openvibe-sdk/auth');
 const { createViewerResolver } = require('./auth/viewer');
 const access = require('./domain/access');
 const { createBlogs } = require('./domain/blogs');
@@ -29,7 +30,7 @@ const { createPeople } = require('./clients/network');
 const { createCommunity } = require('./clients/community');
 const { createMedia } = require('./clients/media');
 const { createVip } = require('./clients/vip');
-const { createBlogOutbox } = require('./events/outbox');
+const { createServiceOutbox } = require('openvibe-sdk/events');
 const { createPublicRoutes } = require('./http/public');
 const { createEditorRoutes } = require('./http/editor');
 const { createApi } = require('./http/api');
@@ -43,7 +44,7 @@ const PUBLIC_DIR = path.join(__dirname, '..', 'public');
 const VERSION = require('../package.json').version;
 
 /**
- * opts: config, store, now (clock), fetchImpl, auth (a createAuthClient-like object),
+ * opts: config, store, now (clock), fetchImpl, auth (an openvibe-sdk/sso client-like object),
  *       entitlementCheck ({ subject, key, blog, post }) → bool (replaces VIP), log,
  *       limitsNow (the per-actor limiter's clock, tests)
  */
@@ -54,7 +55,13 @@ async function createApp(opts = {}) {
     // PostgreSQL (ADR-035): opened and migrated here unless the caller (a test, a script) hands in a store.
     const store = opts.store || await openStore(config, { now: opts.now, log });
 
-    const outbox = createBlogOutbox({ db: store.db, config, fetchImpl, now: store.now, log });
+    // Service outbox (openvibe-sdk/events): rows join the change's own transaction; the relay publishes
+    // with Blog's service token when EVENTS_URL and the client secret are set, else rows wait in event_outbox.
+    const outbox = createServiceOutbox({
+        db: store.db, source: 'blog', eventsUrl: config.events.url, networkInternalUrl: config.networkInternalUrl,
+        clientId: config.oauth.clientId, clientSecret: config.oauth.clientSecret, intervalMs: config.events.intervalMs,
+        now: store.now, fetch: fetchImpl, log,
+    });
     const blogs = createBlogs({ store, config });
     const publication = createPublication({ store, config, outbox });
     const posts = createPosts({ store, blogs, publication, access, outbox, log });
@@ -65,7 +72,16 @@ async function createApp(opts = {}) {
     const reading = createReading({ store, blogs, posts, publication, people, media, vip });
     const effects = createEffects({ outbox, community });
     const entitlements = access.createEntitlementChecker({ provider: config.entitlements.provider, check: opts.entitlementCheck, vip });
-    const auth = opts.auth || createAuthClient(config);
+    // Sign-in with OpenVibe.Network (openvibe-sdk/sso): routes, cookies and offline verification in one call.
+    const networkJwksUrl = `${config.networkInternalUrl}/api/.well-known/jwks`;
+    const sso = createSsoClient({
+        site: 'blog', baseUrl: config.baseUrl, clientId: config.oauth.clientId, clientSecret: config.oauth.clientSecret,
+        redirectUri: config.oauth.redirectUri, scope: config.oauth.scope, networkUrl: config.networkUrl,
+        networkInternalUrl: config.networkInternalUrl, issuer: config.networkUrl, secureCookies: config.cookies.secure,
+    });
+    const auth = opts.auth || sso;
+    // Warm the shared JWKS cache at boot (non-fatal if the Network is down).
+    if (auth === sso) jwksClient(networkJwksUrl).keysForKid(null).catch(() => {});
     const viewers = createViewerResolver({ auth, config, people });
     const worker = createWorker({ config, store, posts, media, outbox, log });
     await blogs.ensureOfficial();
@@ -121,12 +137,25 @@ async function createApp(opts = {}) {
     app.get('/api/health', (_req, res) => res.json({ status: 'ok', service: 'openvibe-blog', version: VERSION }));
     // GET /release.json (ADR-016) and POST /release-metrics: open tabs' update reports into /metrics.
     release.mount(app, { registry: metrics.registry });
-    const readiness = createBlogReadiness({ store, auth, outbox, release: release.release, valkey: ctx.valkey });
+    const readiness = createBlogReadiness({ store, auth, outbox, release: release.release, valkey: ctx.valkey, jwksUrl: networkJwksUrl });
     app.get('/api/ready', readiness.handler);
 
     // ── Sign-in (OAuth2 client of OpenVibe.Network) ─────────
     app.use('/auth/', rateLimit({ windowMs: 15 * 60_000, max: 60, standardHeaders: true, legacyHeaders: false }));
-    app.use('/auth', createAuthRoutes(config, auth));
+    // /auth/me: the shared navbar probes it on every page view, so a guest is a signed-out answer (200
+    // { user: null }), not a 401. The SDK router's own /me answers 401 for an absent session; this route,
+    // registered first, keeps Blog's contract and marks the answer private / no-store.
+    app.get('/auth/me', async (req, res) => {
+        res.set('Cache-Control', 'private, no-store');
+        res.vary('Cookie');
+        res.vary('Authorization');
+        const token = auth.extractToken(req);
+        if (!token) return res.json({ user: null });
+        const claims = await auth.verify(token);
+        if (!claims) return res.status(401).json({ error: 'Invalid or expired token' });
+        return res.json({ user: claimsToUser(claims), expires_at: claims.exp ? claims.exp * 1000 : null });
+    });
+    app.use('/auth', sso.router(express));
     { const legal = require('openvibe-shared/legal'); app.get(legal.PATHS, legal.handler({ id: 'blog', service: 'blog', host: 'openvibe.blog', name: 'OpenVibe.Blog', profile: 'ugc' })); }
 
     // ── Static assets (content-hashed ?v= → immutable) ──────

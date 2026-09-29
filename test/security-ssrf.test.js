@@ -58,7 +58,9 @@ const LONG = Array.from({ length: 100 }, (_, i) => `w${i}`).join(' ');
 
     await check('ratchet: every file that makes an outbound request itself is reviewed', () => {
         const REVIEWED = {
-            'server/auth/sso.js': 'Network JWKS, OAuth token and revoke (configured)',
+            // server/auth/sso.js and server/events/outbox.js are superseded by openvibe-sdk/sso and
+            // openvibe-sdk/events and are no longer imported; they await deletion (the sandbox denies rm).
+            'server/auth/sso.js': 'Network JWKS, OAuth token and revoke (configured); dead after the SDK move',
             'server/changelog.js': 'Network registry (configured) and api.github.com (fixed host) for the repositories the registry names',
             'server/clients/community.js': 'OpenVibe.Community (configured)',
             'server/clients/media.js': 'OpenVibe.Media (configured)',
