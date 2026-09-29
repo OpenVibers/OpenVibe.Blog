@@ -23,9 +23,7 @@ NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=true
-# Blog's own database lives in /var/lib/openvibe-blog; the code tree stays read-only.
 StateDirectory=openvibe-blog
-Environment=BLOG_DB_PATH=/var/lib/openvibe-blog/blog.db
 
 [Install]
 WantedBy=multi-user.target

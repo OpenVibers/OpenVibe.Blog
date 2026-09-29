@@ -416,9 +416,7 @@ Production deploys with `sudo ovhost deploy blog` on the host (strategy `git-che
 fast-forward `/opt/openvibe.blog`, install on a lockfile change, restart, wait for `/api/ready`).
 The unit is `openvibe-blog.service` on `127.0.0.1:4810`, the env file `/etc/openvibe/blog.env`. The database is
 `ov_blog` on the host's data role (`sudo /opt/openvibe.host/roles/data/add-service.sh blog` writes its settings); the
-release migrates it at boot. The one-time move from SQLite is `scripts/migrate-to-postgres.js` (openvibe-sdk
-`runSqliteMigration`, with a `--pglite` rehearsal mode), run while the service is stopped; the old
-`/var/lib/openvibe-blog/blog.db` stays read-only for 7 days as the rollback. nginx serves
+release migrates it at boot. nginx serves
 `openvibe.blog` from [deploy/nginx/openvibe.blog.conf](deploy/nginx/openvibe.blog.conf).
 Rollback: ovhost puts the previous sha back by itself when `/api/ready` does not answer 2xx after the
 restart; afterwards `sudo ovhost rollback blog --to <sha>`. Nothing blocks a rollback: the schema

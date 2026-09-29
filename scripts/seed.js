@@ -7,7 +7,7 @@
  *   npm run seed -- --author usr_…                   # a different accountable author
  *   npm run seed -- --publish --reviewer usr_…       # a person reviewed it: record that and publish
  *
- * Uses the same database and outbox as the service (BLOG_DB_PATH); events wait in event_outbox and
+ * Uses the same database and outbox as the service (PostgreSQL, DATABASE_URL); events wait in event_outbox and
  * are relayed by the running service.
  */
 const { createApp } = require('../server/app');

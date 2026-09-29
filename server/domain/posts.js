@@ -4,7 +4,7 @@
  * Posts: drafts, immutable revisions, publication, scheduling, unpublish, delete, slug changes,
  * taxonomy, series, citations, media attachments, and the human review AI drafts need.
  *
- * Every state change runs in one SQLite transaction together with its events (SDK outbox) and its
+ * Every state change runs in one PostgreSQL transaction together with its events (SDK outbox) and its
  * Search document (index-hooks), so the event exists if and only if the change committed.
  *
  * Content lives in blog_post_revisions (openvibe-publishing/revisions): content = Markdown body,

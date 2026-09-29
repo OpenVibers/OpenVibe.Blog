@@ -5,7 +5,7 @@
  *
  *   const t = await boot();                  // t.base, t.get(path, { as: user | token, ... })
  *   t.clock.advance(ms)                      // the app's clock (scheduler, revisions, gate)
- *   t.restart()                              // a new app on the SAME database file (a worker restart)
+ *   t.restart()                              // a new app on the SAME database (a worker restart)
  */
 const fs = require('fs');
 const os = require('os');
@@ -23,12 +23,10 @@ async function boot(opts = {}) {
     const community = await startCommunity({ network });
     const media = await startMedia({ network });
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ov-blog-test-'));
-    const dbPath = path.join(dir, 'blog.db');
     const clock = opts.clock || makeClock();
     const official = network.addUser('lead', { display_name: 'The Lead' });
     const env = {
         NODE_ENV: 'test', PORT: '0', BASE_URL: 'https://openvibe.blog', TRUST_PROXY: '1',
-        BLOG_DB_PATH: dbPath,
         OV_NETWORK_URL: network.url, OV_NETWORK_INTERNAL_URL: network.url,
         OV_OAUTH_CLIENT_ID: 'blog', OV_OAUTH_CLIENT_SECRET: 'shh', COOKIE_SECURE: 'false',
         OV_COMMUNITY_URL: 'https://openvibe.community', OV_COMMUNITY_INTERNAL_URL: community.url,
@@ -41,7 +39,7 @@ async function boot(opts = {}) {
     const quiet = { log() {}, warn() {}, error: (...a) => { if (process.env.VERBOSE) console.error(...a); } };
 
     const { createStore } = require('../../server/db');
-    // One database per boot (PGlite, or BLOG_TEST_STORE=pg: the containers); a restart keeps it, like a file did.
+    // One database per boot (PGlite, or BLOG_TEST_STORE=pg: the containers); it stays up across a restart.
     const testdb = await require('./db').testDb();
     let server = null;
     let built = null;
@@ -79,7 +77,7 @@ async function boot(opts = {}) {
     }
 
     const t = {
-        network, community, media, clock, dbPath, official, get, events,
+        network, community, media, clock, official, get, events,
         csrf: (user) => require('../../server/auth/forms').csrfToken({ formSecret: env.BLOG_FORM_SECRET }, user),
         async restart() { await stop(); await start(); },
         async close() { await stop(); await testdb.close(); await network.close(); await community.close(); await media.close(); fs.rmSync(dir, { recursive: true, force: true }); },

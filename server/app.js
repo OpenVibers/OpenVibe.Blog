@@ -43,7 +43,7 @@ const PUBLIC_DIR = path.join(__dirname, '..', 'public');
 const VERSION = require('../package.json').version;
 
 /**
- * opts: config, store | dbPath, now (clock), fetchImpl, auth (a createAuthClient-like object),
+ * opts: config, store, now (clock), fetchImpl, auth (a createAuthClient-like object),
  *       entitlementCheck ({ subject, key, blog, post }) → bool (replaces VIP), log,
  *       limitsNow (the per-actor limiter's clock, tests)
  */
