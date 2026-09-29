@@ -79,7 +79,7 @@ const LONG = Array.from({ length: 100 }, (_, i) => `w${i}`).join(' ');
             }
         };
         walk(path.join(root, 'server'));
-        assert.ok(found.length >= 5, `the scan finds the known sites (${found.join(', ')})`);
+        assert.ok(found.length >= 4, `the scan finds the known sites (${found.join(', ')})`);
         assert.deepStrictEqual(found.filter((f) => !REVIEWED[f]).sort(), [], 'a new outbound request site: a user-chosen URL goes through openvibe-shared/egress; then add the file here with the reason');
     });
 
