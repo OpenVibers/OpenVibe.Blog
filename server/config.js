@@ -36,7 +36,9 @@ function load(env = process.env) {
         },
 
         // PostgreSQL (ADR-035): DATABASE_URL serves (PgBouncer), DATABASE_DIRECT_URL migrates (owner role).
-        db: { url: env.DATABASE_URL || '', directUrl: env.DATABASE_DIRECT_URL || '' },
+        // Non-production without DATABASE_URL: the embedded PGlite database in data/pglite
+        // (BLOG_PGLITE_DIR, tests: an isolated directory of their own).
+        db: { url: env.DATABASE_URL || '', directUrl: env.DATABASE_DIRECT_URL || '', pgliteDir: env.BLOG_PGLITE_DIR || '' },
         valkey: { url: env.VALKEY_URL || '', prefix: env.VALKEY_PREFIX || 'ov:blog:' },
 
         // OpenVibe.Network: SSO (OAuth2 authorization server), JWKS, client-credentials tokens.
