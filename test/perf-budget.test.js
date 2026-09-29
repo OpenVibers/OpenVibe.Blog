@@ -11,15 +11,17 @@ const path = require('path');
 const { spawn } = require('child_process');
 const { measure, check, format } = require('openvibe-shared/perf-budget');
 
+// 2026-09-29: the home opens with the showcase hero and features (six inline ring icons) and links the cached
+// /shared/showcase.css: measured html 26.2 KB (6.8 br), css 15.9 KB (4.0 br). Raised as a decision.
 const BUDGETS = {
-    htmlRawKB: 22,   // measured 17.4 (fresh database)
-    htmlBrotliKB: 5.5,   // 4.5
+    htmlRawKB: 29,   // measured 17.4 (fresh database)
+    htmlBrotliKB: 7.5,   // 4.5
     jsFiles: 4,   // 3
     jsRawKB: 230,   // 197.7
     jsBrotliKB: 53,   // 45.6
     cssFiles: 2,   // 1
-    cssRawKB: 6.5,   // 5.0
-    cssBrotliKB: 2,   // 1.4
+    cssRawKB: 17.5,   // 5.0
+    cssBrotliKB: 4.5,   // 1.4
     externalFiles: 1,   // 0
 };
 

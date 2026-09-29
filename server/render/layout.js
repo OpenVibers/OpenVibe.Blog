@@ -47,7 +47,7 @@ function themeStyle(vars) {
 /**
  * o: title, description, decision (required), canonical, type ('website'|'article'), image,
  *    jsonLd [], feeds [{ type, href, title }], body (HTML), viewer, config, csrf,
- *    theme { slug, vars }, published, modified, author, prev, next, bodyClass
+ *    theme { slug, vars }, published, modified, author, prev, next, bodyClass, styles [openvibe-shared stylesheet names]
  */
 function renderPage(o) {
     if (!o.decision) throw new TypeError('renderPage needs the gate decision');
@@ -97,6 +97,7 @@ ${o.modified ? `<meta property="article:modified_time" content="${esc(o.modified
 ${seo.feedLinks(o.feeds || [])}
 ${appIcon.headTags({ site: 'blog' })}
 <link rel="stylesheet" href="${asset('css/blog.css')}">
+${(o.styles || []).map((name) => `<link rel="stylesheet" href="${esc(ovServe.url(name))}">`).join('\n')}
 <script src="${ovServe.url('theme-loader.js')}" defer></script>
 <script src="${ovServe.url('navbar.js')}" defer></script>
 <script src="${ovServe.url('footer.js')}" defer></script>

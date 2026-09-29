@@ -16,6 +16,7 @@
  *     `public, max-age=60`; everything else — signed-in views, drafts, previews, unlisted,
  *     members/VIP and private posts, refusals, 404/410 — is `private, no-store` + X-Robots-Tag.
  */
+const showcase = require('openvibe-shared/showcase');
 const express = require('express');
 const ovServe = require('openvibe-shared/serve');
 const frame = require('openvibe-shared/frame');
@@ -79,6 +80,26 @@ function createPublicRoutes(ctx) {
 
     // ── Blog front pages ────────────────────────────────────
 
+    /** The product's own words above the official blog's posts: only features Blog has today. */
+    function blogShowcase() {
+        return showcase.hero({
+            eyebrow: 'OpenVibe.Blog',
+            title: 'Write on', accent: 'OpenVibe',
+            lede: 'A blog of your own with drafts, scheduling, feeds and comments. Sign in once with your OpenVibe account; anyone can read without one.',
+            actions: [{ label: 'Start writing', href: '/write', primary: true }, { label: 'Read the OpenVibe blog', href: '#posts' }],
+        }) + showcase.features({
+            title: 'What your blog gets',
+            items: [
+                { icon: 'ov:blog', title: 'Drafts and revisions', text: 'Every save is a revision you can go back to; publish when it is ready.' },
+                { icon: 'ov:history', title: 'Scheduling', text: 'Pick the minute a post goes live.' },
+                { icon: 'ov:news', title: 'Feeds', text: 'RSS, Atom and JSON Feed for every blog, series and category.' },
+                { icon: 'ov:community', title: 'Comments', text: 'Threads on OpenVibe.Community, moderated by you.' },
+                { icon: 'ov:theme', title: 'Your theme', text: 'Pick a theme preset and your blog wears it.' },
+                { icon: 'ov:vip', title: 'Members-only posts', text: 'Your OpenVibe.VIP members read the whole post; everyone else sees a teaser.' },
+            ],
+        }) + '<div id="posts"></div>';
+    }
+
     async function blogFront(req, res, blog, { home = false } = {}) {
         const page = pageNumber(req);
         const restricted = await isMember(blog, req.viewer);
@@ -115,7 +136,9 @@ function createPublicRoutes(ctx) {
             jsonLd: [blog.kind === 'official'
                 ? { '@context': 'https://schema.org', '@type': 'Blog', '@id': `${publication.abs(path)}#blog`, name: blog.title, url: publication.abs(path), description: blog.description || undefined, publisher: { '@type': 'Organization', name: 'OpenVibe', url: 'https://openvibe.network' } }
                 : { '@context': 'https://schema.org', '@type': 'Blog', '@id': `${publication.abs(path)}#blog`, name: blog.title, url: publication.abs(path), description: blog.description || undefined }],
-            body: pages.blogIndex({
+            // The network's blog home opens with what OpenVibe.Blog is for (openvibe-shared/showcase), then the posts.
+            ...(home && pager.page === 1 ? { styles: [showcase.STYLESHEET] } : {}),
+            body: (home && pager.page === 1 ? blogShowcase() : '') + pages.blogIndex({
                 blog, blogUrl: `/@${blog.handle}`, items, pager, feeds,
                 series: seriesShown, categories: await prune(await reading.categoriesTree(blog)),
                 canWrite: await access.canWrite(store, req.viewer, blog, 'create'),
