@@ -23,6 +23,7 @@ const { renderPage } = require('../render/layout');
 const editor = require('../render/editor');
 const { csrfToken, checkCsrf } = require('../auth/forms');
 const { asApiError } = require('./errors');
+const cache = require('openvibe-shared/cache-policy');
 
 /** Checkbox + hidden fallback arrive as ['1','0']; a text field repeated keeps its last value. */
 const one = (v) => (Array.isArray(v) ? (v.includes('1') ? '1' : v[v.length - 1]) : v);
@@ -39,7 +40,7 @@ function createEditorRoutes(ctx) {
     const form = express.urlencoded({ extended: false, limit: '600kb' });
     router.use(viewers.middleware({ services: false }));
     router.use((req, res, next) => {
-        res.set('Cache-Control', 'private, no-store');
+        res.set('Cache-Control', cache.htmlHeaders({ private: true }));
         res.set('X-Robots-Tag', 'noindex, nofollow');
         res.vary('Cookie');
         if (req.viewer.kind !== 'user') {

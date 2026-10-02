@@ -32,6 +32,7 @@ const { createMedia } = require('./clients/media');
 const { createVip } = require('./clients/vip');
 const { createServiceOutbox } = require('openvibe-sdk/events');
 const { createIndexNow } = require('openvibe-shared/indexnow');
+const cache = require('openvibe-shared/cache-policy');
 const { createPublicRoutes } = require('./http/public');
 const { createEditorRoutes } = require('./http/editor');
 const { createApi } = require('./http/api');
@@ -153,7 +154,7 @@ async function createApp(opts = {}) {
     // { user: null }), not a 401. The SDK router's own /me answers 401 for an absent session; this route,
     // registered first, keeps Blog's contract and marks the answer private / no-store.
     app.get('/auth/me', async (req, res) => {
-        res.set('Cache-Control', 'private, no-store');
+        res.set('Cache-Control', cache.htmlHeaders({ private: true }));
         res.vary('Cookie');
         res.vary('Authorization');
         const token = auth.extractToken(req);
@@ -176,7 +177,7 @@ async function createApp(opts = {}) {
         setHeaders(res, filePath) {
             const rel = path.relative(PUBLIC_DIR, filePath).split(path.sep).join('/');
             const v = res.req && res.req.query && res.req.query.v;
-            res.setHeader('Cache-Control', v && v === assetVersion(rel) ? 'public, max-age=31536000, immutable' : 'public, max-age=300');
+            res.setHeader('Cache-Control', cache.assetHeaders(rel, { hashed: !!v && v === assetVersion(rel) }));
         },
     }));
 
@@ -195,7 +196,7 @@ async function createApp(opts = {}) {
     app.use((err, req, res, _next) => {
         log.error('[Blog]', err && err.stack ? err.stack : err);
         if (res.headersSent) return;
-        res.set('Cache-Control', 'private, no-store');
+        res.set('Cache-Control', cache.htmlHeaders({ private: true }));
         if (req.path.startsWith('/api/')) return contracts.http.sendProblem(res, 500, 'internal.error', { detail: 'Internal error', ctx: req.ov });
         res.status(500).type('text/plain').send('Something went wrong on our side. Try again in a moment.');
     });
