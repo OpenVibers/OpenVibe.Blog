@@ -23,6 +23,7 @@ const frame = require('openvibe-shared/frame');
 const seo = require('openvibe-publishing/seo');
 const ssr = require('openvibe-publishing/ssr');
 const authorship = require('openvibe-publishing/authorship');
+const cache = require('openvibe-shared/cache-policy');
 const { renderPage } = require('../render/layout');
 const pages = require('../render/pages');
 const { csrfToken, checkCsrf } = require('../auth/forms');
@@ -39,8 +40,8 @@ function createPublicRoutes(ctx) {
     function cacheHeaders(res, { cacheable, robots }) {
         res.vary('Cookie');
         res.vary('Authorization');
-        if (cacheable) res.set('Cache-Control', 'public, max-age=60, stale-while-revalidate=60');
-        else res.set('Cache-Control', 'private, no-store');
+        if (cacheable) res.set('Cache-Control', cache.htmlHeaders({ maxAge: 60 }));
+        else res.set('Cache-Control', cache.htmlHeaders({ private: true }));
         if (robots && robots !== 'index, follow') res.set('X-Robots-Tag', robots);
     }
 
@@ -173,7 +174,7 @@ function createPublicRoutes(ctx) {
         const items = await reading.feedItems(blog, { limit: s.item_count, fullContent: Boolean(s.full_content) });
         const link = publication.abs(publication.blogPath(blog));
         const feedUrl = publication.abs(reading.urls.feed(blog, kind));
-        res.set('Cache-Control', 'public, max-age=300');
+        res.set('Cache-Control', cache.htmlHeaders({ maxAge: 300 }));
         res.vary('Accept-Encoding');
         if (kind === 'rss') return res.type('application/rss+xml').send(seo.rssFeed({ title: blog.title, link, description: blog.description || blog.title, feedUrl, language: blog.language }, items));
         if (kind === 'json') return res.type('application/feed+json').send(JSON.stringify(seo.jsonFeed({ title: blog.title, link, feedUrl, description: blog.description || undefined, language: blog.language }, items)));

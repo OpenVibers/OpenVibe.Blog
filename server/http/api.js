@@ -31,6 +31,7 @@
 const express = require('express');
 const contracts = require('openvibe-contracts');
 const seo = require('openvibe-publishing/seo');
+const cache = require('openvibe-shared/cache-policy');
 const { run, jsonBody, ApiError, privateNoStore } = require('./errors');
 const { guard } = require('../auth/viewer');
 const { checkCapability } = require('../auth/capabilities');
@@ -227,7 +228,7 @@ function createApi(ctx) {
         const blog = await mustBlog(req);
         const s = await blogs.feedSettings(blog);
         const items = await reading.feedItems(blog, { limit: s.item_count, fullContent: Boolean(s.full_content) });
-        res.set('Cache-Control', 'public, max-age=300');
+        res.set('Cache-Control', cache.htmlHeaders({ maxAge: 300 }));
         res.removeHeader('X-Robots-Tag');
         return seo.jsonFeed({ title: blog.title, link: publication.abs(publication.blogPath(blog)), feedUrl: publication.abs(reading.urls.feed(blog, 'json')), description: blog.description || undefined }, items);
     }));

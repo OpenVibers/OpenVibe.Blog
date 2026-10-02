@@ -16,6 +16,7 @@
 const express = require('express');
 const seo = require('openvibe-publishing/seo');
 const sharedSeo = require('openvibe-shared/seo');
+const cache = require('openvibe-shared/cache-policy');
 
 function createDiscoveryRoutes({ config, store, blogs, publication, reading }) {
     const router = express.Router();
@@ -40,7 +41,7 @@ function createDiscoveryRoutes({ config, store, blogs, publication, reading }) {
         return out;
     }
 
-    const xml = (res, body) => res.type('application/xml').set('Cache-Control', 'public, max-age=300').send(body);
+    const xml = (res, body) => res.type('application/xml').set('Cache-Control', cache.htmlHeaders({ maxAge: 300 })).send(body);
 
     router.get('/robots.txt', (_req, res) => {
         const body = [
@@ -49,12 +50,12 @@ function createDiscoveryRoutes({ config, store, blogs, publication, reading }) {
             '# Pages decide their own indexability (meta robots / X-Robots-Tag); a Disallow is not a noindex.',
             sharedSeo.robotsTxt({ sitemaps: [abs('/sitemap.xml')], disallow: ['/write', '/auth/', '/api/'] }),
         ].join('\n');
-        res.type('text/plain').set('Cache-Control', 'public, max-age=3600').send(body);
+        res.type('text/plain').set('Cache-Control', cache.htmlHeaders({ maxAge: 3600 })).send(body);
     });
 
     router.get('/llms.txt', async (_req, res) => {
         const official = await blogs.official();
-        res.type('text/plain').set('Cache-Control', 'public, max-age=3600').send(sharedSeo.llmsTxt({
+        res.type('text/plain').set('Cache-Control', cache.htmlHeaders({ maxAge: 3600 })).send(sharedSeo.llmsTxt({
             name: 'OpenVibe.Blog',
             summary: 'The official OpenVibe blog and a blog for every OpenVibe member: server-rendered posts with feeds, sitemaps and a JSON representation of every post.',
             details: 'Only public, published posts are listed, fed or mapped. Every post page has a machine-readable twin at <post URL>.json with the same content, its revision, authorship (human, AI-assisted or AI-generated, and whether a person reviewed it), sources and indexability reasons. AI-generated drafts are never published or indexed before a person reviews them.',
