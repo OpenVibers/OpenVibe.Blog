@@ -56,14 +56,16 @@ const split = (html) => ({ head: html.slice(0, html.indexOf('</head>')), body: h
         assert.strictEqual(count(r.text, /<main\b/g), 1, 'one <main>');
     });
 
-    await check('the editor stays noindex; the home page keeps its feeds and one JSON-LD', async () => {
+    await check('the editor stays noindex; the home page keeps its feeds, the Blog JSON-LD and the AI summary', async () => {
         const { head } = split((await t.get('/write', { as: eve })).text);
         assert.strictEqual(count(head, /<title>/g), 1);
         assert.ok(/<meta name="robots" content="noindex[^"]*">/.test(head), 'the editor is noindex');
         const home = split((await t.get('/')).text).head;
         assert.strictEqual(count(home, /<title>/g), 1);
         assert.ok(home.includes('<link rel="canonical" href="https://openvibe.blog/">'));
-        assert.strictEqual(count(home, /<script type="application\/ld\+json">/g), 1, 'one JSON-LD script on the home page');
+        // The home carries the Blog JSON-LD and, since llms-full.txt, the site summary's WebPage JSON-LD.
+        assert.deepStrictEqual([...home.matchAll(/<script type="application\/ld\+json">(.*?)<\/script>/g)].map((m) => JSON.parse(m[1])['@type']), ['Blog', 'WebPage']);
+        assert.match(home, /<meta name="ai-summary" content="[^"]+">/, 'the AI summary head');
         assert.ok(home.includes('<link rel="alternate" type="application/atom+xml" href="/atom.xml" title="The OpenVibe blog (Atom)">'));
         assert.ok(home.includes('<link rel="alternate" type="application/feed+json" href="/feed.json" title="The OpenVibe blog (JSON Feed)">'));
         assert.ok(/<link rel="stylesheet" href="\/shared\/showcase\.css\?v=[0-9a-f]+">/.test(home), 'the showcase kit stylesheet on the home');
