@@ -9,10 +9,10 @@
   "domain": "openvibe.blog",
   "contracts": "openvibe-contracts v0.79.0",
   "packages": [
-    "openvibe-publishing v1.0.0",
+    "openvibe-publishing v1.2.0",
     "openvibe-contracts v0.79.0",
-    "openvibe-shared v2.3.1",
-    "openvibe-sdk v0.25.0"
+    "openvibe-shared v2.6.0",
+    "openvibe-sdk v0.26.0"
   ],
   "capabilities": [
     "blog.blog.create",
