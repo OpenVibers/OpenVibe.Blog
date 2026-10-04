@@ -5,6 +5,7 @@
  *
  *   GET /robots.txt             sitemap location + explicit automated-consumer policy
  *   GET /llms.txt               orientation for language models (what the site is, entry points)
+ *   GET /llms-full.txt          the same header plus an excerpt of every indexable post (never the body)
  *   GET /sitemap.xml            sitemap index over the two sections below
  *   GET /sitemaps/posts.xml     published, public, INDEXABLE posts only (the gate decides), lastmod
  *                               = the published revision's real time
@@ -15,8 +16,10 @@
  */
 const express = require('express');
 const seo = require('openvibe-publishing/seo');
+const ssr = require('openvibe-publishing/ssr');
 const sharedSeo = require('openvibe-shared/seo');
 const cache = require('openvibe-shared/cache-policy');
+const { SITE_SUMMARY } = require('../render/layout');
 
 function createDiscoveryRoutes({ config, store, blogs, publication, reading }) {
     const router = express.Router();
@@ -57,7 +60,7 @@ function createDiscoveryRoutes({ config, store, blogs, publication, reading }) {
         const official = await blogs.official();
         res.type('text/plain').set('Cache-Control', cache.htmlHeaders({ maxAge: 3600 })).send(sharedSeo.llmsTxt({
             name: 'OpenVibe.Blog',
-            summary: 'The official OpenVibe blog and a blog for every OpenVibe member: server-rendered posts with feeds, sitemaps and a JSON representation of every post.',
+            summary: SITE_SUMMARY,
             details: 'Only public, published posts are listed, fed or mapped. Every post page has a machine-readable twin at <post URL>.json with the same content, its revision, authorship (human, AI-assisted or AI-generated, and whether a person reviewed it), sources and indexability reasons. AI-generated drafts are never published or indexed before a person reviews them.',
             sections: [
                 { title: 'Start here', links: [
@@ -70,6 +73,23 @@ function createDiscoveryRoutes({ config, store, blogs, publication, reading }) {
                 ] },
                 { title: 'Data', links: [{ title: 'Post JSON', url: abs('/'), note: 'append .json to any post URL (/@handle/slug.json)' }] },
             ],
+        }));
+    });
+
+    router.get('/llms-full.txt', async (_req, res) => {
+        // Only public, published, indexable posts (the sitemap's gate), each as its summary — or a
+        // clipped excerpt when the author wrote no summary. Full post bodies are never included.
+        const posts = (await postEntries()).filter((e) => e.decision.indexable).map((e) => ({
+            title: e.post.title,
+            url: publication.postUrl(e.blog, e.post),
+            text: e.rev.fields.summary || ssr.markdownToText(e.rev.content || '', 160),
+        }));
+        res.type('text/plain').set('Cache-Control', cache.htmlHeaders({ maxAge: 3600 })).send(sharedSeo.llmsFull({
+            site: 'OpenVibe.Blog',
+            summary: SITE_SUMMARY,
+            base: config.baseUrl,
+            maxBytes: 512 * 1024,
+            sections: [{ title: 'Posts', pages: posts }],
         }));
     });
 

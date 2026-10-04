@@ -24,7 +24,7 @@ const seo = require('openvibe-publishing/seo');
 const ssr = require('openvibe-publishing/ssr');
 const authorship = require('openvibe-publishing/authorship');
 const cache = require('openvibe-shared/cache-policy');
-const { renderPage } = require('../render/layout');
+const { renderPage, SITE_SUMMARY } = require('../render/layout');
 const pages = require('../render/pages');
 const { csrfToken, checkCsrf } = require('../auth/forms');
 
@@ -127,6 +127,8 @@ function createPublicRoutes(ctx) {
         send(req, res, 200, {
             title: blog.title,
             description: blog.description,
+            // The network blog's home carries the site summary an AI can read (ai-summary meta + WebPage JSON-LD).
+            ...(home ? { summary: SITE_SUMMARY } : {}),
             decision: pageDecision(canonical, { empty: total === 0, query: ['page'] }),
             canonical,
             feeds,

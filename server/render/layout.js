@@ -19,6 +19,8 @@ const { escapeHtml: esc } = require('openvibe-publishing/ssr');
 
 const NETWORK_URL = 'https://openvibe.network';
 const SITE_NAME = 'OpenVibe.Blog';
+// One site summary, shared by /llms.txt, /llms-full.txt and the home page's ai-summary.
+const SITE_SUMMARY = 'The official OpenVibe blog and a blog for every OpenVibe member: server-rendered posts with feeds, sitemaps and a JSON representation of every post.';
 const PUBLIC_DIR = path.join(__dirname, '..', '..', 'public');
 
 const hashes = new Map();
@@ -80,6 +82,10 @@ function renderPage(o) {
         description: o.description || 'The official OpenVibe blog and a blog for every member.',
         canonical: o.canonical,
         decision: o.decision,
+        summary: o.summary,
+        facts: o.facts,
+        updated: o.updated,
+        url: o.url,
         type: o.type || 'website',
         image: o.image,
         author: o.author,
@@ -106,4 +112,4 @@ function renderPage(o) {
     return style ? html.replace('<main id="main" class="page blog-surface">', () => `<main id="main" class="page blog-surface"${style}>`) : html;
 }
 
-module.exports = { renderPage, asset, assetVersion, themeStyle, setRelease, SITE_NAME, NETWORK_URL };
+module.exports = { renderPage, asset, assetVersion, themeStyle, setRelease, SITE_NAME, SITE_SUMMARY, NETWORK_URL };

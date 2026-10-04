@@ -82,6 +82,29 @@ const { seedOfficialPost, loadFacts, SLUG } = require('../server/seed');
         assert.match(idx, /sitemaps\/posts\.xml/);
     });
 
+    await check('llms-full.txt lists only indexable posts as summary text, within maxBytes, never the body', async () => {
+        const full = await t.get('/llms-full.txt');
+        assert.strictEqual(full.status, 200);
+        assert.match(full.headers.get('content-type'), /text\/plain/);
+        assert.ok(Buffer.byteLength(full.text) <= 512 * 1024, 'stays within maxBytes (512 KiB)');
+        assert.match(full.text, /^# OpenVibe\.Blog/);
+        const urls = [...full.text.matchAll(/^URL: (\S+)$/gm)].map((m) => m[1]);
+        assert.ok(urls.length >= 1, 'lists the published post');
+        // The same gate as the sitemap: every listed URL is one the sitemap also lists as indexable.
+        const locs = new Set([...(await t.get('/sitemaps/posts.xml')).text.matchAll(/<loc>([^<]+)<\/loc>/g)].map((m) => m[1]));
+        for (const u of urls) assert.ok(locs.has(u), `only indexable posts: ${u}`);
+        // The author's summary, not the full body (the verbatim quotes live only in the post).
+        assert.match(full.text, /Commit messages and release notes quoted from the OpenVibers repositories/);
+        assert.ok(!full.text.includes(facts.items[0].quote), 'the body is never included');
+    });
+
+    await check('/ carries the AI summary head (ai-summary meta and WebPage JSON-LD)', async () => {
+        const home = await t.get('/');
+        assert.match(home.text, /<meta name="ai-summary" content="[^"]+">/);
+        const ld = [...home.text.matchAll(/<script type="application\/ld\+json">(.*?)<\/script>/g)].map((m) => JSON.parse(m[1]));
+        assert.ok(ld.some((x) => x['@type'] === 'WebPage' && x.description && x.url === 'https://openvibe.blog/'), 'WebPage JSON-LD names the home URL and summary');
+    });
+
     await check('legal pages and 404s', async () => {
         assert.strictEqual((await t.get('/terms')).status, 200);
         const nf = await t.get('/@nobody-here');
