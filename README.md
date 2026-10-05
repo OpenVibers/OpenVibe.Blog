@@ -4,7 +4,7 @@
 
 **Status:** alpha (roadmap Wave 16, Blog half). **Public at https://openvibe.blog since 2026-09-23**
 (the launch release also removed the domain from OpenVibe.Sites). Its capabilities and service
-manifest are released in openvibe-contracts v0.18.0. The network changelog publishes Patch notes
+manifest are released in openvibe-contracts v0.97.0. The network changelog publishes Patch notes
 posts on the official blog ([below](#the-network-changelog-and-patch-notes)); the seed post stays a
 draft until a person reviews it.
 **Domain:** `openvibe.blog` · **Port:** 4810 · **Service id:** `blog`
@@ -224,7 +224,7 @@ OpenVibe.Network proxies this feed at `openvibe.network/api/v1/changelog`. Every
 | `blog.moderation.action` | internal. Staff unpublished (`post.unpublished`) or deleted (`post.deleted`) a post that only their staff powers let them touch, for the network's moderation audit log (ADR-022, `common.moderation-action@1`). Never the content. |
 | `blog.index_document.upserted` / `.deleted` | Documents and tombstones in `search.index-document@1` form, with a monotonic index revision (`createIndexSequencer`). Only published, public, listable posts are upserted; every other state is a tombstone. A post that was never indexed gets no tombstone. |
 
-## Capabilities (released in openvibe-contracts v0.18.0; proposal: `docs/capabilities-proposal/`)
+## Capabilities (released in openvibe-contracts v0.97.0)
 
 Service tokens use audience `openvibe.blog`, with one capability per route. The person the service
 acts for goes in `X-OV-Subject`, and membership still applies:
@@ -235,10 +235,11 @@ acts for goes in `X-OV-Subject`, and membership still applies:
   `blog.post.schedule`, `blog.post.unpublish`, `blog.post.delete`
 - `blog.feed.read`
 
-Browser and app user JWTs are judged by blog membership. Grants for these ids are decided locally
-with the contracts library's matching rule (`server/auth/capabilities.js`). The service manifest
-(proposal: `docs/service-manifest-proposal.json`) is released in openvibe-contracts v0.18.0; this
-repo pins v0.33.0.
+Browser and app user JWTs are judged by blog membership. The ids and the service manifest are
+released in openvibe-contracts (pinned at v0.97.0; the source proposals stay in
+[docs/capabilities-proposal/](docs/capabilities-proposal/) and
+[docs/service-manifest-proposal.json](docs/service-manifest-proposal.json)); `server/auth/capabilities.js`
+decides them with the contracts grant rule.
 
 Called elsewhere, as the service principal `blog`: `identity.subject.resolve` and
 `network.integration.github.read` (Network), `events.event.publish` (Events),
@@ -251,9 +252,9 @@ Called elsewhere, as the service principal `blog`: `identity.subject.resolve` an
 
 - **PostgreSQL 18 and Valkey 9** (OpenVibe.Host `roles/data/`, ADR-035): every read and write is async through
   `openvibe-sdk/db`; Valkey holds the per-actor limit counters (optional: without `VALKEY_URL` they count per process).
-- **Packages** (all pinned by release tarball): `openvibe-publishing` v1.2.0 (async PostgreSQL stores: revisions,
+- **Packages** (all pinned by release tarball): `openvibe-publishing` v1.3.0 (async PostgreSQL stores: revisions,
   schedule, taxonomy, citations, media, discussion, seo, authorship, index-hooks, ssr, layout), `openvibe-contracts`
-  v0.79.0, `openvibe-shared` v2.6.0 (Frame, app icon, footer, legal, release, metrics, ready, theme presets),
+  v0.97.0, `openvibe-shared` v2.9.0 (Frame, app icon, footer, legal, release, metrics, ready, theme presets),
   `openvibe-sdk` v0.26.0 (sso, db, PostgreSQL events outbox, service tokens, per-actor limits, testing).
 - **OpenVibe.Network:**
   - SSO: the OAuth client `blog` is already seeded with redirect
@@ -302,6 +303,7 @@ Each grant is `[client, capability, audience]`:
 | Capability-guarded service tokens, X-OV-Subject membership, AI drafts that need a person's review, and problem+json with request ids. | `test/api-ai.test.js` |
 | The seed post, readiness, release, robots, llms.txt and the sitemap index. | `test/seed-ops.test.js` |
 | The contract proposals are valid against the released schemas and match the code. | `test/contracts.test.js` |
+| Capability guards delegate to the released contracts: every guarded id is defined, and grants follow the library's rule (exact, prefix, denied, unknown). | `test/capabilities.test.js` |
 | IndexNow: off without `INDEXNOW_KEY` (no key route, nothing sent); with one the key file is served at `/<key>.txt` as `text/plain` and a publish or unpublish pings the post path and the sitemap; a draft never pings. | `test/indexnow.test.js` |
 
 ## Launch rule
@@ -315,7 +317,7 @@ existed; the launch release went out on 2026-09-23. Status against each point:
 3. **SSR public routes useful without JS:** done.
 4. **Persistence and end-to-end workflows:** done; `ovhost drill blog` restored it on the production
    host on 2026-09-23.
-5. **Capability and event registration against OpenVibe.Contracts:** released in v0.18.0
+5. **Capability and event registration against OpenVibe.Contracts:** released in v0.97.0
    (capabilities and service manifest; no `blog.*` event payload schemas yet).
 6. **Migration and seed strategy, threat review, sitemap/robots/feed behaviour:** done. There is
    nothing to migrate, the seed is described below and the threat review is below.
@@ -447,7 +449,7 @@ First install (done once; kept for a rebuild):
 4. **systemd:** install `deploy/systemd/openvibe-blog.service` (port 4810, `StateDirectory=openvibe-blog`).
 5. **nginx:** install `deploy/nginx/openvibe.blog.conf`. `/metrics` is never proxied.
 6. **Seed:** `npm run seed`. It stays a draft until someone has reviewed it.
-7. **Contracts:** done: released in openvibe-contracts v0.18.0.
+7. **Contracts:** done: released in openvibe-contracts v0.97.0.
 8. **Launch:** in the same release, remove `openvibe.blog` from OpenVibe.Sites and flip the Network
    hub entry (see the launch rule above).
 

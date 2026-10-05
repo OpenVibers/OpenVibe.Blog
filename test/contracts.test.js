@@ -8,7 +8,7 @@ const fs = require('fs');
 const path = require('path');
 const contracts = require('openvibe-contracts');
 const { check, done } = require('./helpers/boot');
-const { PROPOSED } = require('../server/auth/capabilities');
+const { CAPABILITIES } = require('../server/auth/capabilities');
 
 const DIR = path.join(__dirname, '..', 'docs', 'capabilities-proposal');
 
@@ -29,8 +29,8 @@ const DIR = path.join(__dirname, '..', 'docs', 'capabilities-proposal');
     });
 
     await check('the proposals are exactly the capabilities the code enforces', async () => {
-        assert.deepStrictEqual(caps.map((c) => c.id).sort(), [...PROPOSED].sort());
-        assert.deepStrictEqual([...manifest.capabilities].sort(), [...PROPOSED].sort());
+        assert.deepStrictEqual(caps.map((c) => c.id).sort(), Object.values(CAPABILITIES).sort());
+        assert.deepStrictEqual([...manifest.capabilities].sort(), Object.values(CAPABILITIES).sort());
     });
 
     await check('the service manifest proposal is a valid registry.service-manifest@1', async () => {
