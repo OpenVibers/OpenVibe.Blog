@@ -126,8 +126,8 @@ async function createApp(opts = {}) {
                 // Media objects are served by openvibe.media (which may redirect to object storage).
                 imgSrc: ["'self'", 'data:', 'https:'],
                 mediaSrc: ["'self'", 'https:'],
-                // events.openvibe.network: release notifications (release-watch's EventSource, openvibe-shared 1.17).
-                connectSrc: ["'self'", 'https://openvibe.network', 'https://cloudflareinsights.com', 'https://events.openvibe.network'],
+                // openvibe.events: release notifications (release-watch's EventSource, openvibe-shared 1.17).
+                connectSrc: ["'self'", 'https://openvibe.network', 'https://cloudflareinsights.com', 'https://openvibe.events'],
                 frameSrc: ["'self'", 'https://openvibe.network'],
                 frameAncestors: ["'self'"],
                 objectSrc: ["'none'"],
