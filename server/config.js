@@ -107,6 +107,10 @@ function load(env = process.env) {
         events: {
             url: trim(env.EVENTS_URL || ''),
             intervalMs: int(env.EVENTS_RELAY_INTERVAL_MS, 2000),
+            // OpenVibe.Events → Blog (ADR-033 account export and deletion, server/domain/account-data.js): the secret(s)
+            // that sign a delivery to POST /internal/events (comma-separated for rotation, 32+ characters each). Unset:
+            // the route answers 503 and no subscription is created at boot.
+            secrets: String(env.BLOG_EVENTS_SECRET || '').split(',').map((x) => x.trim()).filter(Boolean),
         },
 
         // Scheduled publication worker.

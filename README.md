@@ -224,6 +224,24 @@ OpenVibe.Network proxies this feed at `openvibe.network/api/v1/changelog`. Every
 | `blog.moderation.action` | internal. Staff unpublished (`post.unpublished`) or deleted (`post.deleted`) a post that only their staff powers let them touch, for the network's moderation audit log (ADR-022, `common.moderation-action@1`). Never the content. |
 | `blog.index_document.upserted` / `.deleted` | Documents and tombstones in `search.index-document@1` form, with a monotonic index revision (`createIndexSequencer`). Only published, public, listable posts are upserted; every other state is a tombstone. A post that was never indexed gets no tombstone. |
 
+### Account export and deletion (ADR-033)
+
+`network.account.export_requested` and `network.account.deleted` arrive at `POST /internal/events`. The route is
+loopback-only (nginx answers 404 for `/internal/`, and the handler refuses a forwarded request) and signed with
+`BLOG_EVENTS_SECRET`. They are answered by `server/domain/account-data.js` over `openvibe-sdk/account-data`, with one
+receipt per export and deletion in `account_data_events`.
+
+- **Export:** the person's blog, memberships, posts, revisions, drafts and reviews.
+- **Their own member blog:** every post is removed the way its owner would remove it (`posts.remove`: unpublished,
+  out of Search and the feeds). The blog is then suspended and loses its title, description and owner; the handle
+  stays reserved.
+- **Deleted:** their memberships, drafts and display-name cache.
+- **Authorless:** posts they wrote on other blogs stay published, with `author_subject` set to `deleted`. Revisions
+  and citations are append-only, so only the erasure transaction may clear a revision's author (and their id in
+  `meta.authorship.authors`) or a citation's `attached_by` (`blog.account_erasure`, migration
+  `0002_account_erasure.sql`); the text never changes.
+- **Kept:** post reviews, since a person's approval is what lets reviewed text stay published.
+
 ## Capabilities (released in openvibe-contracts v0.97.0)
 
 Service tokens use audience `openvibe.blog`, with one capability per route. The person the service
@@ -275,6 +293,9 @@ Each grant is `[client, capability, audience]`:
 
 - `[blog, identity.subject.resolve, openvibe.network]`
 - `[blog, events.event.publish, openvibe.events]`
+- `[blog, events.subscription.manage, openvibe.events]` (the two account subscriptions, created at boot), then, last and
+  once the release is live, `[blog, network.account.export.contribute, openvibe.network]` and
+  `[blog, network.account.deletion.confirm, openvibe.network]` (ADR-033)
 - `[blog, community.comment.write, openvibe.community]`
 - `[blog, community.comment.moderate, openvibe.community]` (optional: hides the threads of deleted
   or no-longer-public posts)
