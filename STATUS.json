@@ -9,7 +9,7 @@
   "domain": "openvibe.blog",
   "contracts": "openvibe-contracts v0.112.0",
   "sdk": "openvibe-sdk v0.37.0",
-  "shared": "openvibe-shared v2.15.0",
+  "shared": "openvibe-shared v2.17.0",
   "packages": [
     "openvibe-publishing v1.3.0",
     "openvibe-contracts v0.97.0",
@@ -55,5 +55,5 @@
     "per-actor limits (openvibe-sdk/limits)"
   ],
   "database": "PostgreSQL ov_blog (ADR-035), schema migrations/0001_initial.sql applied at boot",
-  "updated": "2026-10-08"
+  "updated": "2026-10-09"
 }
