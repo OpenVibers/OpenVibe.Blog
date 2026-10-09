@@ -8,13 +8,13 @@
   "port": 4810,
   "domain": "openvibe.blog",
   "contracts": "openvibe-contracts v0.112.0",
-  "sdk": "openvibe-sdk v0.35.0",
+  "sdk": "openvibe-sdk v0.37.0",
   "shared": "openvibe-shared v2.15.0",
   "packages": [
     "openvibe-publishing v1.3.0",
     "openvibe-contracts v0.97.0",
     "openvibe-shared v2.13.0",
-    "openvibe-sdk v0.35.0"
+    "openvibe-sdk v0.37.0"
   ],
   "capabilities": [
     "blog.blog.create",
