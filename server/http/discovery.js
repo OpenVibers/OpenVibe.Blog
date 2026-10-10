@@ -31,17 +31,17 @@ function createDiscoveryRoutes({ config, store, blogs, publication, reading }) {
                                           ORDER BY p.published_at DESC LIMIT 50000`).all();
 
     async function postEntries() {
-        // Revisions in one query and each blog once, whatever the number of posts (no N+1).
+        // Revisions and reviews in one query each, and each blog once, whatever the number of posts
+        // (no per-post N+1: the gate's review lookup is batched, not one round-trip per post).
         const rows = await publicPosts();
-        const revs = await store.revisions.getMany(rows.map((p) => ({ entityId: p.id, revision: p.published_revision })));
+        const refs = rows.map((p) => ({ entityId: p.id, revision: p.published_revision }));
+        const [revs, reviews] = await Promise.all([store.revisions.getMany(refs), store.reviews.latestMany(refs)]);
         const blogById = new Map();
         for (const id of new Set(rows.map((p) => p.blog_id))) blogById.set(id, await blogs.get(id));
-        const out = [];
-        for (const [i, post] of rows.entries()) {
+        return await Promise.all(rows.map(async (post, i) => {
             const blog = blogById.get(post.blog_id);
-            out.push({ post, blog, rev: revs[i], decision: await publication.decide(blog, post, revs[i]) });
-        }
-        return out;
+            return { post, blog, rev: revs[i], decision: await publication.decide(blog, post, revs[i], { review: reviews[i] }) };
+        }));
     }
 
     const xml = (res, body) => res.type('application/xml').set('Cache-Control', cache.htmlHeaders({ maxAge: 300 })).send(body);

@@ -56,6 +56,22 @@ async function memberCanSee(store, viewer, blog, post) {
 }
 
 /**
+ * A listing's visibility scope: the options posts.listPublished needs so a list only names posts this
+ * viewer may actually open, per memberCanSee/canReadPost — never a private or members-only post the
+ * post page would refuse (an author-level member may read their own, not another author's).
+ *   editor of the blog, or staff → restricted: every members/private post
+ *   author-level member          → the public posts, plus that author's own members/private posts
+ *   anyone else                  → the public posts only
+ */
+async function listingScope(store, viewer, blog) {
+    if (isStaff(viewer)) return { restricted: true };
+    const role = await effectiveRole(store, viewer, blog);
+    if (atLeast(role, 'editor')) return { restricted: true };
+    if (role === 'author' && viewer && viewer.subject) return { restrictedAuthor: viewer.subject };
+    return {};
+}
+
+/**
  * The entitlement seam for members-only (VIP) posts.
  *   decide({ subject, blog, post }) → { allow, reason }   never throws: an error is a "no"
  *   has({ subject, blog, post })    → true | false
@@ -138,4 +154,4 @@ async function canWrite(store, viewer, blog, action, post = null) {
     }
 }
 
-module.exports = { ROLE_RANK, roleOf, effectiveRole, atLeast, isStaff, memberCanSee, canReadPost, canWrite, createEntitlementChecker };
+module.exports = { ROLE_RANK, roleOf, effectiveRole, atLeast, isStaff, memberCanSee, listingScope, canReadPost, canWrite, createEntitlementChecker };

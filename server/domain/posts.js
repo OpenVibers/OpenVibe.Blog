@@ -190,15 +190,21 @@ function createPosts({ store, blogs, publication, access, outbox, log = console 
         },
 
         /**
-         * Published posts for listings. `restricted` = also members/private posts (the viewer is a
-         * member of the blog or staff). Unlisted posts are never listed.
-         * filters: blogId, termIds (any), seriesId, authorSubject, restricted, limit, offset
+         * Published posts for listings. `restricted` = also every members/private post (the viewer is
+         * an editor of the blog or staff); `restrictedAuthor` = also the members/private posts that
+         * author wrote (an author-level member, who may read only their own). Unlisted posts are never
+         * listed. The caller picks the scope with access.listingScope so a list never names a post the
+         * same viewer's post page would refuse.
+         * filters: blogId, termIds (any), seriesId, authorSubject, restricted, restrictedAuthor, limit, offset
          */
-        async listPublished({ blogId = null, termIds = null, seriesId = null, authorSubject = null, restricted = false, limit = 20, offset = 0, order = 'recent' } = {}) {
+        async listPublished({ blogId = null, termIds = null, seriesId = null, authorSubject = null, restricted = false, restrictedAuthor = null, limit = 20, offset = 0, order = 'recent' } = {}) {
             const where = ["p.state = 'published'"];
             const args = [];
             if (restricted) where.push("p.visibility IN ('public','members','private')");
-            else where.push("p.visibility = 'public'");
+            else if (restrictedAuthor) {
+                where.push("(p.visibility = 'public' OR (p.visibility IN ('members','private') AND p.author_subject = ?))");
+                args.push(restrictedAuthor);
+            } else where.push("p.visibility = 'public'");
             if (blogId) { where.push('p.blog_id = ?'); args.push(blogId); }
             if (seriesId) { where.push('p.series_id = ?'); args.push(seriesId); }
             if (authorSubject) { where.push('p.author_subject = ?'); args.push(authorSubject); }

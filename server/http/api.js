@@ -178,13 +178,14 @@ function createApi(ctx) {
     router.get('/blogs/:handle/posts', run(async (req) => {
         const blog = await mustBlog(req);
         const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 20, 1), 100);
-        const offset = Math.max(parseInt(req.query.offset, 10) || 0, 0);
+        // A pathological ?offset= must never reach LIMIT's OFFSET (Postgres scans the skipped rows).
+        const offset = Math.min(Math.max(parseInt(req.query.offset, 10) || 0, 0), 100000);
         if (req.query.all === '1') {
             if (req.viewer.kind === 'service' && !checkCapability(req.viewer.claims, 'blog.post.read').allowed) throw new ApiError(403, 'capability.denied', 'blog.post.read not granted');
             if (!await isMember(blog, req.viewer)) throw new ApiError(403, 'blog.forbidden', 'Only the blog’s members can list its drafts');
             return { posts: await Promise.all((await posts.listForDashboard(blog, req.viewer)).slice(offset, offset + limit).map(async (p) => await postDto(p, { full: false }))) };
         }
-        const { total, posts: rows } = await posts.listPublished({ blogId: blog.id, restricted: await isMember(blog, req.viewer), limit, offset });
+        const { total, posts: rows } = await posts.listPublished({ blogId: blog.id, ...(await access.listingScope(store, req.viewer, blog)), limit, offset });
         return { total, posts: await Promise.all(rows.map(async (p) => await postDto(p))) };
     }));
 
