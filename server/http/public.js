@@ -63,11 +63,12 @@ function createPublicRoutes(ctx) {
     }
     const notFound = (req, res) => messagePage(req, res, 404, 'Not found', 'There is nothing at this address.', { href: '/', label: 'The OpenVibe blog' });
 
-    const isMember = async (blog, viewer) => Boolean(await access.effectiveRole(store, viewer, blog)) || access.isStaff(viewer);
+    // The highest page a listing will query: a pathological ?page= must never reach LIMIT's OFFSET.
+    const MAX_PAGE = 10000;
 
     function pageNumber(req) {
         const n = parseInt(req.query.page, 10);
-        return Number.isInteger(n) && n > 0 ? n : 1;
+        return Number.isInteger(n) && n > 0 ? Math.min(n, MAX_PAGE) : 1;
     }
 
     async function activeBlog(req) {
@@ -103,9 +104,9 @@ function createPublicRoutes(ctx) {
 
     async function blogFront(req, res, blog, { home = false } = {}) {
         const page = pageNumber(req);
-        const restricted = await isMember(blog, req.viewer);
+        const scope = await access.listingScope(store, req.viewer, blog);
         const path = publication.blogPath(blog);
-        const { total, posts: rows } = await posts.listPublished({ blogId: blog.id, restricted, limit: PER_PAGE, offset: (page - 1) * PER_PAGE });
+        const { total, posts: rows } = await posts.listPublished({ blogId: blog.id, ...scope, limit: PER_PAGE, offset: (page - 1) * PER_PAGE });
         const pager = ssr.paginate({ page, perPage: PER_PAGE, total, href: (p) => (p === 1 ? path : `${path}?page=${p}`) });
         if (pager.outOfRange && total) return notFound(req, res);
         const items = await reading.listItems(rows);
@@ -113,7 +114,7 @@ function createPublicRoutes(ctx) {
         const feeds = await reading.feedsOf(blog);
         // Series and categories are named when a draft or restricted post uses them: list only those
         // holding a post this viewer may see in the list, so their names never leak ahead of a post.
-        const shows = async (filter) => (await posts.listPublished({ ...filter, blogId: blog.id, restricted, limit: 1 })).total > 0;
+        const shows = async (filter) => (await posts.listPublished({ ...filter, blogId: blog.id, ...scope, limit: 1 })).total > 0;
         const prune = async (nodes) => {
             const out = [];
             for (const n of nodes) {
@@ -146,7 +147,7 @@ function createPublicRoutes(ctx) {
                 series: seriesShown, categories: await prune(await reading.categoriesTree(blog)),
                 canWrite: await access.canWrite(store, req.viewer, blog, 'create'),
             }) + (home && pager.page === 1 ? frame.shipped({ service: 'blog', title: 'Recently shipped on OpenVibe.Blog' }) : ''),
-        }, { cacheable: !restricted });
+        }, { cacheable: !scope.restricted && !scope.restrictedAuthor });
     }
 
     router.get('/', wrap(async (req, res) => await blogFront(req, res, await blogs.official(), { home: true })));
@@ -199,8 +200,8 @@ function createPublicRoutes(ctx) {
 
     async function collection(req, res, { blog, heading, intro, crumbs, path, filter, order, empty, hideEmpty = false }) {
         const page = pageNumber(req);
-        const restricted = blog ? await isMember(blog, req.viewer) : false;
-        const { total, posts: rows } = await posts.listPublished({ ...filter, blogId: blog ? blog.id : null, restricted, limit: PER_PAGE, offset: (page - 1) * PER_PAGE, order });
+        const scope = blog ? await access.listingScope(store, req.viewer, blog) : {};
+        const { total, posts: rows } = await posts.listPublished({ ...filter, blogId: blog ? blog.id : null, ...scope, limit: PER_PAGE, offset: (page - 1) * PER_PAGE, order });
         // A series or category named only by drafts or posts this viewer cannot see does not exist for them.
         if (hideEmpty && !total) return notFound(req, res);
         const pager = ssr.paginate({ page, perPage: PER_PAGE, total, href: (p) => (p === 1 ? path : `${path}?page=${p}`) });
@@ -214,7 +215,7 @@ function createPublicRoutes(ctx) {
             prev: pager.prev ? pager.prev.href : null, next: pager.next ? pager.next.href : null,
             jsonLd: [seo.structuredData.breadcrumbs(crumbs.map((c) => ({ name: c.name, url: c.url ? publication.abs(c.url) : canonical })))],
             body: pages.collection({ heading, intro, breadcrumbs: crumbs, items, pager, empty }),
-        }, { cacheable: !restricted });
+        }, { cacheable: !scope.restricted && !scope.restrictedAuthor });
     }
 
     const blogCrumb = (blog) => ({ name: blog.title, url: publication.blogPath(blog) });

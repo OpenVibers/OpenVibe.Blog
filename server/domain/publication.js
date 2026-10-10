@@ -44,8 +44,12 @@ function createPublication({ store, config, outbox, indexnow }) {
         return rev ? await store.reviews.latest(post.id, rev.number) : null;
     }
 
-    /** The gate's decision for a post at one revision (the published one by default). */
-    async function decide(blog, post, rev, { state } = {}) {
+    /**
+     * The gate's decision for a post at one revision (the published one by default). `review` lets a
+     * caller that already fetched reviews in one batch (sitemaps, llms-full) skip the per-post lookup;
+     * omit it and the review is read here.
+     */
+    async function decide(blog, post, rev, { state, review } = {}) {
         const rec = authorshipOf(rev);
         const facts = {
             state: state || post.state,
@@ -54,7 +58,7 @@ function createPublication({ store, config, outbox, indexnow }) {
             text: rev ? `${rev.fields.title || ''}\n${ssr.markdownToText(rev.content)}` : '',
             noindex: Boolean(post.noindex),
         };
-        if (rec) Object.assign(facts, authorship.gateFacts(rec, await reviewOf(post, rev)));
+        if (rec) Object.assign(facts, authorship.gateFacts(rec, review !== undefined ? review : await reviewOf(post, rev)));
         return seo.evaluate(facts, { policy: POLICY, now: store.now() });
     }
 
