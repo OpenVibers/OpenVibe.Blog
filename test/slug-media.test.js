@@ -95,7 +95,9 @@ const MED_B = 'med_01J8Z3K4M5N6P7Q8R9S0T1V2W4';
         assert.match(page.text, new RegExp(`data-media-id="${MED_A}" data-state="broken"`));
         assert.match(page.text, /This media is no longer available\./);
         assert.doesNotMatch(page.text, new RegExp(`<img src="https://openvibe.media/o/${MED_A}"`));
-        assert.doesNotMatch(page.text, /og:image/, 'a broken cover is not advertised');
+        // A broken cover is never advertised: og:image falls back to the site's share card (openvibe-shared 4.0.0).
+        assert.doesNotMatch(page.text, new RegExp(`og:image" content="[^"]*${MED_A}`), 'a broken cover is not advertised');
+        assert.match(page.text, /og:image" content="[^"]*\/shared\/social\/blog\.jpg/);
         const json = (await t.get('/@dan/newest-name.json')).json();
         const m = json.media.find((x) => x.media_id === MED_A);
         assert.strictEqual(m.state, 'broken');
