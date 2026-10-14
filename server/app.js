@@ -106,6 +106,17 @@ async function createApp(opts = {}) {
     require('./render/layout').setRelease(release.release);
     const metrics = require('openvibe-shared/metrics').instrument(app, { service: 'blog', release: release.release });
     app.locals.metrics = metrics.registry;
+    // Request telemetry (openvibe-sdk/service): one aggregated sample per route template, status class and flush
+    // window, stored in Blog's own telemetry_samples table; static assets and /metrics produce none.
+    const { createHttpTelemetry } = require('openvibe-sdk/service');
+    const { createPgTelemetrySink } = require('openvibe-sdk/telemetry');
+    const telemetry = createHttpTelemetry({
+        service: 'blog',
+        sink: opts.telemetrySink || createPgTelemetrySink({ db: store.db, log }),
+        skipPrefixes: ['/shared'],
+    });
+    app.use(telemetry.middleware());
+    ctx.telemetry = telemetry;
     app.locals.ctx = ctx;
     // Per-actor limits (http/actor-limits.js) for the API, the editor and comment posts, counted once each
     // router resolved req.viewer; the per-address limits below stay.

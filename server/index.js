@@ -17,7 +17,7 @@ const { startSubscriptions } = require('openvibe-sdk/account-data');
 function createLifecycle({ server, ctx, exit, signals, extra = [] }) {
     return gracefulStop({
         name: 'Blog', server, deadlineExitCode: 0, exit, signals,
-        stop: [() => ctx.worker.stop(), () => ctx.changelog.stop(), ...extra],
+        stop: [() => ctx.telemetry.stop(), () => ctx.worker.stop(), () => ctx.changelog.stop(), ...extra],
         close: [() => ctx.outbox.stop(), () => ctx.store.close()],
     });
 }
