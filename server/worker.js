@@ -8,16 +8,15 @@
  *   media verification      every BLOG_MEDIA_VERIFY_INTERVAL_MS: ask OpenVibe.Media whether the
  *                           objects attached to published posts still exist; gone → the explicit
  *                           broken-asset state; an outage changes nothing (check_failed)
- *   telemetry retention     once a day: pruneTelemetry() deletes telemetry_samples rows older than 30 days
+ *   telemetry retention     openvibe-sdk/telemetry startTelemetryRetention(): a minute after start, then once a day,
+ *                           telemetry_samples rows older than 30 days are deleted (a redeploy never pushes it a day out)
  */
-const { pruneTelemetry } = require('openvibe-sdk/telemetry');
-
-const PRUNE_INTERVAL_MS = 24 * 60 * 60 * 1000;
+const { pruneTelemetry, startTelemetryRetention } = require('openvibe-sdk/telemetry');
 
 function createWorker({ config, store, posts, media, outbox, log = console }) {
     let scheduleTimer = null;
     let mediaTimer = null;
-    let pruneTimer = null;
+    let retention = null;
     let running = false;
 
     async function scheduleTick() {
@@ -62,11 +61,10 @@ function createWorker({ config, store, posts, media, outbox, log = console }) {
                 mediaTimer = setInterval(() => verifyMedia().catch((err) => log.warn('[Blog] media verification failed:', err.message)), config.media.verifyIntervalMs);
                 mediaTimer.unref();
             }
-            pruneTimer = setInterval(pruneSamples, PRUNE_INTERVAL_MS);
-            pruneTimer.unref();
+            retention = startTelemetryRetention({ db: store.db, log });
             setTimeout(scheduleTick, 1000).unref();
         },
-        stop() { clearInterval(scheduleTimer); clearInterval(mediaTimer); clearInterval(pruneTimer); },
+        async stop() { clearInterval(scheduleTimer); clearInterval(mediaTimer); if (retention) await retention.stop(); },
     };
 }
 
