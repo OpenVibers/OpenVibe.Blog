@@ -61,10 +61,13 @@ ${post.dek ? h`<p class="lede">${post.dek}</p>` : ''}
 <div class="post-body">${md(post.body.markdown, 0)}</div>
 ${post.body.tags && post.body.tags.length ? h`<p class="tags">${post.body.tags.map((t) => h`<span>#${t}</span> `)}</p>` : ''}`);
     }
-    const cite = (n) => h`<a href="#src-${n + 1}">${n + 1}</a>`;
+    const cite = (n) => h`<a href="#src-${n + 1}" aria-label="Item ${n + 1}">${n + 1}</a>`;
+    const cites = (list) => h` <span class="desk-cites">[${list.map((n, i) => h`${i ? ', ' : ''}${cite(n)}`)}]</span>`;
+    // Rows written before the AI answered in paragraphs hold one body per section.
+    const parasOf = (s) => (Array.isArray(s.paragraphs) ? s.paragraphs : [{ text: s.body, cites: s.cites || [], markdown: true }]);
     return String(h`<p class="disclosure" role="note"><strong>AI-generated</strong> from ${post.sources.length} items OpenVibe.Sources fetched, by OpenVibe.AI's blog.write_digest${post.model ? ` (${post.model})` : ''}; not reviewed by a person. Check anything that matters against the linked item.</p>
 ${post.dek ? h`<p class="lede">${post.dek}</p>` : ''}
-<div class="post-body">${post.body.sections.map((s) => h`<section class="desk-section">${s.heading ? h`<h2>${s.heading}</h2>` : ''}${md(s.body, 2)}<p class="desk-cites">From ${s.cites.map((n, i) => h`${i ? ', ' : ''}${cite(n)}`)}</p></section>`)}</div>
+<div class="post-body">${post.body.sections.map((s) => h`<section class="desk-section">${s.heading ? h`<h2>${s.heading}</h2>` : ''}${parasOf(s).map((p) => (p.markdown ? h`${md(p.text, 2)}<p>${cites(p.cites)}</p>` : h`<p>${p.text}${cites(p.cites)}</p>`))}</section>`)}</div>
 ${post.body.gaps && post.body.gaps.length ? h`<details class="desk-gaps"><summary>What the AI could not tell from the items</summary><ul>${post.body.gaps.map((g) => h`<li>${g}</li>`)}</ul></details>` : ''}
 <section class="sources"><h2>The items it was written from</h2><ol>${post.sources.map((s, i) => h`<li id="src-${i + 1}">${s.url ? h`<a href="${s.url}" rel="nofollow noopener">${s.title || s.url}</a>` : (s.title || s.item_id)} <span class="meta">(${s.source_key}${s.published_at ? h`, ${String(s.published_at).slice(0, 10)}` : ''})</span></li>`)}</ol></section>`);
 }
