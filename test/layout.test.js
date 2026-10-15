@@ -60,7 +60,10 @@ const split = (html) => ({ head: html.slice(0, html.indexOf('</head>')), body: h
         const { head } = split((await t.get('/write', { as: eve })).text);
         assert.strictEqual(count(head, /<title>/g), 1);
         assert.ok(/<meta name="robots" content="noindex[^"]*">/.test(head), 'the editor is noindex');
-        const home = split((await t.get('/')).text).head;
+        const homePage = (await t.get('/')).text;
+        const home = split(homePage).head;
+        // The showcase hero is the page's one h1; the blog's own title under it is an h2.
+        assert.strictEqual(count(homePage, /<h1\b/g), 1, 'one h1 on the home');
         assert.strictEqual(count(home, /<title>/g), 1);
         assert.ok(home.includes('<link rel="canonical" href="https://openvibe.blog/">'));
         // The home carries the Blog JSON-LD and, since llms-full.txt, the site summary's WebPage JSON-LD.
