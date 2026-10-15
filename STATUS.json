@@ -8,13 +8,13 @@
   "port": 4810,
   "domain": "openvibe.blog",
   "contracts": "openvibe-contracts v0.143.0",
-  "sdk": "openvibe-sdk v0.44.0",
+  "sdk": "openvibe-sdk v0.46.0",
   "shared": "openvibe-shared v4.1.3",
   "packages": [
     "openvibe-publishing v1.3.0",
     "openvibe-contracts v0.143.0",
     "openvibe-shared v4.1.3",
-    "openvibe-sdk v0.44.0"
+    "openvibe-sdk v0.46.0"
   ],
   "capabilities": [
     "blog.blog.create",
@@ -55,5 +55,5 @@
     "per-actor limits (openvibe-sdk/limits)"
   ],
   "database": "PostgreSQL ov_blog (ADR-035), schema migrations/0001_initial.sql applied at boot",
-  "updated": "2026-10-12"
+  "updated": "2026-10-15"
 }
