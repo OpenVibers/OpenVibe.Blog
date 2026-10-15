@@ -33,7 +33,7 @@ function index({ latest }) {
 </li>`;
     };
     return String(h`<header class="blog-header"><h1>AI desks</h1>
-<p class="lede">Niche blogs written by AI from the data OpenVibe.Sources collects (government news, food recalls, deals, hosting plans, developer releases), and one satire column. Each digest links every item it was written from.</p></header>
+<p class="lede">Niche blogs written by AI from the data OpenVibe.Sources collects (government news, food recalls, deals, hosting plans, crowdfunding, developer releases), and one satire column. Each digest links every item it was written from.</p></header>
 <p class="disclosure" role="note"><strong>Written by AI.</strong> ${AI_NOTE} The people's blogs are elsewhere on <a href="/">OpenVibe.Blog</a>.</p>
 <ul class="desk-list">${catalog.ALL.map(card)}</ul>`);
 }
@@ -53,6 +53,21 @@ ${raw(ssr.paginationHtml(pager))}
 ${staff ? h`<p class="meta">Staff see hidden posts here too.</p>` : ''}`);
 }
 
+/**
+ * The items under a digest: the ones it cites, numbered as the citations are; the rest of what the AI was given folded
+ * away below them (same numbers, so nothing renumbers).
+ */
+function sourcesList(post) {
+    const cited = new Set();
+    for (const s of post.body.sections || []) for (const p of (Array.isArray(s.paragraphs) ? s.paragraphs : [{ cites: s.cites || [] }])) for (const n of p.cites || []) cited.add(n);
+    const item = (s, i) => h`<li id="src-${i + 1}" value="${i + 1}">${s.url ? h`<a href="${s.url}" rel="nofollow noopener">${s.title || s.url}</a>` : (s.title || s.item_id)} <span class="meta">(${s.source_key}${s.published_at ? h`, ${String(s.published_at).slice(0, 10)}` : ''})</span></li>`;
+    const all = post.sources.map((s, i) => ({ s, i }));
+    const used = all.filter((x) => cited.has(x.i));
+    const rest = all.filter((x) => !cited.has(x.i));
+    return h`<section class="sources"><h2>The items it cites</h2><ol>${used.map((x) => item(x.s, x.i))}</ol>
+${rest.length ? h`<details class="desk-gaps"><summary>${rest.length} more item${rest.length === 1 ? '' : 's'} from the period it was given</summary><ol>${rest.map((x) => item(x.s, x.i))}</ol></details>` : ''}</section>`;
+}
+
 /** The article body (also the feeds' content). */
 function articleBody(desk, post) {
     if (desk.satire) {
@@ -69,7 +84,7 @@ ${post.body.tags && post.body.tags.length ? h`<p class="tags">${post.body.tags.m
 ${post.dek ? h`<p class="lede">${post.dek}</p>` : ''}
 <div class="post-body">${post.body.sections.map((s) => h`<section class="desk-section">${s.heading ? h`<h2>${s.heading}</h2>` : ''}${parasOf(s).map((p) => (p.markdown ? h`${md(p.text, 2)}<p>${cites(p.cites)}</p>` : h`<p>${p.text}${cites(p.cites)}</p>`))}</section>`)}</div>
 ${post.body.gaps && post.body.gaps.length ? h`<details class="desk-gaps"><summary>What the AI could not tell from the items</summary><ul>${post.body.gaps.map((g) => h`<li>${g}</li>`)}</ul></details>` : ''}
-<section class="sources"><h2>The items it was written from</h2><ol>${post.sources.map((s, i) => h`<li id="src-${i + 1}">${s.url ? h`<a href="${s.url}" rel="nofollow noopener">${s.title || s.url}</a>` : (s.title || s.item_id)} <span class="meta">(${s.source_key}${s.published_at ? h`, ${String(s.published_at).slice(0, 10)}` : ''})</span></li>`)}</ol></section>`);
+${sourcesList(post)}`);
 }
 
 function postPage({ desk, post, staff, csrf }) {

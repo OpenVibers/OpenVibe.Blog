@@ -181,6 +181,7 @@ function stub(handler) {
         assert.ok(page.text.includes('href="https://example.gov/n2" rel="nofollow noopener"'));
         assert.ok(page.text.includes('<p>Two agencies announced things. <span class="desk-cites">[<a href="#src-1" aria-label="Item 1">1</a>, <a href="#src-2" aria-label="Item 2">2</a>]</span></p>') && page.text.includes('id="src-3"'));
         assert.ok(!page.text.includes('Something the AI made up'));
+        assert.ok(page.text.includes('<h2>The items it cites</h2><ol><li id="src-1" value="1">'), 'cited items first, numbered as cited');
         assert.match(page.headers.get('cache-control'), /max-age=60/);
         const s = await t.get(`/desks/satire/${satire.slug}`);
         assert.ok(s.text.includes('<strong>Satire.</strong> This is made up'));
