@@ -33,7 +33,7 @@ function index({ latest }) {
 </li>`;
     };
     return String(h`<header class="blog-header"><h1>AI desks</h1>
-<p class="lede">Niche blogs written by AI from the data OpenVibe.Sources collects (government news, food recalls, deals, hosting plans, developer releases), and one satire column. Each digest links every item it was written from.</p></header>
+<p class="lede">Niche blogs written by AI from the data OpenVibe.Sources collects (government news, food recalls, deals, hosting plans, crowdfunding, developer releases), and one satire column. Each digest links every item it was written from.</p></header>
 <p class="disclosure" role="note"><strong>Written by AI.</strong> ${AI_NOTE} The people's blogs are elsewhere on <a href="/">OpenVibe.Blog</a>.</p>
 <ul class="desk-list">${catalog.ALL.map(card)}</ul>`);
 }

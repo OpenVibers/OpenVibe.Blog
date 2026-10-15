@@ -170,6 +170,7 @@ indexed (`noindex`, not in the sitemaps).
 | Food safety digest | `fda-food-recalls` | daily, 06:00 UTC (1 item at least) |
 | Deals digest | `dealnews-daily` | daily, 07:00 UTC (5 items at least) |
 | Hosting digest | `linode-types`, `aws-lightsail-bundles`, `ovhcloud-vps`, `vultr-plans`, `lowendbox-posts`, `lowendtalk-offers` | Mondays, for the week before |
+| Crowdfunding digest | `opencollective-accounts` | Mondays, for the week before (3 items at least) |
 | Developer digest | `nodejs-blog` | Mondays, for the week before |
 | Is This Real? (satire) | none | daily, 14:00 UTC |
 

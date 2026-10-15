@@ -34,6 +34,11 @@ const DESKS = [
         categories: ['hosting'], sources: ['linode-types', 'aws-lightsail-bundles', 'ovhcloud-vps', 'vultr-plans', 'lowendbox-posts', 'lowendtalk-offers'],
     },
     {
+        key: 'crowdfunding', title: 'Crowdfunding digest', every: 'week', hour: 7, min: 3, max: 30,
+        about: 'New and growing open-source and community campaigns on Open Collective, week by week: what they raise money for and what they have received, as Open Collective states it.',
+        categories: ['crowdfunding'], sources: ['opencollective-accounts'],
+    },
+    {
         key: 'dev', title: 'Developer digest', every: 'week', hour: 7, min: 1, max: 30,
         about: 'Releases and news from the Node.js project blog, week by week.',
         categories: ['blog'], sources: ['nodejs-blog'],
