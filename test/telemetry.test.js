@@ -17,7 +17,10 @@ const read = (p) => fs.readFileSync(path.join(__dirname, '..', p), 'utf8');
         assert.match(app, /createHttpTelemetry\(\{[^}]*service: 'blog'/s);
         assert.match(app, /app\.use\(telemetry\.middleware\(\)\)/);
         assert.match(app, /ctx\.telemetry = telemetry/);
-        assert.match(read('server/index.js'), /stop: \[\(\) => ctx\.telemetry\.stop\(\),/);
+        const index = read('server/index.js');
+        assert.match(index, /stop: \[\(\) => \{ clearInterval\(ctx\.telemetryTick\); return ctx\.telemetry\.stop\(\); \},/);
+        // The collector has no timer of its own (openvibe-sdk 0.46): index.js flushes it every 15 s.
+        assert.match(index, /ctx\.telemetryTick = setInterval\(\(\) => \{ ctx\.telemetry\.flush\(\)/);
     });
 
     const samples = [];
