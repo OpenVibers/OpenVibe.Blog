@@ -20,7 +20,7 @@ const BUDGETS = {
     jsRawKB: 250,   // 246.2 with openvibe-shared 4.2.x (Ask Actor in the navbar, 2026-10-15); 239.1 (212.2 before openvibe-shared/shell's web-runtime.js)
     jsBrotliKB: 59,   // 56.3 (49.9 before web-runtime.js)
     cssFiles: 2,   // 1
-    cssRawKB: 17.5,   // 5.0
+    cssRawKB: 18.5,   // 17.7 (2026-10-15: blog.css carries the AI desks' few rules; the shared showcase.css grew to ~12 KB)
     cssBrotliKB: 4.5,   // 1.4
     externalFiles: 1,   // 0
 };

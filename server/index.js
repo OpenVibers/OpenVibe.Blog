@@ -17,7 +17,7 @@ const { startSubscriptions } = require('openvibe-sdk/account-data');
 function createLifecycle({ server, ctx, exit, signals, extra = [] }) {
     return gracefulStop({
         name: 'Blog', server, deadlineExitCode: 0, exit, signals,
-        stop: [() => { clearInterval(ctx.telemetryTick); return ctx.telemetry.stop(); }, () => ctx.worker.stop(), () => ctx.changelog.stop(), ...extra],
+        stop: [() => { clearInterval(ctx.telemetryTick); return ctx.telemetry.stop(); }, () => ctx.worker.stop(), () => ctx.changelog.stop(), () => ctx.desks.stop(), ...extra],
         close: [() => ctx.outbox.stop(), () => ctx.store.close()],
     });
 }
@@ -39,6 +39,8 @@ async function start() {
     ctx.telemetryTick.unref();
     // The network changelog and patch notes run where the worker runs (one process).
     if (config.worker.enabled) ctx.changelog.start();
+    // The AI desks (server/desks/desks.js) write where the worker runs too.
+    if (config.worker.enabled) ctx.desks.start();
 
     // The two account subscriptions at OpenVibe.Events (ADR-033), created when missing; off without EVENTS_URL,
     // BLOG_EVENTS_SECRET or the client secret.
