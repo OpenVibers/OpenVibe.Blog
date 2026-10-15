@@ -49,6 +49,10 @@ Other tables in the same database:
   `blog_post_discussion_refs` and `blog_index_revisions`.
 - `event_outbox`, the SDK transactional outbox.
 - `subject_projections`, a display cache of Network names. It isn't authority.
+- `telemetry_samples`, this service's own request telemetry (migration `0003_telemetry.sql`): aggregated by route template, method and status class, never
+  by raw URL; `server/app.js` builds the collector, `server/index.js` flushes it once a minute and on stop (one `http.request` sample per key, plus the
+  active-requests, p95 latency and event-loop-lag gauges, in the openvibe-sdk 0.46 `platform.telemetry-sample@1` shape), and `server/worker.js` deletes
+  rows older than 14 days daily. `/shared`, static assets, health, readiness and `/metrics` are not counted.
 
 ## Does not own
 
