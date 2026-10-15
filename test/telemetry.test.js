@@ -46,10 +46,10 @@ const read = (p) => fs.readFileSync(path.join(__dirname, '..', p), 'utf8');
         assert.deepStrictEqual(requests(), []);
     });
 
-    await check('the worker retention drops telemetry_samples rows older than 30 days and keeps newer ones', async () => {
+    await check('the worker retention drops telemetry_samples rows older than 14 days and keeps newer ones', async () => {
         const db = t.ctx.store.db;
         const insert = (days) => db.query(`INSERT INTO telemetry_samples (at, service, operation) VALUES (now() - make_interval(days => $1), 'blog', 'http.request')`, [days]);
-        await insert(45);
+        await insert(20);
         await insert(1);
         assert.strictEqual(await t.ctx.worker.pruneSamples(), 1);
         const left = await db.query('SELECT count(*)::int AS n FROM telemetry_samples');
