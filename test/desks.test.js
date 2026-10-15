@@ -80,11 +80,14 @@ function stub(handler) {
             const n = body.input.sources ? body.input.sources.length : 0;
             const output = body.workflow === 'blog.write_satire'
                 ? { title: 'Is it safe to let your air fryer vote?', dek: 'Experts at the Institute of Crisp are alarmed.', body_markdown: '## The crisis\n\nYour air fryer has opinions.\n\n# A stray title\n\nIt does.', tags: ['Appliances', 'democracy'] }
-                : { title: 'Recalls and releases', dek: 'What was announced.', sections: [
-                    { heading: 'Announcements', body: 'Two agencies announced things.', citations: [0, 1, 99] },
-                    { heading: 'Unsourced', body: 'Something the AI made up.', citations: [] },
-                    ...(n > 2 ? [{ heading: 'Space', body: 'NASA said something.', citations: [2] }] : []),
-                ], citations: [0], gaps: ['Item 3 had no date.'] };
+                : body.input.desk === 'Hosting digest'
+                    // An answer in the first shape (one body per section) still makes a post.
+                    ? { title: 'Hosting digest for the week (5 October 2026)', dek: 'Plans.', sections: [{ heading: 'Plans', body: 'A plan changed its price.', citations: [0] }], citations: [0], gaps: [] }
+                    : { title: 'Recalls and releases', dek: 'What was announced.', sections: [
+                        { heading: 'Announcements', paragraphs: [{ text: 'Two agencies announced things (Source 0).', citations: [0, 1, 99] }, { text: 'An uncited aside.', citations: [] }] },
+                        { heading: 'Unsourced', paragraphs: [{ text: 'Something the AI made up.', citations: [] }] },
+                        ...(n > 2 ? [{ heading: 'Space', paragraphs: [{ text: 'NASA said something [2].', citations: [2] }] }] : []),
+                    ], citations: [0], gaps: ['Item 3 had no date.'] };
             return { status: 201, body: { run: { id, status: 'succeeded', workflow: { key: body.workflow, version: 1 }, synthetic: mode === 'stub', provenance: { model: 'gpt-test' }, output } } };
         }
         if (/^\/api\/v1\/runs\/[^/]+\/citations$/.test(req.url)) return { body: { citations: [] } };
@@ -114,8 +117,10 @@ function stub(handler) {
         assert.deepStrictEqual(byWorkflow('blog.write_satire').map((x) => x.input), [catalog.questionFor(0)]);
         news = await desks.bySlug('news', '2026-10-14');
         assert.strictEqual(news.status, 'published');
-        assert.deepStrictEqual(news.body.sections.map((s) => [s.heading, s.cites]), [['Announcements', [0, 1]], ['Space', [2]]], 'uncited section dropped, out-of-range citation dropped');
-        assert.ok(news.body.gaps.some((g) => g.includes('without citing')));
+        assert.deepStrictEqual(news.body.sections.map((s) => [s.heading, s.paragraphs.map((p) => [p.text, p.cites])]),
+            [['Announcements', [['Two agencies announced things.', [0, 1]]]], ['Space', [['NASA said something.', [2]]]]],
+            'uncited paragraphs and sections dropped, out-of-range citations dropped, source numbers taken out of the text');
+        assert.ok(news.body.gaps.includes('2 paragraph(s) the AI wrote without citing an item were left out.'));
         satire = (await desks.list('satire')).posts[0];
         assert.strictEqual(satire.slug, '2026-10-14-is-it-safe-to-let-your-air-fryer-vote');
         assert.deepStrictEqual(satire.body.tags, ['appliances', 'democracy']);
@@ -138,6 +143,8 @@ function stub(handler) {
         const hosting = (await desks.list('hosting')).posts[0];
         assert.ok(hosting, 'the week with the price change gets a post');
         assert.strictEqual(hosting.slug, '2026-10-12');
+        assert.strictEqual(hosting.title, 'Hosting digest: the week of 12 October to 18 October 2026', 'a title naming the format gives way to the desk\'s own');
+        assert.deepStrictEqual(hosting.body.sections[0].paragraphs, [{ text: 'A plan changed its price.', cites: [0] }]);
         const req = runs.filter((x) => x.input.desk === 'Hosting digest').pop();
         assert.ok(req.input.sources[0].snippet.includes('Changed at the source (revision 2)') && req.input.sources[0].snippet.includes('price_monthly: 6'));
     });
@@ -172,7 +179,7 @@ function stub(handler) {
         assert.strictEqual(page.status, 200);
         assert.ok(page.text.includes('AI-generated</strong> from 3 items'));
         assert.ok(page.text.includes('href="https://example.gov/n2" rel="nofollow noopener"'));
-        assert.ok(page.text.includes('<a href="#src-1">1</a>') && page.text.includes('id="src-3"'));
+        assert.ok(page.text.includes('<p>Two agencies announced things. <span class="desk-cites">[<a href="#src-1" aria-label="Item 1">1</a>, <a href="#src-2" aria-label="Item 2">2</a>]</span></p>') && page.text.includes('id="src-3"'));
         assert.ok(!page.text.includes('Something the AI made up'));
         assert.match(page.headers.get('cache-control'), /max-age=60/);
         const s = await t.get(`/desks/satire/${satire.slug}`);

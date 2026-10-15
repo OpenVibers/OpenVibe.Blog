@@ -34,6 +34,17 @@ const slugify = (s) => String(s || '').normalize('NFKD').replace(/[̀-ͯ]/g, '')
 const ymd = (ms) => new Date(ms).toISOString().slice(0, 10);
 const newId = () => `dsk_${crypto.randomBytes(10).toString('hex')}`;
 
+// Source numbers the AI was told not to write into its text: "(Source 3)", "(Sources 1, 2)", "[4]". The page links them.
+const SOURCE_REFS = /\s*(?:\((?:sources?|items?)\s*[\d\s,&and-]+\)|\[\d+(?:\s*,\s*\d+)*\])/gi;
+const prose = (v, n) => String(v == null ? '' : v).replace(SOURCE_REFS, '').replace(/[ \t]+/g, ' ').trim().slice(0, n);
+const citesOf = (list, n) => [...new Set((Array.isArray(list) ? list : []).filter((x) => Number.isInteger(x) && x >= 0 && x < n))].sort((a, b) => a - b);
+
+/** The AI's headline, or the desk's own when the AI named the format ("… digest", "snapshot") instead of the news. */
+function headline(title, fallback) {
+    const t = clean(title, 200).replace(/\s*[([](?:[A-Z][a-z]{2,8}\.? \d{1,2},? \d{4}|\d{1,2} [A-Z][a-z]+ \d{4}|\d{4}-\d{2}-\d{2})[)\]]\s*$/, '');
+    return t && !/\b(digest|desk|snapshots?|round-?ups?)\b/i.test(t) ? t : fallback;
+}
+
 /** The latest period of a desk that is over (and past its writing hour) at `now`: { from, to }. */
 function duePeriod(desk, now) {
     const d = new Date(now);
@@ -174,15 +185,20 @@ function createDesks({ config, store, fetchImpl = globalThis.fetch, log = consol
             const out = r.output || {};
             const gaps = (Array.isArray(out.gaps) ? out.gaps : []).map((g) => clean(g, 300)).filter(Boolean).slice(0, 20);
             const all = Array.isArray(out.sections) ? out.sections : [];
-            const sections = all.map((s) => ({
-                heading: clean(s && s.heading, 160),
-                body: String((s && s.body) || '').trim().slice(0, 4000),
-                cites: [...new Set((s && Array.isArray(s.citations) ? s.citations : []).filter((n) => Number.isInteger(n) && n >= 0 && n < items.length))].sort((a, b) => a - b),
-            })).filter((s) => s.body && s.cites.length);
-            if (sections.length < all.length) gaps.push(`${all.length - sections.length} section(s) the AI wrote without citing an item were left out.`);
+            // Each paragraph keeps its own citations (an older answer's section body counts as one paragraph); a
+            // paragraph that cites nothing is left out and the post says so.
+            let dropped = 0;
+            const sections = all.map((s) => {
+                const paras = (s && Array.isArray(s.paragraphs) ? s.paragraphs : (s && s.body ? [{ text: s.body, citations: s.citations }] : []))
+                    .map((p) => ({ text: prose(p && p.text, 1500), cites: citesOf(p && p.citations, items.length) }));
+                const kept = paras.filter((p) => p.text && p.cites.length);
+                dropped += paras.length - kept.length;
+                return { heading: clean(s && s.heading, 160), paragraphs: kept };
+            }).filter((s) => s.paragraphs.length);
+            if (dropped) gaps.push(`${dropped} paragraph(s) the AI wrote without citing an item were left out.`);
             if (!sections.length) throw new Error(`run ${r.runId} cited nothing, so no post was made`);
             const sources = items.map((it) => ({ item_id: it.item_id, source_key: it.source_key, title: it.title || null, url: it.url || null, published_at: it.published_at || null }));
-            return await finish(row, r, { title: clean(out.title, 200) || `${desk.title}: ${label}`, dek: clean(out.dek, 400) || null, body: { sections, gaps }, sources });
+            return await finish(row, r, { title: headline(out.title, `${desk.title}: ${label}`), dek: prose(out.dek, 400) || null, body: { sections, gaps }, sources });
         } catch (err) { await fail(row, err); return null; }
     }
 
@@ -294,4 +310,4 @@ function createDesks({ config, store, fetchImpl = globalThis.fetch, log = consol
     };
 }
 
-module.exports = { createDesks, duePeriod, periodLabel, snippetOf, slugify };
+module.exports = { createDesks, duePeriod, periodLabel, snippetOf, slugify, headline, prose };
