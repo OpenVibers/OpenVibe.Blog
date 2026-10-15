@@ -17,7 +17,7 @@ const { startSubscriptions } = require('openvibe-sdk/account-data');
 function createLifecycle({ server, ctx, exit, signals, extra = [] }) {
     return gracefulStop({
         name: 'Blog', server, deadlineExitCode: 0, exit, signals,
-        stop: [() => ctx.telemetry.stop(), () => ctx.worker.stop(), () => ctx.changelog.stop(), ...extra],
+        stop: [() => { clearInterval(ctx.telemetryTick); return ctx.telemetry.stop(); }, () => ctx.worker.stop(), () => ctx.changelog.stop(), ...extra],
         close: [() => ctx.outbox.stop(), () => ctx.store.close()],
     });
 }
@@ -33,6 +33,10 @@ async function start() {
     server.keepAliveTimeout = 65_000;
     ctx.outbox.start();
     ctx.worker.start();
+    // The request collector aggregates in memory and has no timer of its own (openvibe-sdk 0.46 createHttpTelemetry):
+    // this tick writes each 15-second interval's samples; the stop clears it and flushes once more.
+    ctx.telemetryTick = setInterval(() => { ctx.telemetry.flush().catch(() => {}); }, 15_000);
+    ctx.telemetryTick.unref();
     // The network changelog and patch notes run where the worker runs (one process).
     if (config.worker.enabled) ctx.changelog.start();
 
