@@ -113,7 +113,7 @@ function stub(handler) {
         assert.deepStrictEqual(n.input.sources.map((s) => s.source_id), ['n3', 'n2', 'n1'], 'the period\'s items of its own sources, newest first (n0 is older, x1 is another source)');
         assert.strictEqual(n.input.period, 'Wednesday 14 October 2026');
         assert.ok(n.input.sources[0].snippet.includes('New at the source.'));
-        assert.strictEqual(n.idempotency_key, 'blog.desk:news:2026-10-14:1');
+        assert.match(n.idempotency_key, /^blog\.desk:dsk_[0-9a-f]{20}:1$/);
         assert.deepStrictEqual(byWorkflow('blog.write_satire').map((x) => x.input), [catalog.questionFor(0)]);
         news = await desks.bySlug('news', '2026-10-14');
         assert.strictEqual(news.status, 'published');
@@ -164,7 +164,7 @@ function stub(handler) {
         mode = 'stub';
         await desks.compose();
         row = await t.ctx.store.db.maybe("SELECT * FROM blog_desk_posts WHERE desk = 'food' AND slug = '2026-10-19'");
-        assert.strictEqual(runs.filter((x) => x.input.desk === 'Food safety digest').pop().idempotency_key, 'blog.desk:food:2026-10-19:2');
+        assert.strictEqual(runs.filter((x) => x.input.desk === 'Food safety digest').pop().idempotency_key, `blog.desk:${row.id}:2`);
         assert.deepStrictEqual([row.status, row.synthetic, row.hidden_reason], ['hidden', true, 'Written by the stub provider (synthetic text).']);
         mode = 'ok';
     });

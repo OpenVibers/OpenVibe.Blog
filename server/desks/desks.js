@@ -33,6 +33,8 @@ const num = (v) => (v == null ? null : Number(v));
 const slugify = (s) => String(s || '').normalize('NFKD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 70).replace(/-+$/, '');
 const ymd = (ms) => new Date(ms).toISOString().slice(0, 10);
 const newId = () => `dsk_${crypto.randomBytes(10).toString('hex')}`;
+// One AI run per post row and attempt: a post written again (a new row) is a new run, never a replay of the old one.
+const runKey = (row) => `blog.desk:${row.id}:${row.attempts}`;
 
 // Source numbers the AI was told not to write into its text: "(Source 3)", "(Sources 1, 2)", "[4]". The page links them.
 const SOURCE_REFS = /\s*(?:\((?:sources?|items?)\s*[\d\s,&and-]+\)|\[\d+(?:\s*,\s*\d+)*\])/gi;
@@ -181,7 +183,7 @@ function createDesks({ config, store, fetchImpl = globalThis.fetch, log = consol
                     ...(it.published_at ? { published_at: String(it.published_at).slice(0, 40) } : {}),
                     snippet: snippetOf(it),
                 })),
-            }, { target: { service: 'blog', type: 'desk', id: `${desk.key}:${ymd(period.from)}` }, idempotencyKey: `blog.desk:${desk.key}:${ymd(period.from)}:${row.attempts}` });
+            }, { target: { service: 'blog', type: 'desk', id: `${desk.key}:${ymd(period.from)}` }, idempotencyKey: runKey(row) });
             const out = r.output || {};
             const gaps = (Array.isArray(out.gaps) ? out.gaps : []).map((g) => clean(g, 300)).filter(Boolean).slice(0, 20);
             const all = Array.isArray(out.sections) ? out.sections : [];
@@ -210,7 +212,7 @@ function createDesks({ config, store, fetchImpl = globalThis.fetch, log = consol
         try {
             const q = catalog.questionFor(done);
             const r = await ai.run('blog.write_satire', { topic: q.topic, angle: q.angle }, {
-                target: { service: 'blog', type: 'desk', id: `${desk.key}:${ymd(period.to)}` }, idempotencyKey: `blog.desk:${desk.key}:${ymd(period.to)}:${row.attempts}`,
+                target: { service: 'blog', type: 'desk', id: `${desk.key}:${ymd(period.to)}` }, idempotencyKey: runKey(row),
             });
             const out = r.output || {};
             const markdown = String(out.body_markdown || '').trim().slice(0, 12000);
