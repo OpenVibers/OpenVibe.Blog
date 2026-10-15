@@ -88,7 +88,7 @@ function createPublicRoutes(ctx) {
             eyebrow: 'OpenVibe.Blog',
             title: 'Write on', accent: 'OpenVibe',
             lede: 'A blog of your own with drafts, scheduling, feeds and comments. Sign in once with your OpenVibe account; anyone can read without one.',
-            actions: [{ label: 'Start writing', href: '/write', primary: true }, { label: 'Read the OpenVibe blog', href: '#posts' }],
+            actions: [{ label: 'Start writing', href: '/write', primary: true }, { label: 'Read the OpenVibe blog', href: '#posts' }, { label: 'AI desks', href: '/desks' }],
         }) + showcase.features({
             title: 'What your blog gets',
             items: [

@@ -31,6 +31,10 @@ h2 { font-size: 1.35rem; margin: 1.6rem 0 .5rem; }
 .disclosure { border: 1px solid var(--warning, #f59e0b); border-radius: 8px; padding: 8px 12px; }
 .series { border: 1px solid var(--border, #1f2d47); border-radius: 8px; padding: 8px 14px; margin: 12px 0; font-size: .95rem; }
 .sources ol { padding-left: 1.2rem; }
+.desk-list { list-style: none; padding: 0; }
+.desk-card h2 { margin: 16px 0 4px; font-size: 1.2rem; }
+.desk-satire { border-color: var(--danger, #ef4444); }
+.desk-cites, .desk-gaps { font-size: .9rem; color: var(--text-secondary, #96a7c2); }
 .ov-breadcrumbs ol { list-style: none; padding: 0; margin: 8px 0; display: flex; flex-wrap: wrap; gap: 6px; font-size: .9rem; }
 .ov-breadcrumbs li + li::before { content: "›"; margin-right: 6px; color: var(--text-muted); }
 .ov-pagination { display: flex; gap: 10px; flex-wrap: wrap; margin: 20px 0; }

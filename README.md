@@ -53,6 +53,8 @@ Other tables in the same database:
   by raw URL; `server/app.js` builds the collector, `server/index.js` flushes it once a minute and on stop (one `http.request` sample per key, plus the
   active-requests, p95 latency and event-loop-lag gauges, in the openvibe-sdk 0.46 `platform.telemetry-sample@1` shape), and `server/worker.js` deletes
   rows older than 14 days daily. `/shared`, static assets, health, readiness and `/metrics` are not counted.
+- The AI desks (migration `0004_ai_desks.sql`): `blog_ingest_cursor` (Sources change cursors), `blog_desk_items` (the
+  Sources items the desks may cite, 21 days) and `blog_desk_posts` (one post per desk and period).
 
 ## Does not own
 
@@ -153,6 +155,34 @@ Other tables in the same database:
 | `/write/…` | the editor, as plain HTML forms with Network SSO and a form token |
 | `/auth/*` | sign-in; the same session layer as OpenVibe.Community |
 | `/api/health`, `/api/ready`, `/release.json`, `/metrics` | health, readiness and metrics; `/metrics` is loopback only |
+| `/desks`, `/desks/:desk`, `/desks/:desk/:slug(.json)`, `/desks/:desk/feed.xml\|atom.xml` | the AI desks (below); staff `POST …/hide\|show` |
+
+### AI desks (`server/desks/`)
+
+The owner's April ask: "AI-generated niche blogs backed by large source datasets" and a "satirical/parody type blog".
+They sit beside the blogs, not in them: a desk post is never a `blog_posts` row (whose AI text waits for a person's
+review), says on every page, feed entry and JSON twin that OpenVibe.AI wrote it and no person reviewed it, and is never
+indexed (`noindex`, not in the sitemaps).
+
+| Desk | Sources (OpenVibe.Sources keys) | When |
+|---|---|---|
+| News digest | `govuk-news`, `eu-press-corner`, `nasa-news-releases`, `noaa-news` | daily, 06:00 UTC, for the day before (3 items at least) |
+| Food safety digest | `fda-food-recalls` | daily, 06:00 UTC (1 item at least) |
+| Deals digest | `dealnews-daily` | daily, 07:00 UTC (5 items at least) |
+| Hosting digest | `linode-types`, `aws-lightsail-bundles`, `ovhcloud-vps`, `vultr-plans`, `lowendbox-posts`, `lowendtalk-offers` | Mondays, for the week before |
+| Developer digest | `nodejs-blog` | Mondays, for the week before |
+| Is This Real? (satire) | none | daily, 14:00 UTC |
+
+Every 15 minutes (`BLOG_DESKS_INTERVAL_MS`) where the worker runs: the change feed of each Sources category the desks
+read is pulled (openvibe-publishing/ingest cursors in `blog_ingest_cursor`) into `blog_desk_items` (21 days; a removed
+item is dropped). An item new to Blog is dated by when Sources first saw it, a new revision by when Blog saw it, so the
+first pull never presents old items as new. When a desk's period is over, its newest items (40 at most) go to
+`blog.write_digest`; a section the AI did not cite is left out and said so, a run that cites nothing makes no post, and
+every cited item is linked under the post. The satire desk sends the next question of `server/desks/catalog.js` to
+`blog.write_satire` (fiction with its own rules in OpenVibe.AI: no real people, no words in a real organisation's mouth,
+nothing dangerous) and every page and feed title says it is satire. A failed run is retried after 30 minutes with a new
+key (three attempts); the stub provider's text is kept but hidden. Staff (Network admins) may hide a post and show it
+again. `BLOG_DESKS=off` stops the desks; the digests need `OV_SOURCES_INTERNAL_URL`, every desk `OV_AI_INTERNAL_URL`.
 
 ### The network changelog and patch notes
 
@@ -310,6 +340,8 @@ Each grant is `[client, capability, audience]`:
   with the network's token instead of anonymously; `CHANGELOG_GITHUB_TOKEN` overrides it).
 - `[blog, ai.run.create, openvibe.ai]` and `[blog, ai.run.read, openvibe.ai]` for AI drafts (the
   editor's "draft with AI" and the dev-blog draft of each patch notes post).
+- `[blog, sources.item.read, openvibe.sources]` for the AI desks' digests (`blog.write_digest` and `blog.write_satire`
+  run under the `ai.run.create` grant above).
 - For OpenVibe.AI to deliver drafts: `[ai, blog.post.create, openvibe.blog]`. Add
   `[ai, blog.post.read, openvibe.blog]` if it reads the drafts back.
 

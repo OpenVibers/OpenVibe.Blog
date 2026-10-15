@@ -72,6 +72,7 @@ function createDiscoveryRoutes({ config, store, blogs, publication, reading }) {
                     { title: 'Member blogs', url: abs('/sitemaps/blogs.xml'), note: 'each member blog has /@handle/feed.xml, /@handle/atom.xml and /@handle/feed.json' },
                 ] },
                 { title: 'Data', links: [{ title: 'Post JSON', url: abs('/'), note: 'append .json to any post URL (/@handle/slug.json)' }] },
+                { title: 'AI desks', links: [{ title: 'AI desks', url: abs('/desks'), note: 'digests OpenVibe.AI writes from OpenVibe.Sources items (news, food recalls, deals, hosting plans, developer releases) and a satire column; labelled as AI, every digest section cited, never indexed; each desk has /desks/<desk>/feed.xml and each post a .json twin' }] },
             ],
         }));
     });

@@ -60,6 +60,7 @@ function renderPage(o) {
         apiBase: NETWORK_URL,
         links: [
             { label: 'Blog', href: '/' },
+            { label: 'AI desks', href: '/desks' },
             { label: 'Write', href: '/write', icon: 'fa-pen' },
         ],
         history: { type: 'page', title: o.title || SITE_NAME },
@@ -97,7 +98,7 @@ function renderPage(o) {
         next: o.next,
         navbar: nav,
         footer,
-        navLinks: [{ label: 'Blog', href: '/' }, { label: 'Write', href: '/write' }],
+        navLinks: [{ label: 'Blog', href: '/' }, { label: 'AI desks', href: '/desks' }, { label: 'Write', href: '/write' }],
         home: '/',
         css: asset('css/blog.css'),
         styles: o.styles,

@@ -97,7 +97,9 @@ async function createApp(opts = {}) {
 
     const aiDrafts = opts.aiDrafts || require('./domain/ai-drafts').createAiDrafts({ config, store, posts, access, fetchImpl });
     const changelog = opts.changelog || require('./changelog').createChangelog({ config, store, blogs, posts, aiDrafts, fetchImpl, log });
-    const ctx = { config, store, outbox, blogs, publication, posts, people, community, media, reading, effects, entitlements, vip, auth, viewers, access, worker, aiDrafts, changelog, indexnow };
+    // The AI desks (server/desks/): digests from Sources' items and the satire desk, beside the blogs.
+    const desks = opts.desks || require('./desks/desks').createDesks({ config, store, fetchImpl, log });
+    const ctx = { config, store, outbox, blogs, publication, posts, people, community, media, reading, effects, entitlements, vip, auth, viewers, access, worker, aiDrafts, changelog, desks, indexnow };
 
     const app = express();
     app.disable('x-powered-by');
@@ -210,6 +212,7 @@ async function createApp(opts = {}) {
 
     // ── Discovery, editor, public pages ─────────────────────
     app.use(createDiscoveryRoutes(ctx));
+    app.use(require('./desks/routes').createDeskRoutes(ctx));
     const publicRoutes = createPublicRoutes(ctx);
     ctx.publicRoutes = publicRoutes;
     app.use('/write', rateLimit({ windowMs: 60_000, max: 120, standardHeaders: true, legacyHeaders: false }), createEditorRoutes({ ...ctx, publicRoutes }));
