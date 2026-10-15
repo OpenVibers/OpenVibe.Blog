@@ -146,6 +146,7 @@ function createPublicRoutes(ctx) {
                 blog, blogUrl: `/@${blog.handle}`, items, pager, feeds,
                 series: seriesShown, categories: await prune(await reading.categoriesTree(blog)),
                 canWrite: await access.canWrite(store, req.viewer, blog, 'create'),
+                showcase: home && pager.page === 1,
             }) + (home && pager.page === 1 ? frame.shipped({ service: 'blog', title: 'Recently shipped on OpenVibe.Blog' }) : ''),
         }, { cacheable: !scope.restricted && !scope.restrictedAuthor });
     }
