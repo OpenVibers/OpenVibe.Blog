@@ -10,6 +10,7 @@
  *   categories the Sources categories its sources are in (one change cursor each)
  *   sources    the Sources source keys it reads (a source that is disabled or empty just contributes nothing)
  *   min, max   fewer items than min: no post for that period; at most max items go to the AI (the newest)
+ *   feed       instead of Sources: 'food-library', OpenVibe.Food's recipe library (/recipes/library.json)
  */
 
 const DESKS = [
@@ -37,6 +38,11 @@ const DESKS = [
         key: 'crowdfunding', title: 'Crowdfunding digest', every: 'week', hour: 7, min: 3, max: 30,
         about: 'New and growing open-source and community campaigns on Open Collective, week by week: what they raise money for and what they have received, as Open Collective states it.',
         categories: ['crowdfunding'], sources: ['opencollective-accounts'],
+    },
+    {
+        key: 'recipes', title: 'Budget recipes', every: 'week', hour: 8, min: 3, max: 20, feed: 'food-library',
+        about: 'The week\'s new recipes in OpenVibe.Food\'s library: cheap, simple dishes made only from its food list, each with what to buy and what that typically costs. Written by AI from the recipes themselves; check a recipe before you cook it.',
+        categories: [], sources: ['food-library'],
     },
     {
         key: 'dev', title: 'Developer digest', every: 'week', hour: 7, min: 1, max: 30,

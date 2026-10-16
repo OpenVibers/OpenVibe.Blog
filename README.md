@@ -172,11 +172,13 @@ indexed (`noindex`, not in the sitemaps).
 | Hosting digest | `linode-types`, `aws-lightsail-bundles`, `ovhcloud-vps`, `vultr-plans`, `lowendbox-posts`, `lowendtalk-offers` | Mondays, for the week before |
 | Crowdfunding digest | `opencollective-accounts` | Mondays, for the week before (3 items at least) |
 | Developer digest | `nodejs-blog` | Mondays, for the week before |
+| Budget recipes | OpenVibe.Food's recipe library (`/recipes/library.json`, `OV_FOOD_URL`; each recipe a `food.recipe` source) | Mondays, 08:00 UTC, for the week before (3 recipes at least) |
 | Is This Real? (satire) | none | daily, 14:00 UTC |
 
 Every 15 minutes (`BLOG_DESKS_INTERVAL_MS`) where the worker runs: the change feed of each Sources category the desks
 read is pulled (openvibe-publishing/ingest cursors in `blog_ingest_cursor`) into `blog_desk_items` (21 days; a removed
-item is dropped). An item new to Blog is dated by when Sources first saw it, a new revision by when Blog saw it, so the
+item is dropped); the budget-recipes desk asks OpenVibe.Food for the recipes added since the newest one Blog holds (the
+owner's "interconnect food with blog where it creates its own blogs"). An item new to Blog is dated by when Sources first saw it, a new revision by when Blog saw it, so the
 first pull never presents old items as new. When a desk's period is over, its newest items (40 at most) go to
 `blog.write_digest`; a section the AI did not cite is left out and said so, a run that cites nothing makes no post, and
 every cited item is linked under the post. The satire desk sends the next question of `server/desks/catalog.js` to

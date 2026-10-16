@@ -63,6 +63,7 @@ const LONG = Array.from({ length: 100 }, (_, i) => `w${i}`).join(' ');
             'server/auth/sso.js': 'Network JWKS, OAuth token and revoke (configured); dead after the SDK move',
             'server/changelog.js': 'Network registry (configured) and api.github.com (fixed host) for the repositories the registry names',
             'server/clients/community.js': 'OpenVibe.Community (configured)',
+            'server/desks/desks.js': 'OpenVibe.Food\'s recipe library feed (OV_FOOD_URL, configured; the budget-recipes desk)',
             'server/clients/media.js': 'OpenVibe.Media (configured)',
             'server/clients/network.js': 'OpenVibe.Network (configured)',
         };
