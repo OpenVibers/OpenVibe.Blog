@@ -65,6 +65,8 @@ function load(env = process.env) {
         aiUrl: trim(env.OV_AI_INTERNAL_URL || ''),
         // OpenVibe.Sources (sources.item.read): the items the AI desks write their digests from (server/desks/).
         sources: { internalUrl: trim(env.OV_SOURCES_INTERNAL_URL || ''), timeoutMs: int(env.BLOG_SOURCES_TIMEOUT_MS, 10000) },
+        // OpenVibe.Food's recipe library feed (/recipes/library.json, public): the budget-recipes desk. Empty = off.
+        food: { url: trim(env.OV_FOOD_URL || ''), timeoutMs: int(env.BLOG_FOOD_TIMEOUT_MS, 10000) },
         // The AI desks (server/desks/desks.js): pull, write and prune every intervalMs where the worker runs. Off with
         // BLOG_DESKS=off; the digests also need OV_SOURCES_INTERNAL_URL, every desk needs OV_AI_INTERNAL_URL.
         desks: { enabled: env.BLOG_DESKS !== 'off', intervalMs: Math.max(60_000, int(env.BLOG_DESKS_INTERVAL_MS, 15 * 60_000)) },

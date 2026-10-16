@@ -92,7 +92,8 @@ function createDesks({ config, store, fetchImpl = globalThis.fetch, log = consol
     const ai = createAiClient({ baseUrl: config.aiUrl, tokenClient: aiTokens, fetch: fetchImpl });
     const sourcesOn = Boolean(config.sources && config.sources.internalUrl && config.oauth.clientSecret);
     const cursor = ingest.createChangeCursor(db, { prefix: 'blog', now });
-    const wanted = new Set(catalog.DESKS.flatMap((d) => d.sources));
+    const wanted = new Set(catalog.DESKS.filter((d) => !d.feed).flatMap((d) => d.sources));
+    const foodOn = Boolean(config.food && config.food.url);
     const categories = [...new Set(catalog.DESKS.flatMap((d) => d.categories))];
     const clients = new Map(categories.map((cat) => [cat, ingest.createSourcesClient({ config: { ...config, sources: { ...config.sources, category: cat } }, fetchImpl, now })]));
     const stats = { lastPullAt: null, lastComposeAt: null, lastError: null, written: 0 };
@@ -137,6 +138,42 @@ function createDesks({ config, store, fetchImpl = globalThis.fetch, log = consol
         return { pulled };
     }
 
+    /**
+     * OpenVibe.Food's recipe library (the budget-recipes desk): the recipes added since the newest one Blog holds (or
+     * two weeks back), each as a desk item `food:<slug>` dated when Food added it.
+     */
+    async function pullFood() {
+        if (!foodOn) return 0;
+        const newest = await db.value("SELECT max(published_at) FROM blog_desk_items WHERE source_key = 'food-library'");
+        const since = newest || new Date(now() - 14 * 86_400_000).toISOString();
+        let res;
+        try {
+            res = await fetchImpl(`${config.food.url}/recipes/library.json?since=${encodeURIComponent(since)}&limit=100`, {
+                headers: { accept: 'application/json' }, signal: AbortSignal.timeout(config.food.timeoutMs || 10000),
+            });
+        } catch (err) {
+            stats.lastError = `pull food-library: ${err.message}`;
+            return 0;
+        }
+        if (!res.ok) { stats.lastError = `pull food-library: HTTP ${res.status}`; return 0; }
+        const body = await res.json().catch(() => ({}));
+        let n = 0;
+        for (const x of Array.isArray(body.recipes) ? body.recipes : []) {
+            if (!x || !x.slug || !x.title || !x.url || Number.isNaN(Date.parse(x.created_at))) continue;
+            const facts = [x.serves ? `Serves ${x.serves}` : null, x.minutes ? `about ${x.minutes} min` : null,
+                x.cost != null ? `$${Number(x.cost).toFixed(2)} to buy${x.cost_partial ? ' (some prices unknown)' : ''}` : null].filter(Boolean).join(', ');
+            const summary = [facts, Array.isArray(x.ingredients) && x.ingredients.length ? `Ingredients: ${x.ingredients.slice(0, 15).join(', ')}.` : null, x.reviewed ? 'Checked by a person.' : null].filter(Boolean).join(' ');
+            const at = Date.parse(x.created_at);
+            await db.query(`INSERT INTO blog_desk_items (item_id, source_key, title, url, summary, published_at, fields, revision, changed_at, updated_at)
+                            VALUES ($1, 'food-library', $2, $3, $4, $5, $6::jsonb, 1, $7, $8)
+                            ON CONFLICT (item_id) DO UPDATE SET title = excluded.title, summary = excluded.summary, fields = excluded.fields, updated_at = excluded.updated_at`,
+            [`food:${String(x.slug).slice(0, 100)}`, clean(x.title, 500), String(x.url).slice(0, 500), summary.slice(0, 2000), new Date(at).toISOString(),
+                JSON.stringify({ theme: clean(x.theme, 200), cost: x.cost, serves: x.serves, minutes: x.minutes, reviewed: Boolean(x.reviewed) }), at, now()]);
+            n++;
+        }
+        return n;
+    }
+
     // ── Posts ───────────────────────────────────────────────
 
     const shape = (r) => (r ? {
@@ -178,7 +215,7 @@ function createDesks({ config, store, fetchImpl = globalThis.fetch, log = consol
             const r = await ai.run('blog.write_digest', {
                 desk: desk.title, about: desk.about, period: label,
                 sources: items.map((it) => ({
-                    source_type: 'sources.item', source_id: it.item_id,
+                    source_type: desk.feed === 'food-library' ? 'food.recipe' : 'sources.item', source_id: it.item_id,
                     ...(it.url ? { url: it.url } : {}), ...(it.title ? { title: clean(it.title, 500) } : {}),
                     ...(it.published_at ? { published_at: String(it.published_at).slice(0, 40) } : {}),
                     snippet: snippetOf(it),
@@ -240,11 +277,10 @@ function createDesks({ config, store, fetchImpl = globalThis.fetch, log = consol
         if (!ai.enabled) return [];
         const out = [];
         const at = now();
-        if (sourcesOn) {
-            for (const desk of catalog.DESKS) {
-                const p = await writeDigest(desk, duePeriod(desk, at));
-                if (p) out.push(p);
-            }
+        for (const desk of catalog.DESKS) {
+            if (desk.feed === 'food-library' ? !foodOn : !sourcesOn) continue;
+            const p = await writeDigest(desk, duePeriod(desk, at));
+            if (p) out.push(p);
         }
         const p = await writeSatire(catalog.SATIRE, duePeriod(catalog.SATIRE, at));
         if (p) out.push(p);
@@ -262,6 +298,7 @@ function createDesks({ config, store, fetchImpl = globalThis.fetch, log = consol
         running = true;
         try {
             const p = await pull();
+            p.pulled += await pullFood();
             const written = await compose();
             await prune();
             return { ...p, written: written.length };
@@ -278,7 +315,7 @@ function createDesks({ config, store, fetchImpl = globalThis.fetch, log = consol
     return {
         enabled: Boolean(c.enabled && ai.enabled),
         stats,
-        pull, compose, tick, prune,
+        pull, pullFood, compose, tick, prune,
         /** Published posts of a desk, newest first (staff also see hidden ones). */
         async list(deskKey, { limit = 20, offset = 0, staff = false } = {}) {
             const states = staff ? ['published', 'hidden'] : ['published'];
