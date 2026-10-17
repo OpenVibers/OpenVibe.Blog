@@ -65,7 +65,7 @@ const H = (n) => n.toString(16).padStart(40, 'a');
         const post = await t.ctx.posts.get(r.post.id);
         assert.strictEqual(post.state, 'published');
         const head = await t.ctx.posts.head(post);
-        assert.strictEqual(head.fields.title, 'Patch notes: Recent tools in the launcher');
+        assert.match(head.fields.title, /^Patch notes: Recent tools in the launcher \([A-Z][a-z]{2} \d{1,2}\)$/, 'the day ends the title');
         assert.ok(head.content.includes('## Highlights') && head.content.includes('**OpenVibe.Tools:** Recent tools in the launcher'));
         assert.ok(head.content.includes('## OpenVibe.Live') && head.content.includes('Fix the chat scroll'));
         assert.strictEqual(head.meta.authorship.mode, 'imported');
@@ -80,7 +80,7 @@ const H = (n) => n.toString(16).padStart(40, 'a');
         assert.deepStrictEqual(j.entries.map((x) => x.subject).sort(), ['Recent tools in the launcher: anonymous and account history', 'Tidy the docs']);
         assert.ok(j.entries.every((x) => x.service === 'tools' && x.post_id));
         assert.ok(j.latest_post && /\/@openvibe\//.test(j.latest_post.url), 'the latest patch notes post, to link to');
-        assert.strictEqual(j.latest_post.title, 'Patch notes: Recent tools in the launcher');
+        assert.match(j.latest_post.title, /^Patch notes: Recent tools in the launcher \([A-Z][a-z]{2} \d{1,2}\)$/);
     });
 
     await check('a batch publishes without a major, but never sooner than the gap after the last post', async () => {
@@ -90,7 +90,7 @@ const H = (n) => n.toString(16).padStart(40, 'a');
         t.clock.advance(6 * 3600 * 1000 + 1000);
         const r = await cl.tick();
         assert.ok(r && r.post);
-        assert.ok((await t.ctx.posts.head(await t.ctx.posts.get(r.post.id))).fields.title.startsWith('Patch notes: 5 changes across 1 site'));
+        assert.ok((await t.ctx.posts.head(await t.ctx.posts.get(r.post.id))).fields.title.match(/^Patch notes: 5 changes across 1 site \([A-Z][a-z]{2} \d{1,2}\)$/));
     });
 
     await check('subjects are cut at a word; version bumps count as major', async () => {

@@ -244,7 +244,11 @@ function createChangelog({ config, store, blogs, posts, aiDrafts = null, fetchIm
         const to = day(list[list.length - 1].deployed_at);
         const sites = order.map(name);
         const lead = highlights[0] ? clean(highlights[0].subject.split(/[:.;(]/)[0], 70) : null;
-        const title = lead && lead.length >= 12 ? `Patch notes: ${lead}` : `Patch notes: ${list.length} changes across ${order.length} ${order.length === 1 ? 'site' : 'sites'}`;
+        // The day ends the title: titles made from the counts repeated ("Patch notes: 80 changes across 36 sites" three
+        // times by 2026-10-17), which search results and the feed cannot tell apart. The "Patch notes: " start stays
+        // (openvibe-shared/shipped.js strips it to show the rest).
+        const dayLabel = new Date(list[list.length - 1].deployed_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
+        const title = `Patch notes: ${lead && lead.length >= 12 ? lead : `${list.length} changes across ${order.length} ${order.length === 1 ? 'site' : 'sites'}`} (${dayLabel})`;
         const summary = clean(`What shipped on OpenVibe ${from === to ? `on ${from}` : `from ${from} to ${to}`}: ${list.length} ${list.length === 1 ? 'change' : 'changes'} to ${sites.slice(0, 6).join(', ')}${sites.length > 6 ? ` and ${sites.length - 6} more` : ''}.`, 400);
         const out = [`${summary} Every line below is a commit message from the OpenVibers repositories, linked to the change itself.`, ''];
         if (highlights.length) {
