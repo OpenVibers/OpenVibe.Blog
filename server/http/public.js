@@ -209,8 +209,14 @@ function createPublicRoutes(ctx) {
         if (pager.outOfRange && total) return notFound(req, res);
         const items = await reading.listItems(rows, { perBlogLinks: Boolean(blog) });
         const canonical = seo.canonicalUrl(config.baseUrl, pager.page === 1 ? path : `${path}?page=${pager.page}`, { query: ['page'] });
+        // The meta description adds how many posts and the newest titles: "Posts tagged ai on The OpenVibe blog." alone
+        // (37 characters) said the same of every tag, author and category page.
+        const newest = items.slice(0, 2).map((it) => String((it.rev && it.rev.fields && it.rev.fields.title) || '').trim()).filter(Boolean).map((t) => `“${t}”`);
+        const counted = total ? ` ${total} post${total === 1 ? '' : 's'}${newest.length ? `, newest ${newest.join(' and ')}` : ''}.` : '';
+        const fullText = `${intro}${counted}`;
+        const description = fullText.length <= 160 ? fullText : `${fullText.slice(0, 159).replace(/\s+\S*$/, '')}…`;
         send(req, res, 200, {
-            title: heading, description: intro, canonical,
+            title: heading, description, canonical,
             decision: pageDecision(canonical, { empty: total === 0, query: ['page'] }),
             theme: blog ? { slug: blog.theme, vars: blogs.themeVars(blog) } : null,
             prev: pager.prev ? pager.prev.href : null, next: pager.next ? pager.next.href : null,
