@@ -104,6 +104,10 @@ const LONG = Array.from({ length: 120 }, (_, i) => `word${i}`).join(' ');
         assert.match((await t.get('/sitemaps/blogs.xml')).text, /https:\/\/openvibe\.blog\/@alice</);
         assert.match((await t.get('/@alice/tags/astronomy')).text, /First light/);
         assert.match((await t.get('/tags/astronomy')).text, /First light/);
+        // A tag page's description counts its posts and names the newest, so no two tag pages read the same.
+        const tagDesc = ((await t.get('/@alice/tags/astronomy')).text.match(/<meta name="description" content="([^"]*)">/) || [])[1] || '';
+        assert.match(tagDesc, /^Posts tagged astronomy on .+\. \d+ posts?, newest “First light”/i, tagDesc);
+        assert.ok(tagDesc.length <= 160, tagDesc);
         assert.match((await t.get('/@alice/categories/science')).text, /First light/, 'parent category includes children');
         assert.match((await t.get('/@alice/authors/alice')).text, /First light/);
         assert.match((await t.get('/@alice/first-light.json')).text, /"body_markdown"/);
