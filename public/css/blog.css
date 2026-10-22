@@ -70,3 +70,51 @@ table.posts th, table.posts td { text-align: left; padding: 6px 8px; border-bott
 .page .sc-sec { margin-top: 36px; }
 .page .sc-sec + #posts { display: block; margin-top: 40px; }
 .page .sc-ic .ov-icon { --ovi-size: 28px !important; }
+
+/* The home (render/home.js): a wider column, the numbers beside the hero, post cards, the week by site, desks, topics. */
+body.blog-home .page { max-width: 1120px; }
+.bh-panel { padding: 18px; border: 1px solid var(--border, #1f2d47); border-radius: 16px; background: var(--bg-card, #131c2e); }
+.page .bh-panel-h { margin: 0 0 12px; font-size: 1rem; }
+.bh-stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin: 0; }
+.bh-stats div { display: flex; flex-direction: column-reverse; padding: 10px 12px; border: 1px solid var(--border, #1f2d47); border-radius: 12px; background: var(--bg-primary, #0a0f1c); }
+.bh-stats dt { font-size: 13px; line-height: 1.35; color: var(--text-secondary, #96a7c2); }
+.bh-stats dd { margin: 0; font-size: 1.55rem; font-weight: 800; line-height: 1.2; font-variant-numeric: tabular-nums; }
+.bh-sec .feeds { margin: 0 0 14px; font-size: .95rem; }
+.bh-cards, .bh-desks { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr)); }
+.bh-card, .bh-desks li { display: flex; flex-direction: column; min-width: 0; padding: 14px 16px; border: 1px solid var(--border, #1f2d47); border-radius: 14px; background: var(--bg-card, #131c2e); }
+.bh-card h3, .bh-desks h3 { margin: 0 0 4px; font-size: 1.05rem; line-height: 1.35; }
+.bh-card h3 a, .bh-desks h3 a { color: var(--text-primary, #e6edf7); text-decoration: none; }
+.bh-card h3 a:hover, .bh-desks h3 a:hover { text-decoration: underline; }
+.bh-card .meta, .bh-desks .meta { margin: 0; color: var(--text-secondary, #96a7c2); }
+.bh-sum { margin: 6px 0 0; font-size: .95rem; color: var(--text-secondary, #96a7c2); display: -webkit-box; -webkit-line-clamp: 3; line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.bh-card .tags { margin: auto 0 0; padding-top: 8px; font-size: .9rem; }
+.bh-desks .meta { margin-top: auto; padding-top: 8px; }
+.bh-desk { margin: 0 0 6px; font-size: .8rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--text-secondary, #96a7c2); }
+.bh-bars { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.bh-bars li { display: grid; grid-template-columns: minmax(0, 11rem) minmax(0, 1fr) auto; align-items: center; gap: 12px; font-size: .95rem; }
+.bh-bars a { overflow-wrap: anywhere; }
+.bh-bar { height: 10px; border-radius: 999px; background: var(--bg-tertiary, #172238); overflow: hidden; }
+.bh-bar span { display: block; height: 100%; border-radius: inherit; background: var(--accent, #3b82f6); }
+.bh-n { color: var(--text-secondary, #96a7c2); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.bh-more { margin: 14px 0 0; }
+.bh-chips { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+.bh-chips a { display: inline-flex; align-items: center; gap: 6px; padding: 5px 12px; border: 1px solid var(--border-light, #2c3d5c); border-radius: 999px; text-decoration: none; font-size: .95rem; }
+.bh-chips a:hover { border-color: var(--accent, #3b82f6); }
+.bh-chips span { color: var(--text-secondary, #96a7c2); font-size: .85rem; }
+.bh-faq details { border-bottom: 1px solid var(--border, #1f2d47); padding: 10px 0; }
+.bh-faq summary { cursor: pointer; font-weight: 600; }
+.bh-faq details p { margin: 8px 0 0; color: var(--text-secondary, #96a7c2); max-width: 760px; }
+.bh-links { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 240px), 1fr)); }
+.bh-links a { display: block; height: 100%; padding: 12px 14px; border: 1px solid var(--border, #1f2d47); border-radius: 12px; background: var(--bg-card, #131c2e); color: var(--text-primary, #e6edf7); text-decoration: none; }
+.bh-links a:hover { border-color: var(--accent, #3b82f6); }
+.bh-links b { display: block; }
+.bh-links small { display: block; color: var(--text-secondary, #96a7c2); font-size: .88rem; line-height: 1.45; }
+@media (max-width: 560px) {
+  .bh-bars li { grid-template-columns: minmax(0, 1fr) auto; }
+  .bh-bars .bh-bar { grid-column: 1 / -1; grid-row: 2; }
+  .bh-stats dd { font-size: 1.3rem; }
+  /* Phones: a post card is its title, date and tags (the titles say what is inside); desks keep their one-line dek. */
+  .bh-card { padding: 12px 14px; }
+  .bh-card .bh-sum { display: none; }
+  .bh-desks .bh-sum { -webkit-line-clamp: 2; line-clamp: 2; }
+}

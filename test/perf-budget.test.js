@@ -14,14 +14,14 @@ const { measure, check, format } = require('openvibe-shared/perf-budget');
 // 2026-09-29: the home opens with the showcase hero and features (six inline ring icons) and links the cached
 // /shared/showcase.css: measured html 26.2 KB (6.8 br), css 15.9 KB (4.0 br). Raised as a decision.
 const BUDGETS = {
-    htmlRawKB: 29,   // measured 17.4 (fresh database)
-    htmlBrotliKB: 7.5,   // 4.5
+    htmlRawKB: 36,   // 33.5 on 2026-10-22: the home's numbers panel, how-it-works steps, questions (and their FAQPage JSON-LD), links around the site and closing call; 17.4 (fresh database)
+    htmlBrotliKB: 9,   // 8.2 (2026-10-22 the richer home); 4.5
     jsFiles: 5,   // 5 (theme-loader, web-runtime, navbar, footer, boost: openvibe-shared/shell adds web-runtime, 2026-10-04)
     jsRawKB: 250,   // 246.2 with openvibe-shared 4.2.x (Ask Actor in the navbar, 2026-10-15); 239.1 (212.2 before openvibe-shared/shell's web-runtime.js)
     jsBrotliKB: 60,   // 59.1 with openvibe-shared 4.4.0 (every site in the launcher, 2026-10-17); 56.3 (49.9 before web-runtime.js)
     cssFiles: 2,   // 1
-    cssRawKB: 18.5,   // 17.7 (2026-10-15: blog.css carries the AI desks' few rules; the shared showcase.css grew to ~12 KB)
-    cssBrotliKB: 4.5,   // 1.4
+    cssRawKB: 24,   // 22 on 2026-10-22 (the home's post cards, week bars, desks, topics, questions and links); 17.7 (2026-10-15: blog.css carries the AI desks' few rules; the shared showcase.css grew to ~12 KB)
+    cssBrotliKB: 5.5,   // 5.1 (2026-10-22); 1.4
     externalFiles: 1,   // 0
 };
 

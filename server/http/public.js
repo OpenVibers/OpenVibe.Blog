@@ -26,12 +26,19 @@ const authorship = require('openvibe-publishing/authorship');
 const cache = require('openvibe-shared/cache-policy');
 const { renderPage, SITE_SUMMARY } = require('../render/layout');
 const pages = require('../render/pages');
+const homePage = require('../render/home');
+const { createHome } = require('../domain/home');
+
+// The home's own words in search results and share cards (the official blog's later pages keep the blog's).
+const HOME_TITLE = 'OpenVibe.Blog: start a blog, read what OpenVibe ships';
+const HOME_DESCRIPTION = 'Start a blog with drafts, scheduling, feeds and comments on your OpenVibe account. Read OpenVibe\'s patch notes and AI digests of the news.';
 const { csrfToken, checkCsrf } = require('../auth/forms');
 
 const PER_PAGE = 15;
 
 function createPublicRoutes(ctx) {
-    const { config, store, blogs, posts, publication, reading, people, community, media, access, entitlements, viewers, limits } = ctx;
+    const { config, store, blogs, posts, publication, reading, people, community, media, access, entitlements, viewers, limits, desks } = ctx;
+    const homeData = ctx.home || createHome({ store });
     const router = express.Router();
     router.use(viewers.middleware({ services: false }));
 
@@ -82,26 +89,6 @@ function createPublicRoutes(ctx) {
 
     // ── Blog front pages ────────────────────────────────────
 
-    /** The product's own words above the official blog's posts: only features Blog has today. */
-    function blogShowcase() {
-        return showcase.hero({
-            eyebrow: 'OpenVibe.Blog',
-            title: 'Write on', accent: 'OpenVibe',
-            lede: 'A blog of your own with drafts, scheduling, feeds and comments. Sign in once with your OpenVibe account; anyone can read without one.',
-            actions: [{ label: 'Start writing', href: '/write', primary: true }, { label: 'Read the OpenVibe blog', href: '#posts' }, { label: 'AI desks', href: '/desks' }],
-        }) + showcase.features({
-            title: 'What your blog gets',
-            items: [
-                { icon: 'ov:blog', title: 'Drafts and revisions', text: 'Every save is a revision you can go back to; publish when it is ready.' },
-                { icon: 'ov:history', title: 'Scheduling', text: 'Pick the minute a post goes live.' },
-                { icon: 'ov:news', title: 'Feeds', text: 'RSS, Atom and JSON Feed for every blog, series and category.' },
-                { icon: 'ov:community', title: 'Comments', text: 'Threads on OpenVibe.Community, moderated by you.' },
-                { icon: 'ov:theme', title: 'Your theme', text: 'Pick a theme preset and your blog wears it.' },
-                { icon: 'ov:vip', title: 'Members-only posts', text: 'Your OpenVibe.VIP members read the whole post; everyone else sees a teaser.' },
-            ],
-        }) + '<div id="posts"></div>';
-    }
-
     async function blogFront(req, res, blog, { home = false } = {}) {
         const page = pageNumber(req);
         const scope = await access.listingScope(store, req.viewer, blog);
@@ -125,6 +112,27 @@ function createPublicRoutes(ctx) {
         };
         const seriesShown = [];
         for (const sr of await blogs.series(blog)) if (await shows({ seriesId: sr.id })) seriesShown.push(sr);
+        const blogLd = blog.kind === 'official'
+            ? { '@context': 'https://schema.org', '@type': 'Blog', '@id': `${publication.abs(path)}#blog`, name: blog.title, url: publication.abs(path), description: blog.description || undefined, publisher: { '@type': 'Organization', name: 'OpenVibe', url: 'https://openvibe.network' } }
+            : { '@context': 'https://schema.org', '@type': 'Blog', '@id': `${publication.abs(path)}#blog`, name: blog.title, url: publication.abs(path), description: blog.description || undefined };
+        // The network's home (the official blog's first page): what OpenVibe.Blog is for, then everything it has to read.
+        if (home && pager.page === 1) {
+            const [stats, week, latestDesks, tags, memberRows, seriesCounts] = await Promise.all([
+                homeData.stats(), homeData.weekChanges(10), desks ? desks.latest() : new Map(), homeData.topTags(24), homeData.memberPosts(6),
+                Promise.all(seriesShown.map(async (sr) => ({ title: sr.title, url: `/@${blog.handle}/series/${encodeURIComponent(sr.slug)}`, posts: (await posts.listPublished({ blogId: blog.id, seriesId: sr.id, ...scope, limit: 1 })).total }))),
+            ]);
+            const memberItems = memberRows.length ? await reading.listItems(memberRows) : [];
+            return send(req, res, 200, {
+                title: blog.title, fullTitle: HOME_TITLE, description: HOME_DESCRIPTION, summary: SITE_SUMMARY,
+                decision: pageDecision(canonical, { empty: false, query: ['page'] }),
+                canonical, feeds, theme: { slug: blog.theme, vars: blogs.themeVars(blog) }, lang: blog.language,
+                next: pager.next ? pager.next.href : null,
+                jsonLd: [blogLd, ...homePage.homeJsonLd({ base: config.baseUrl.replace(/\/+$/, ''), items })],
+                styles: [showcase.STYLESHEET], bodyClass: 'blog-home',
+                body: homePage.homeBody({ blog, items, pager, feeds, stats, week, latestDesks, tags, series: seriesCounts, memberItems, signedIn: req.viewer.kind === 'user' })
+                    + frame.shipped({ service: 'blog', title: 'Recently shipped on OpenVibe.Blog' }),
+            }, { cacheable: !scope.restricted && !scope.restrictedAuthor });
+        }
         send(req, res, 200, {
             title: blog.title,
             description: blog.description,
@@ -137,17 +145,12 @@ function createPublicRoutes(ctx) {
             lang: blog.language,
             prev: pager.prev ? pager.prev.href : null,
             next: pager.next ? pager.next.href : null,
-            jsonLd: [blog.kind === 'official'
-                ? { '@context': 'https://schema.org', '@type': 'Blog', '@id': `${publication.abs(path)}#blog`, name: blog.title, url: publication.abs(path), description: blog.description || undefined, publisher: { '@type': 'Organization', name: 'OpenVibe', url: 'https://openvibe.network' } }
-                : { '@context': 'https://schema.org', '@type': 'Blog', '@id': `${publication.abs(path)}#blog`, name: blog.title, url: publication.abs(path), description: blog.description || undefined }],
-            // The network's blog home opens with what OpenVibe.Blog is for (openvibe-shared/showcase), then the posts.
-            ...(home && pager.page === 1 ? { styles: [showcase.STYLESHEET] } : {}),
-            body: (home && pager.page === 1 ? blogShowcase() : '') + pages.blogIndex({
+            jsonLd: [blogLd],
+            body: pages.blogIndex({
                 blog, blogUrl: `/@${blog.handle}`, items, pager, feeds,
                 series: seriesShown, categories: await prune(await reading.categoriesTree(blog)),
                 canWrite: await access.canWrite(store, req.viewer, blog, 'create'),
-                showcase: home && pager.page === 1,
-            }) + (home && pager.page === 1 ? frame.shipped({ service: 'blog', title: 'Recently shipped on OpenVibe.Blog' }) : ''),
+            }),
         }, { cacheable: !scope.restricted && !scope.restrictedAuthor });
     }
 
