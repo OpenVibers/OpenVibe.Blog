@@ -79,7 +79,8 @@ function renderPage(o) {
         site: 'blog',
         siteName: SITE_NAME,
         lang: o.lang,
-        title: o.title ? `${o.title} · ${SITE_NAME}` : SITE_NAME,
+        // fullTitle: a page whose title already names the site (the home); everything else is "<page> · OpenVibe.Blog".
+        title: o.fullTitle || (o.title ? `${o.title} · ${SITE_NAME}` : SITE_NAME),
         description: o.description || 'The official OpenVibe blog and a blog for every member.',
         canonical: o.canonical,
         decision: o.decision,

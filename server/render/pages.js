@@ -57,10 +57,10 @@ function feedLinksHtml(feeds) {
     return h`<p class="feeds">Follow: ${feeds.map((f) => h`<a href="${f.href}" type="${f.mime}">${f.label}</a> `)}</p>`;
 }
 
-/** A blog's front page. Under the network blog's showcase (its hero is the page's h1) the blog's title is an h2. */
-function blogIndex({ blog, blogUrl, items, pager, feeds, series, categories, canWrite, showcase = false }) {
+/** A blog's front page (the network's home, the official blog's first page, is render/home.js). */
+function blogIndex({ blog, blogUrl, items, pager, feeds, series, categories, canWrite }) {
     return String(h`<header class="blog-header">
-${showcase ? h`<h2>${blog.title}</h2>` : h`<h1>${blog.title}</h1>`}
+<h1>${blog.title}</h1>
 ${blog.description ? h`<p class="lede">${blog.description}</p>` : ''}
 ${raw(feedLinksHtml(feeds))}
 ${canWrite ? h`<p><a class="button" href="/write/@${blog.handle}">Write on this blog</a></p>` : ''}

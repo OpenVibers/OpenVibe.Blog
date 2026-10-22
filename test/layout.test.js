@@ -67,7 +67,7 @@ const split = (html) => ({ head: html.slice(0, html.indexOf('</head>')), body: h
         assert.strictEqual(count(home, /<title>/g), 1);
         assert.ok(home.includes('<link rel="canonical" href="https://openvibe.blog/">'));
         // The home carries the Blog JSON-LD and, since llms-full.txt, the site summary's WebPage JSON-LD.
-        assert.deepStrictEqual([...home.matchAll(/<script type="application\/ld\+json">(.*?)<\/script>/g)].map((m) => JSON.parse(m[1])['@type']), ['Blog', 'WebPage']);
+        assert.deepStrictEqual([...home.matchAll(/<script type="application\/ld\+json">(.*?)<\/script>/g)].map((m) => JSON.parse(m[1])['@type']), ['Blog', 'WebSite', 'FAQPage', 'WebPage'], 'the Blog, the site, the questions shown (no posts yet: no ItemList) and the AI summary');
         assert.match(home, /<meta name="ai-summary" content="[^"]+">/, 'the AI summary head');
         assert.ok(home.includes('<link rel="alternate" type="application/atom+xml" href="/atom.xml" title="The OpenVibe blog (Atom)">'));
         assert.ok(home.includes('<link rel="alternate" type="application/feed+json" href="/feed.json" title="The OpenVibe blog (JSON Feed)">'));
