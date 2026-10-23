@@ -17,7 +17,7 @@ const BUDGETS = {
     htmlRawKB: 36,   // 33.5 on 2026-10-22: the home's numbers panel, how-it-works steps, questions (and their FAQPage JSON-LD), links around the site and closing call; 17.4 (fresh database)
     htmlBrotliKB: 9,   // 8.2 (2026-10-22 the richer home); 4.5
     jsFiles: 5,   // 5 (theme-loader, web-runtime, navbar, footer, boost: openvibe-shared/shell adds web-runtime, 2026-10-04)
-    jsRawKB: 250,   // 246.2 with openvibe-shared 4.2.x (Ask Actor in the navbar, 2026-10-15); 239.1 (212.2 before openvibe-shared/shell's web-runtime.js)
+    jsRawKB: 256,   // 254.1 with openvibe-shared 4.9.0 (status text twins in every theme, 2026-10-23); 246.2 with openvibe-shared 4.2.x (Ask Actor in the navbar, 2026-10-15); 239.1 (212.2 before openvibe-shared/shell's web-runtime.js)
     jsBrotliKB: 60,   // 59.1 with openvibe-shared 4.4.0 (every site in the launcher, 2026-10-17); 56.3 (49.9 before web-runtime.js)
     cssFiles: 2,   // 1
     cssRawKB: 24,   // 22 on 2026-10-22 (the home's post cards, week bars, desks, topics, questions and links); 17.7 (2026-10-15: blog.css carries the AI desks' few rules; the shared showcase.css grew to ~12 KB)
