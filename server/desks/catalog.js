@@ -16,8 +16,8 @@
 const DESKS = [
     {
         key: 'news', title: 'News digest', every: 'day', hour: 6, min: 3, max: 40,
-        about: 'What governments and space agencies announced the day before: GOV.UK, the European Commission press corner and NASA.',
-        categories: ['news'], sources: ['govuk-news', 'eu-press-corner', 'nasa-news-releases', 'noaa-news'],
+        about: 'What governments and their agencies announced the day before: GOV.UK, the European Commission press corner, NASA, the CDC, NIST and the Federal Reserve Board.',
+        categories: ['news'], sources: ['govuk-news', 'eu-press-corner', 'nasa-news-releases', 'noaa-news', 'cdc-newsroom', 'nist-news', 'federal-reserve-press'],
     },
     {
         key: 'food', title: 'Food safety digest', every: 'day', hour: 6, min: 1, max: 30,
