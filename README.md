@@ -166,7 +166,7 @@ indexed (`noindex`, not in the sitemaps).
 
 | Desk | Sources (OpenVibe.Sources keys) | When |
 |---|---|---|
-| News digest | `govuk-news`, `eu-press-corner`, `nasa-news-releases`, `noaa-news` | daily, 06:00 UTC, for the day before (3 items at least) |
+| News digest | `govuk-news`, `eu-press-corner`, `nasa-news-releases`, `noaa-news`, `cdc-newsroom`, `nist-news`, `federal-reserve-press` | daily, 06:00 UTC, for the day before (3 items at least) |
 | Food safety digest | `fda-food-recalls` | daily, 06:00 UTC (1 item at least) |
 | Deals digest | `dealnews-daily` | daily, 07:00 UTC (5 items at least) |
 | Hosting digest | `linode-types`, `aws-lightsail-bundles`, `ovhcloud-vps`, `vultr-plans`, `lowendbox-posts`, `lowendtalk-offers` | Mondays, for the week before |
