@@ -175,7 +175,8 @@ async function createApp(opts = {}) {
     app.get('/api/ready', readiness.handler);
 
     // ── Sign-in (OAuth2 client of OpenVibe.Network) ─────────
-    app.use('/auth/', rateLimit({ windowMs: 15 * 60_000, max: 60, standardHeaders: true, legacyHeaders: false }));
+    // /auth/me is the navbar's who-is-signed-in read on every page, so it is not counted with sign-ins: 60 page views in 15 minutes made a signed-in visitor look signed out.
+    app.use('/auth/', rateLimit({ windowMs: 15 * 60_000, max: 60, skip: (req) => req.path === '/me', standardHeaders: true, legacyHeaders: false }));
     // /auth/me: the shared navbar probes it on every page view, so a guest is a signed-out answer (200
     // { user: null }), not a 401. The SDK router's own /me answers 401 for an absent session; this route,
     // registered first, keeps Blog's contract and marks the answer private / no-store.
