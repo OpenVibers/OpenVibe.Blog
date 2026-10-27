@@ -54,6 +54,10 @@ const split = (html) => ({ head: html.slice(0, html.indexOf('</head>')), body: h
         assert.ok(body.includes('OpenVibeFooter.init(window.__OV_PAGE.footer)'), 'the footer is initialised');
         assert.ok(/<main id="main" class="page blog-surface" style="--[^"]+" data-blog-theme="paper">/.test(body), 'the theme preset stays on the content surface');
         assert.strictEqual(count(r.text, /<main\b/g), 1, 'one <main>');
+        // vibe is the network's default: a blog on it follows the reader's OpenVibe theme, so no colours are pinned.
+        const { renderPage } = require('../server/render/layout');
+        const vibe = renderPage({ decision: { robots: 'index, follow' }, config: { baseUrl: 'https://openvibe.blog' }, body: 'x', theme: { slug: 'vibe', vars: {} } });
+        assert.ok(vibe.includes('<main id="main" class="page blog-surface" data-blog-theme="vibe">'), 'vibe pins no colours');
     });
 
     await check('the editor stays noindex; the home page keeps its feeds, the Blog JSON-LD and the AI summary', async () => {

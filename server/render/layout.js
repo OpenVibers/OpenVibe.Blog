@@ -71,7 +71,8 @@ function renderPage(o) {
         notificationsRealtime: true,             // the bell hears new notifications over OpenVibe.Events (Shared 1.22.0)
     };
     const footer = { service: 'blog', variant: 'full', mount: '#ov-footer', brandName: SITE_NAME, updates: '/updates' };
-    const style = o.theme ? ` style="${esc(themeStyle(o.theme.vars))}" data-blog-theme="${esc(o.theme.slug)}"` : '';
+    const vars = o.theme ? themeStyle(o.theme.vars) : '';
+    const style = o.theme ? `${vars ? ` style="${esc(vars)}"` : ''} data-blog-theme="${esc(o.theme.slug)}"` : '';
     const account = signedIn
         ? `<a href="/write">Write</a> · <a href="/auth/logout?next=${loginNext}">Sign out</a>`
         : `<a href="/auth/login?next=${loginNext}">Sign in with OpenVibe</a>`;
