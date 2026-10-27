@@ -125,8 +125,15 @@ function createBlogs({ store, config }) {
             return await q.byId.get(blog.id);
         },
 
-        /** CSS custom properties of the blog's preset, for its content surface. */
-        themeVars(blog) { return (THEMES[blog.theme] || THEMES.vibe).variables; },
+        /**
+         * CSS custom properties of the blog's preset, for its content surface. `vibe` is the network's own default: a
+         * blog that keeps it follows whatever theme the reader has on OpenVibe (a season's colours included) instead of
+         * pinning vibe's values, so the official blog's front page matches every other site.
+         */
+        themeVars(blog) {
+            if (!THEMES[blog.theme] || blog.theme === 'vibe') return {};
+            return THEMES[blog.theme].variables;
+        },
 
         async feedSettings(blog) { return await q.feed.get(blog.id) || { blog_id: blog.id, rss: 1, atom: 1, json: 1, item_count: 20, full_content: 1 }; },
 
