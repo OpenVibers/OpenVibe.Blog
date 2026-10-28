@@ -70,7 +70,7 @@ function renderPage(o) {
         logoutUrl: '/auth/logout?next={path}',   // Sign out in the shared navbar ends this site's session too
         notificationsRealtime: true,             // the bell hears new notifications over OpenVibe.Events (Shared 1.22.0)
     };
-    const footer = { service: 'blog', variant: 'full', mount: '#ov-footer', brandName: SITE_NAME, updates: '/updates' };
+    const footer = { service: 'blog', variant: 'auto', path: o.path, mount: '#ov-footer', brandName: SITE_NAME, updates: '/updates' };   // full on the front page only (Shared 4.19)
     const vars = o.theme ? themeStyle(o.theme.vars) : '';
     const style = o.theme ? `${vars ? ` style="${esc(vars)}"` : ''} data-blog-theme="${esc(o.theme.slug)}"` : '';
     const account = signedIn
