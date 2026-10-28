@@ -309,7 +309,7 @@ Called elsewhere, as the service principal `blog`: `identity.subject.resolve` an
   `openvibe-sdk/db`; Valkey holds the per-actor limit counters (optional: without `VALKEY_URL` they count per process).
 - **Packages** (all pinned by release tarball): `openvibe-publishing` v1.4.1 (async PostgreSQL stores: revisions,
   schedule, taxonomy, citations, media, discussion, seo, authorship, index-hooks, ssr, layout), `openvibe-contracts`
-  v0.97.0, `openvibe-shared` v4.22.0 (Frame, app icon, footer, legal, release, metrics, ready, theme presets),
+  v0.97.0, `openvibe-shared` v4.23.0 (Frame, app icon, footer, legal, release, metrics, ready, theme presets),
   `openvibe-sdk` v0.35.0 (sso, db, PostgreSQL events outbox, service tokens, per-actor limits, testing).
 - **OpenVibe.Network:**
   - SSO: the OAuth client `blog` is already seeded with redirect
@@ -520,6 +520,6 @@ Part of the [OpenVibe network](https://openvibe.network). Built in the open by [
 <!-- versions:start -->
 - openvibe-contracts: v0.222.0
 - openvibe-sdk: v0.67.0
-- openvibe-shared: v4.22.0
+- openvibe-shared: v4.23.0
 - openvibe-publishing: v1.4.1
 <!-- versions:end -->
