@@ -47,7 +47,7 @@ function createEditorRoutes(ctx) {
             // A gated page answers on this origin, noindex, instead of bouncing to sign-in: a crawler
             // that followed the redirect read openvibe.network's canonical as this page's. The page
             // links to sign-in, so a person is one click from where the redirect used to take them.
-            if (req.method === 'GET') return publicRoutes.messagePage(req, res, 401, 'Sign in to write', 'The editor is for OpenVibe accounts. Sign in and you come straight back here.', { href: `/auth/login?next=${encodeURIComponent(req.originalUrl)}`, label: 'Sign in with OpenVibe' });
+            if (req.method === 'GET') return publicRoutes.messagePage(req, res, 401, 'Sign in to write', 'The editor is for OpenVibe accounts. Sign in and you come straight back here.', { href: `/auth/login?next=${encodeURIComponent(req.path)}`, label: 'Sign in with OpenVibe' });
             return publicRoutes.messagePage(req, res, 401, 'Sign in first', 'Your session ended. Sign in and try again.', { href: `/auth/login?next=${encodeURIComponent('/write')}`, label: 'Sign in' });
         }
         if (!req.viewer.subject) return publicRoutes.messagePage(req, res, 403, 'Account not ready', 'Your OpenVibe sign-in did not include an account id. Sign out and in again.');
