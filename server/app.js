@@ -209,6 +209,9 @@ async function createApp(opts = {}) {
     }));
 
     // ── API ─────────────────────────────────────────────────
+    // GET /openapi.json: the API document, generated from the table the /api/v1 router mounts (http/openapi.js).
+    // Mounted before the API router, whose last layer answers 404 for anything it does not serve.
+    require('./http/openapi').mount(app);
     app.use('/api/v1', rateLimit({ windowMs: 60_000, max: 240, standardHeaders: true, legacyHeaders: false }), createApi(ctx));
 
     // ── Discovery, editor, public pages ─────────────────────
