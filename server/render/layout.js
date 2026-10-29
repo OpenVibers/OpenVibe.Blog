@@ -54,7 +54,9 @@ function renderPage(o) {
     if (!o.decision) throw new TypeError('renderPage needs the gate decision');
     const viewer = o.viewer || { kind: 'anonymous' };
     const signedIn = viewer.kind === 'user';
-    const loginNext = encodeURIComponent(o.path || '/');
+    // The path only: o.path can be the whole requested URL, and a sign-in link that echoed its query would put
+    // a page's words into every page of the site, including the 401 a signed-out visitor sees (SEO-7 review).
+    const loginNext = encodeURIComponent(String(o.path || '/').split('?')[0] || '/');
     const nav = {
         service: 'blog',
         apiBase: NETWORK_URL,
