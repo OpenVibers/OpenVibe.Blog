@@ -111,6 +111,9 @@ function renderPage(o) {
         body: o.body,
         mainClass: 'page blog-surface',
         bodyClass: o.bodyClass,
+        // The discovery tags of the page's Markdown twin (public.js's send adds them; renderDocument has no
+        // agentLayer switch).
+        head: o.head,
     });
     // A blog's theme preset applies to its content surface only: the custom properties and the preset's
     // slug stay on <main> (the layout writes that tag before any page body, so the first match is it).
