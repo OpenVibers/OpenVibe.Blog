@@ -16,13 +16,26 @@ const idFrom = (location) => (location.match(/\/write\/posts\/(pst_[0-9A-Z]+)/) 
     const csrf = t.csrf(eve);
     let postId;
 
-    await check('the editor sends a signed-out browser to Network sign-in', async () => {
+    await check('the editor answers a signed-out browser here, noindex, and links to Network sign-in', async () => {
         const r = await t.get('/write');
-        assert.strictEqual(r.status, 303);
-        assert.strictEqual(r.headers.get('location'), '/auth/login?next=%2Fwrite');
+        assert.strictEqual(r.status, 401);
+        assert.match(r.headers.get('x-robots-tag'), /noindex/);
+        assert.match(r.text, /<meta name="robots" content="noindex, nofollow">/);
+        assert.match(r.text, /href="\/auth\/login\?next=%2Fwrite"/, 'one click from signing in');
+        // The rule (SEO-7): a gated page never names another origin as its canonical, so a crawler that
+        // reads this page is not told the Network login page is the page it asked for.
+        const canon = (/<link rel="canonical" href="([^"]+)"/.exec(r.text) || [])[1];
+        assert.ok(!canon || new URL(canon).origin === 'https://openvibe.blog', `canonical ${canon}`);
         const login = await t.get('/auth/login?next=/write');
         assert.strictEqual(login.status, 302);
         assert.match(login.headers.get('location'), /\/oauth\/authorize\?.*client_id=blog/);
+    });
+
+    await check('a public page still keeps its own canonical', async () => {
+        const r = await t.get('/');
+        assert.strictEqual(r.status, 200);
+        assert.match(r.text, /<link rel="canonical" href="https:\/\/openvibe\.blog\/"/);
+        assert.doesNotMatch(r.text, /<meta name="robots" content="noindex/);
     });
 
     await check('first use: the start form creates the member blog', async () => {
