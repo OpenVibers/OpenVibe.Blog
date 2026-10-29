@@ -219,6 +219,23 @@ async function createApp(opts = {}) {
     app.use(require('./desks/routes').createDeskRoutes(ctx));
     const publicRoutes = createPublicRoutes(ctx);
     ctx.publicRoutes = publicRoutes;
+    // The agent layer (openvibe-shared/agent-layer): /.well-known/agent.json, and the Markdown twins of the
+    // public pages. Gated to the manifest and twin requests only, so a browser (signed in or not) keeps the
+    // page its own route renders; the twins are rendered signed out through the same public router.
+    {
+        const agentRouter = express.Router();
+        require('openvibe-shared/agent-layer').mount(agentRouter, {
+            descriptor: require('./agent-descriptor'),
+            render: require('./agent-pages').createAgentPages({ router: publicRoutes.router, host: new URL(config.baseUrl).hostname }).renderPublicPage,
+        });
+        app.use((req, res, next) => {
+            // The manifest exactly: the rest of /.well-known/ (security.txt) belongs to the app.
+            if (req.path === '/.well-known/agent.json') return agentRouter(req, res, next);
+            if (String(req.path || '').endsWith('.md') || (req.query && req.query.format === 'markdown')
+                || req.accepts(['html', 'text/markdown']) === 'text/markdown') return agentRouter(req, res, next);
+            return next();
+        });
+    }
     app.use('/write', rateLimit({ windowMs: 60_000, max: 120, standardHeaders: true, legacyHeaders: false }), createEditorRoutes({ ...ctx, publicRoutes }));
     app.use(publicRoutes.router);
     app.use((req, res) => publicRoutes.notFound(req, res));

@@ -55,6 +55,7 @@ function createDiscoveryRoutes({ config, store, blogs, publication, reading }) {
             '# public posts, feeds and sitemaps. Drafts, the editor, sign-in and the API are not for crawling.',
             '# Pages decide their own indexability (meta robots / X-Robots-Tag); a Disallow is not a noindex.',
             sharedSeo.robotsTxt({ sitemaps: [abs('/sitemap.xml')], disallow: ['/write', '/auth/', '/api/'] }),
+            `# Agent manifest: ${abs('/.well-known/agent.json')}`,
         ].join('\n');
         res.type('text/plain').set('Cache-Control', cache.htmlHeaders({ maxAge: 3600 })).send(body);
     });
