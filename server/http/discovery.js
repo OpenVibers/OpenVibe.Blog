@@ -21,6 +21,9 @@ const sharedSeo = require('openvibe-shared/seo');
 const cache = require('openvibe-shared/cache-policy');
 const { SITE_SUMMARY } = require('../render/layout');
 
+// The date /.well-known/security.txt must be refreshed by: one year on, a person re-reads and re-commits it.
+const SECURITY_EXPIRES = '2027-10-29T00:00:00.000Z';
+
 function createDiscoveryRoutes({ config, store, blogs, publication, reading }) {
     const router = express.Router();
     const { db } = store;
@@ -54,6 +57,21 @@ function createDiscoveryRoutes({ config, store, blogs, publication, reading }) {
             sharedSeo.robotsTxt({ sitemaps: [abs('/sitemap.xml')], disallow: ['/write', '/auth/', '/api/'] }),
         ].join('\n');
         res.type('text/plain').set('Cache-Control', cache.htmlHeaders({ maxAge: 3600 })).send(body);
+    });
+
+    // /.well-known/security.txt (RFC 9116, SEO-30). Contact, Expires and Canonical are required; Canonical is
+    // this site's own, from the config, never a constant. Policy is listed only while
+    // https://openvibe.network/security answers 200 (checked 2026-10-29). Expires is the date the file must be
+    // refreshed by: one year on, a person re-reads and re-commits it.
+    router.get('/.well-known/security.txt', (_req, res) => {
+        res.type('text/plain; charset=utf-8').set('Cache-Control', 'public, max-age=86400').send([
+            'Contact: mailto:security@openvibe.network',
+            `Expires: ${SECURITY_EXPIRES}`,
+            'Preferred-Languages: en',
+            `Canonical: ${abs('/.well-known/security.txt')}`,
+            'Policy: https://openvibe.network/security',
+            '',
+        ].join('\n'));
     });
 
     router.get('/llms.txt', async (_req, res) => {

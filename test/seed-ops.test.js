@@ -82,6 +82,25 @@ const { seedOfficialPost, loadFacts, SLUG } = require('../server/seed');
         assert.match(idx, /sitemaps\/posts\.xml/);
     });
 
+    await check('security.txt: RFC 9116, canonical to this site, valid for a year', async () => {
+        const r = await t.get('/.well-known/security.txt');
+        assert.strictEqual(r.status, 200);
+        assert.strictEqual(r.headers.get('content-type'), 'text/plain; charset=utf-8');
+        assert.strictEqual(r.headers.get('cache-control'), 'public, max-age=86400');
+        const fields = new Map();
+        for (const line of r.text.split('\n')) if (line.trim()) {
+            const m = line.match(/^([A-Za-z-]+): (.+)$/);
+            assert.ok(m, `every security.txt line is "Name: value" (got "${line}")`);
+            fields.set(m[1], m[2]);
+        }
+        for (const key of ['Contact', 'Expires', 'Preferred-Languages', 'Canonical', 'Policy']) assert.ok(fields.has(key), `security.txt names ${key}`);
+        assert.strictEqual(fields.get('Contact'), 'mailto:security@openvibe.network');
+        assert.ok(Date.parse(fields.get('Expires')) > Date.now(), 'Expires is in the future');
+        const canonical = new URL(fields.get('Canonical'));
+        assert.strictEqual(canonical.host, 'openvibe.blog', 'Canonical is this site\'s own host');
+        assert.strictEqual(canonical.pathname, '/.well-known/security.txt');
+    });
+
     await check('llms-full.txt lists only indexable posts as summary text, within maxBytes, never the body', async () => {
         const full = await t.get('/llms-full.txt');
         assert.strictEqual(full.status, 200);
