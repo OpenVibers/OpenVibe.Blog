@@ -118,3 +118,23 @@ body.blog-home .page { max-width: 1120px; }
   .bh-card .bh-sum { display: none; }
   .bh-desks .bh-sum { -webkit-line-clamp: 2; line-clamp: 2; }
 }
+
+/* Phones (2026-10-29): a taste and a door. Six posts and a link to the whole blog, five sites in the week, the desks in
+   one sideways row, twelve topics; every list is a link away. */
+.bh-all { display: none; }
+.bh-fold { border: 1px solid var(--border, #1f2d47); border-radius: 14px; background: var(--bg-card, #131c2e); }
+.bh-fold > summary { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 48px; padding: 0 16px; cursor: pointer; font-weight: 700; list-style: none; }
+.bh-fold > summary::-webkit-details-marker { display: none; }
+.bh-fold > summary span { color: var(--text-muted, #7386a3); font-weight: 600; font-size: .86rem; text-align: right; }
+.bh-fold > summary:focus-visible { outline: 2px solid var(--accent, #3b82f6); outline-offset: -2px; border-radius: 14px; }
+.bh-fold .sc-sec { margin: 0; max-width: none; padding: 0 16px 16px; }
+.bh-fold-go { margin: 0; padding: 0 16px 18px; }
+@media (max-width: 599px) {
+  #posts .bh-cards > li:nth-child(n+7), #posts .ov-pagination { display: none; }
+  #posts .bh-all { display: block; }
+  .bh-bars > li:nth-child(n+6), .bh-chips > li:nth-child(n+13) { display: none; }
+  .bh-desks { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; scroll-padding-inline: 16px; scrollbar-width: none; gap: 10px; margin-left: -16px; margin-right: -16px; padding: 0 16px 4px; }
+  .bh-desks::-webkit-scrollbar { display: none; }
+  .bh-desks > li { flex: 0 0 84%; min-width: 0; scroll-snap-align: start; }
+  .bh-fold > summary span { display: none; }
+}
