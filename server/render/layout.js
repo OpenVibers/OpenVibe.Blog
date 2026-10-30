@@ -113,7 +113,8 @@ function renderPage(o) {
         bodyClass: o.bodyClass,
         // The discovery tags of the page's Markdown twin (public.js's send adds them; renderDocument has no
         // agentLayer switch).
-        head: o.head,
+        // The rules that show the picked item of a pick list are written for the page, because there is one per item.
+        head: [o.head, ...(o.inlineStyles || []).map((css) => `<style>${css}</style>`)].filter(Boolean).join('\n'),
     });
     // A blog's theme preset applies to its content surface only: the custom properties and the preset's
     // slug stay on <main> (the layout writes that tag before any page body, so the first match is it).
