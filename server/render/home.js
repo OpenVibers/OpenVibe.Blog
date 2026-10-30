@@ -9,6 +9,9 @@ const showcase = require('openvibe-shared/showcase');
 const catalog = require('../desks/catalog');
 
 const { html: h, raw } = ssr;
+// The short home (the owner's rule, 2026-10-30): the lists of the same kind are one pick block, a row of chips picks
+// one of them, and the parts a reader rarely needs are folds.
+const { pickList, foldBlock } = require('./short');
 const dateLabel = (v) => (v ? new Date(v).toISOString().slice(0, 10) : null);
 const time = (v) => raw(ssr.timeTag(v == null ? null : new Date(v).toISOString(), { label: dateLabel(v) || undefined }));
 const num = (n) => Number(n || 0).toLocaleString('en-US');
@@ -68,17 +71,33 @@ function homeBody(o) {
 ${blog.description ? h`<p class="sc-lede">${blog.description}</p>` : ''}
 ${feeds.length ? h`<p class="feeds">Follow: ${feeds.map((f) => h`<a href="${f.href}" type="${f.mime}">${f.label}</a> `)}</p>` : ''}
 ${items.length ? h`<ol class="bh-cards">${items.map(postCard)}</ol>${raw(ssr.paginationHtml(pager))}<p class="bh-more bh-all"><a href="/@${blog.handle}">Every post, newest first</a></p>` : h`<p class="empty">Nothing published here yet.</p>`}</section>
-${week.length ? h`<section class="sc-sec bh-sec" aria-labelledby="bh-week-h"><h2 id="bh-week-h">This week across OpenVibe</h2>
+${week.length ? raw(pickList({
+    key: 'week',
+    label: 'This week across OpenVibe',
+    head: 'This week across OpenVibe',
+    labels: week.map((w) => siteName(w.service)),
+    html: h`<section class="sc-sec bh-sec" aria-labelledby="bh-week-h"><h2 id="bh-week-h">This week across OpenVibe</h2>
 <p class="sc-lede">${plural(stats.weekChanges, 'change')} shipped to ${plural(stats.weekSites, 'site')} in the last seven days. Patch notes on this blog round them up.</p>
-<ol class="bh-bars">${week.map((w) => h`<li><a href="https://openvibe.network/updates?site=${encodeURIComponent(w.service)}">${siteName(w.service)}</a><span class="bh-bar" aria-hidden="true"><span style="width:${String(Math.max(2, Math.round((w.changes / top) * 100)))}%"></span></span><span class="bh-n">${plural(w.changes, 'change')}</span></li>`)}</ol>
-<p class="bh-more"><a href="https://openvibe.network/updates">Every change, as it ships</a>${series.length ? h` · <a href="${series[0].url}">${series[0].title}</a>` : ''}</p></section>` : ''}
-${desks.length ? h`<section class="sc-sec bh-sec" aria-labelledby="bh-desks-h"><h2 id="bh-desks-h">From the AI desks</h2>
+<ol class="bh-bars pick-list">${week.map((w, i) => h`<li data-i="${i}"><a href="https://openvibe.network/updates?site=${encodeURIComponent(w.service)}">${siteName(w.service)}</a><span class="bh-bar" aria-hidden="true"><span style="width:${String(Math.max(2, Math.round((w.changes / top) * 100)))}%"></span></span><span class="bh-n">${plural(w.changes, 'change')}</span></li>`)}</ol>
+<p class="bh-more"><a href="https://openvibe.network/updates">Every change, as it ships</a>${series.length ? h` · <a href="${series[0].url}">${series[0].title}</a>` : ''}</p></section>`,
+})) : ''}
+${desks.length ? raw(pickList({
+    key: 'desks',
+    label: 'From the AI desks',
+    head: 'From the AI desks',
+    labels: desks.map(({ desk }) => desk.title),
+    html: h`<section class="sc-sec bh-sec" aria-labelledby="bh-desks-h"><h2 id="bh-desks-h">From the AI desks</h2>
 <p class="sc-lede">Daily and weekly digests of what public sources published, every item linked, plus a satire column. Written by AI and not reviewed by a person; kept out of search engines.</p>
-<ul class="bh-desks">${desks.map(({ desk, post }) => h`<li><p class="bh-desk">${desk.title} <span class="badge">${desk.satire ? 'Satire' : 'AI'}</span></p><h3><a href="/desks/${desk.key}/${post.slug}">${post.title}</a></h3>${post.dek ? h`<p class="bh-sum">${post.dek}</p>` : ''}<p class="meta">${time(post.published_at)} · <a href="/desks/${desk.key}">More from this desk</a></p></li>`)}</ul>
-<p class="bh-more"><a href="/desks">Every desk and its feed</a></p></section>` : ''}
-${tags.length ? h`<section class="sc-sec bh-sec" aria-labelledby="bh-tags-h"><h2 id="bh-tags-h">Topics</h2><p class="sc-lede">Tags across every public post, with how many posts carry each.</p>
+<ul class="bh-desks pick-list">${desks.map(({ desk, post }, i) => h`<li data-i="${i}"><p class="bh-desk">${desk.title} <span class="badge">${desk.satire ? 'Satire' : 'AI'}</span></p><h3><a href="/desks/${desk.key}/${post.slug}">${post.title}</a></h3>${post.dek ? h`<p class="bh-sum">${post.dek}</p>` : ''}<p class="meta">${time(post.published_at)} · <a href="/desks/${desk.key}">More from this desk</a></p></li>`)}</ul>
+<p class="bh-more"><a href="/desks">Every desk and its feed</a></p></section>`,
+})) : ''}
+${tags.length ? raw(foldBlock({
+    id: 'topics',
+    head: '<h2 id="bh-tags-h">Topics</h2>',
+    html: h`<section class="sc-sec bh-sec" aria-labelledby="bh-tags-h"><h2>Topics</h2><p class="sc-lede">Tags across every public post, with how many posts carry each.</p>
 <ul class="bh-chips">${tags.map((t) => h`<li><a href="/tags/${encodeURIComponent(t.slug)}">#${t.name} <span>${num(t.posts)}</span></a></li>`)}</ul>
-${series.length ? h`<p class="bh-more">Series: ${series.map((s, i) => h`${i ? ' · ' : ''}<a href="${s.url}">${s.title}</a> (${plural(s.posts, 'post')})`)}</p>` : ''}</section>` : ''}
+${series.length ? h`<p class="bh-more">Series: ${series.map((s, i) => h`${i ? ' · ' : ''}<a href="${s.url}">${s.title}</a> (${plural(s.posts, 'post')})`)}</p>` : ''}</section>`,
+})) : ''}
 ${memberItems.length ? h`<section class="sc-sec bh-sec" aria-labelledby="bh-members-h"><h2 id="bh-members-h">From members' blogs</h2><ol class="bh-cards">${memberItems.map(postCard)}</ol></section>` : ''}
 <div class="sc-sec bh-sec"><details class="bh-fold"><summary>Start your blog today<span>what it gets, how it works</span></summary>${raw(showcase.features({
         title: 'What your blog gets',
@@ -100,7 +119,11 @@ ${raw(showcase.steps({
             { title: 'Readers follow along', text: 'Feeds for the blog, each series and each category, and comments on OpenVibe.Community.' },
         ],
     }))}<p class="bh-fold-go"><a class="sc-btn sc-primary" href="${start.href}">${start.label}</a></p></details></div>
-<section class="sc-sec bh-sec bh-faq" aria-labelledby="bh-faq-h"><h2 id="bh-faq-h">Questions</h2>${FAQ.map((f) => h`<details><summary>${f.q}</summary><p>${f.a}</p></details>`)}</section>`);
+${raw(foldBlock({
+    id: 'faq',
+    head: '<h2 id="bh-faq-h">Questions</h2>',
+    html: h`<section class="sc-sec bh-sec bh-faq" aria-labelledby="bh-faq-h"><h2>Questions</h2>${FAQ.map((f) => h`<details><summary>${f.q}</summary><p>${f.a}</p></details>`)}</section>`,
+}))}`);
 }
 
 /** Structured data for the home: the site, the newest posts as an ItemList, and the questions shown. */
