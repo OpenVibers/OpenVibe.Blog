@@ -42,4 +42,6 @@ const opt = (name) => { const i = args.indexOf(`--${name}`); return i >= 0 ? arg
     } finally {
         await ctx.store.close();
     }
+    // A one-off process: the AI/HTTP keep-alive sockets and the outbox's timers would hold it open.
+    process.exit(process.exitCode || 0);
 })();
