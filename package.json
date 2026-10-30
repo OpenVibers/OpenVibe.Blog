@@ -2,7 +2,7 @@
   "name": "openvibe-blog",
   "version": "0.1.0",
   "private": true,
-  "description": "OpenVibe.Blog \u2014 the official OpenVibe blog and a blog for every member: drafts, immutable revisions, series, tags and categories, scheduling, feeds, sitemaps and Community comments, server-rendered and useful without JavaScript.",
+  "description": "OpenVibe.Blog — the official OpenVibe blog and a blog for every member: drafts, immutable revisions, series, tags and categories, scheduling, feeds, sitemaps and Community comments, server-rendered and useful without JavaScript.",
   "main": "server/index.js",
   "scripts": {
     "start": "node server/index.js",
@@ -27,15 +27,15 @@
     "express-rate-limit": "^7.5.0",
     "helmet": "^8.1.0",
     "iovalkey": "^0.4.0",
-    "openvibe-contracts": "https://codeload.github.com/OpenVibers/OpenVibe.Contracts/tar.gz/refs/tags/v0.222.0",
+    "openvibe-contracts": "https://codeload.github.com/OpenVibers/OpenVibe.Contracts/tar.gz/refs/tags/v0.242.1",
     "openvibe-publishing": "https://codeload.github.com/OpenVibers/OpenVibe.Publishing/tar.gz/refs/tags/v1.4.1",
     "openvibe-sdk": "https://codeload.github.com/OpenVibers/OpenVibe.SDK/tar.gz/refs/tags/v0.73.0",
     "openvibe-shared": "https://codeload.github.com/OpenVibers/OpenVibe.Shared/tar.gz/refs/tags/v4.43.0",
     "pg": "^8.23.0"
   },
   "devDependencies": {
-    "jsonwebtoken": "^9.0.2",
-    "@electric-sql/pglite": "^0.5.8"
+    "@electric-sql/pglite": "^0.5.8",
+    "jsonwebtoken": "^9.0.2"
   },
   "engines": {
     "node": ">=22.0.0"

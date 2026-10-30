@@ -72,9 +72,19 @@ const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const BANNED_RE = new RegExp(`(?<![\\w-])(?:${BANNED.map(escapeRe).join('|')})(?![\\w-])`, 'gi');
 const BANNED_SET = new Set(BANNED);
 
-/** The prose of a Markdown body: the full list, fenced code, inline code, link URLs and HTML are not prose. */
+/**
+ * The sections that quote someone else: the full list, "Also shipped" (commit subjects) and "What's next"
+ * (PR titles). A product name in them ("Showcase S2", "a token cap") is not the writer's filler.
+ */
+function withoutSourced(text) {
+    return String(text || '')
+        .replace(/^##\s+Also shipped[\s\S]*?(?=^##\s|(?![\s\S]))/gim, ' ')
+        .replace(/^##\s+What's next[\s\S]*?(?=^##\s|(?![\s\S]))/gim, ' ');
+}
+
+/** The prose of a Markdown body: sourced sections, fenced code, inline code, link URLs and HTML are not prose. */
 function proseOf(body) {
-    return String(body || '')
+    return withoutSourced(body)
         .replace(/<details[\s\S]*?<\/details>/gi, ' ')
         .replace(/```[\s\S]*?```/g, ' ')
         .replace(/`[^`\n]*`/g, ' ')
@@ -166,4 +176,4 @@ function scan({ title = '', dek = '', body = '', tags = [], captions = [] } = {}
     return { blocking, warnings };
 }
 
-module.exports = { scan, phrasesIn, structuresIn, proseOf, BANNED, REWRITES };
+module.exports = { scan, phrasesIn, structuresIn, proseOf, withoutSourced, BANNED, REWRITES };

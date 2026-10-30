@@ -58,6 +58,9 @@ const INTENTS = [
     ['outbox', /\boutbox\b/i, 'internal'],
 ];
 const DOCS = /\bin the docs\b|^docs?\b|documentation|readme/i;
+// A change with no workstream is only "also shipped" when it names something a reader uses. An engine
+// port or a generation setting is internal; it stays in the full list, not in the prose.
+const USER_FACING = /\b(home|page|site switcher|switcher|launcher|catalog|search|menu|button|layout|phone|mobile|account|profile|settings|reader|visitor|upload|editor|dashboard|console|notifications?|prices?|cart|checkout)\b/i;
 const CHORE = /^openvibe-(?:shared|sdk|contracts|publishing)\s+v?\d|^(?:pin|bump)\b|\blockfiles?\b|package\.json|dependenc|^tidy the docs\b|^update the docs\b/i;
 
 function intentOf(entry) {
@@ -74,7 +77,7 @@ function intentOf(entry) {
     for (const [key, re, kind] of INTENTS) if (re.test(subject)) return { intent: key, kind };
     if (CHORE.test(subject)) return { intent: 'chore', kind: 'chore' };
     if (entry.major) return { intent: 'other', kind: 'feature' };
-    return { intent: 'other', kind: /^add\b|\bnew\b|\bnow\b|support/i.test(subject) ? 'feature' : 'fix' };
+    return { intent: 'other', kind: USER_FACING.test(subject) ? 'feature' : 'internal' };
 }
 
 module.exports = { normaliseSubject, intentOf, siteLabel, INTENTS, WORKSTREAM_TRAILER, PLAYER_TRAILER };

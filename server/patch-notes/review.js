@@ -11,7 +11,7 @@
  * Links are checked for shape always; the HTTP check runs when the caller gives verifyLinks (the editor does; a
  * draft made inside the worker does not, so a GitHub hiccup never stops the draft from being filed).
  */
-const { scan } = require('./slop');
+const { scan, proseOf } = require('./slop');
 const { hasLooks, isExplicit } = require('./no-looks');
 
 const H2 = /^##\s+(.+)$/gm;
@@ -19,7 +19,6 @@ const LINK = /\[([^\]]*)\]\(([^)\s]+)\)/g;
 const TODO = /\[(TODO|FIXME|TBD)[^\]]*\]/i;
 const countWords = (s) => String(s || '').trim().split(/\s+/).filter(Boolean).length;
 const storyPart = (body) => String(body || '').split(/<details/i)[0];
-const withoutDetails = (body) => String(body || '').replace(/<details[\s\S]*?<\/details>/gi, ' ');
 
 function headingsOf(body) {
     const out = [];
@@ -66,7 +65,7 @@ async function evaluate(draft) {
     }
     warnings.push(...slop.warnings);
     // The full list holds exact commit subjects (a "token cap" is not a hat); the story is what describes people.
-    const looksText = [title, dek, withoutDetails(body), ...tags, ...captions].join('\n');
+    const looksText = [title, dek, proseOf(body), ...tags, ...captions].join('\n');
     if (hasLooks(looksText)) add(blocking, 'looks.person', 'The text describes a person (looks, body, clothing, hair, age or a guessed gender). Public AI text never does. Say "the person" or "the streamer", or remove the sentence.');
     if (isExplicit(title, dek, body)) add(blocking, 'looks.explicit', 'The text describes sexual content. It cannot be published.');
     checklist.push({ code: 'voice', label: 'The voice card is followed; no banned phrases; no looks language', ok: !blocking.some((b) => /^(slop|looks)\./.test(b.code)), detail: blocking.filter((b) => /^(slop|looks)\./.test(b.code)).length ? `${blocking.filter((b) => /^(slop|looks)\./.test(b.code)).length} blocking` : 'clean' });
