@@ -28,7 +28,7 @@ ${own ? '' : h`<section class="card"><h2>Start your blog</h2>
 <label for="handle">Handle</label><input id="handle" name="handle" value="${suggestedHandle || ''}" pattern="[a-z0-9][a-z0-9_-]{1,39}" required>
 <label for="title">Blog title</label><input id="title" name="title" maxlength="120" value="${suggestedHandle ? `@${suggestedHandle}` : ''}">
 <button type="submit">Start my blog</button></form></section>`}
-<p class="meta">Signed in as ${viewer.user && (viewer.user.display_name || viewer.user.username) ? (viewer.user.display_name || viewer.user.username) : viewer.subject}.</p>`);
+<p class="meta">Signed in as ${viewer.user && (viewer.user.display_name || viewer.user.username) ? (viewer.user.display_name || viewer.user.username) : viewer.subject}. · <a href="/write/voice">How I write</a></p>`);
 }
 
 function blogDashboard({ blog, posts, heads, role, csrf, message, publicUrl }) {
@@ -94,12 +94,13 @@ function gateSummary(decision) {
 }
 
 function editPage(o) {
-    const { blog, post, head, published, decision, jobs, attachments, csrf, disclosure, needsReview, publicUrl, canDelete } = o;
+    const { blog, post, head, published, decision, jobs, attachments, csrf, disclosure, needsReview, publicUrl, canDelete, patchNotes } = o;
     return String(h`<p><a href="/write/@${blog.handle}">← ${blog.title}</a></p>
 <h1>${head.fields.title}</h1>
 <p class="meta">${STATE_LABEL[post.state] || post.state} · ${post.visibility} · revision ${head.number}${published ? h` · readers see revision ${published.number}` : ''} · <a href="/write/posts/${post.id}/revisions">History</a> · <a href="/write/posts/${post.id}/preview">Preview</a>${post.state === 'published' ? h` · <a href="${publicUrl}">View</a>` : ''}</p>
 ${disclosure ? h`<p class="disclosure" role="note"><strong>${disclosure.short}.</strong> ${disclosure.long}</p>` : ''}
 ${raw(gateSummary(decision))}
+${patchNotes ? raw(patchNotesPanel({ post, draft: patchNotes, csrf })) : ''}
 ${needsReview ? h`<section class="card"><h2>Review needed</h2><p>Revision ${head.number} is AI-generated. A person must review it before it can be published or indexed.</p>
 <form method="post" action="/write/posts/${post.id}/review">${csrfField(csrf)}<input type="hidden" name="revision" value="${head.number}">
 <label for="note">Note</label><input id="note" name="note" maxlength="500">
@@ -163,4 +164,54 @@ ${m.role !== 'owner' || blog.kind === 'official' ? h`<form method="post" action=
 <button type="submit">Add member</button></form></section>`);
 }
 
-module.exports = { home, blogDashboard, postForm, aiDraftForm, editPage, revisionsPage, settingsPage, gateSummary };
+module.exports = { home, blogDashboard, postForm, aiDraftForm, editPage, revisionsPage, settingsPage, gateSummary, patchNotesPanel, voicePage };
+
+/** The reviewer's panel for a Patch notes draft: the story map, the blockers, the warnings and the checklist. */
+function patchNotesPanel({ post, draft, csrf }) {
+    const checks = (draft && draft.checks) || { blocking: [], warnings: [], checklist: [] };
+    const stories = (draft && draft.stories) || [];
+    const slop = (checks.blocking || []).filter((b) => b.code === 'slop.phrase');
+    const mark = (ok) => (ok ? '✓' : '✗');
+    return String(h`<section class="card patch-notes"><h2>Patch notes review</h2>
+<p class="meta">This is a draft for review. Publishing is blocked while a hard gate below fails; a person's approval of this revision is also required.</p>
+${stories.length ? h`<h3>Story map</h3><ol>${stories.map((s) => h`<li><strong>${s.title}</strong> — ${s.kind}, ${s.sites.length} ${s.sites.length === 1 ? 'site' : 'sites'}${s.commits ? h` · ${s.commits.length} commits` : ''}</li>`)}</ol>` : ''}
+${checks.blocking && checks.blocking.length ? h`<div class="notice error" role="alert"><h3>Blocking</h3><ul>${checks.blocking.map((b) => h`<li><code>${b.code}</code> ${b.message}${b.excerpt ? h` <span class="meta">“${b.excerpt}”</span>` : ''}</li>`)}</ul></div>` : h`<p class="notice" role="status">No hard gate is failing.</p>`}
+${checks.warnings && checks.warnings.length ? h`<details><summary>${checks.warnings.length} warning${checks.warnings.length === 1 ? '' : 's'}</summary><ul>${checks.warnings.map((w) => h`<li><code>${w.code}</code> ${w.message}${w.detail ? h` <span class="meta">${w.detail}</span>` : ''}</li>`)}</ul></details>` : ''}
+<h3>Checklist</h3>
+<ul class="checklist">${(checks.checklist || []).map((c) => h`<li>${mark(c.ok)} ${c.label}${c.detail ? h` <span class="meta">(${c.detail})</span>` : ''}</li>`)}</ul>
+${draft && draft.override ? h`<p class="meta">Override on record: ${draft.override.reason} (${(draft.override.phrases || []).join(', ')})</p>` : ''}
+<form method="post" action="/write/posts/${post.id}/checks">${csrfField(csrf)}
+<button type="submit">Run the checks again</button></form>
+${slop.length ? h`<form method="post" action="/write/posts/${post.id}/checks">${csrfField(csrf)}
+<h3>Override a banned phrase</h3>
+<p class="meta">A blocking phrase may be overridden with a reason the reviewer can read. Looks, [TODO], links, alt text and the missing approval cannot.</p>
+<label>Phrases</label><select name="phrases" multiple size="${Math.min(6, slop.length)}">${slop.map((b) => h`<option value="${b.phrase}">${b.phrase} — ${b.where}</option>`)}</select>
+<label for="override-reason">Reason</label><input id="override-reason" name="reason" maxlength="500" required>
+<button type="submit">Override and check again</button></form>` : ''}
+</section>`);
+}
+
+/** Settings → How I write: the person's card, and the official card they inherit. */
+function voicePage({ viewer, mine, official, csrf, message }) {
+    const card = (mine && mine.card) || {};
+    const field = (name, label, value, hint = '') => h`<label for="voice-${name}">${label}${hint ? h` <span class="meta">(${hint})</span>` : ''}</label><input id="voice-${name}" name="${name}" maxlength="300" value="${value || ''}">`;
+    return String(h`<p><a href="/write">← Write</a></p>
+<h1>How I write</h1>
+${flash(message)}
+<p class="meta">This card goes into the AI drafting prompt verbatim, with two samples of your writing. It is private unless you publish it on your author page.</p>
+<form method="post" action="/write/voice">${csrfField(csrf)}
+<label for="voice-text">The card, in your own words</label><textarea id="voice-text" name="text" rows="6" maxlength="1200">${card.text || ''}</textarea>
+${field('name', 'Name on the card', card.name)}
+${field('role', 'Your role', card.role)}
+${field('pov', 'Point of view', card.pov, 'I, we or you')}
+${field('audience', 'Who you are talking to', card.audience)}
+${field('sentenceLength', 'Sentences', card.sentenceLength)}
+${field('humour', 'Humour', card.humour)}
+${field('jargon', 'Jargon', card.jargon)}
+${field('never', 'Never say', Array.isArray(card.never) ? card.never.join(', ') : card.never, 'comma-separated')}
+${field('signoff', 'Sign-off', card.signoff)}
+<label><input type="checkbox" name="public" value="1"${raw(mine && mine.public ? ' checked' : '')}> Show this card on my author page</label>
+<button type="submit">Save my card</button>
+</form>
+<section class="card"><h2>The official card</h2><p class="meta">Patch notes use this card unless a developer claims a section with their own.</p><blockquote>${official.card.text}</blockquote></section>`);
+}

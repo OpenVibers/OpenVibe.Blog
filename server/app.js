@@ -96,10 +96,15 @@ async function createApp(opts = {}) {
     await blogs.ensureOfficial();
 
     const aiDrafts = opts.aiDrafts || require('./domain/ai-drafts').createAiDrafts({ config, store, posts, access, fetchImpl });
-    const changelog = opts.changelog || require('./changelog').createChangelog({ config, store, blogs, posts, aiDrafts, fetchImpl, log });
+    // Patch notes v2: the story map, the template, the voice cards and the review gate. The changelog files drafts
+    // through it; posts.publish refuses a draft with a blocking check or no person's approval.
+    const patchNotes = opts.patchNotes || require('./patch-notes').createPatchNotes({ config, store, blogs, posts, publication, aiDrafts, fetchImpl, log });
+    const changelog = opts.changelog || require('./changelog').createChangelog({ config, store, blogs, posts, patchNotes, fetchImpl, log });
+    if (patchNotes.attach) patchNotes.attach({ changelog });
+    posts.setPublishGate(patchNotes.gate);
     // The AI desks (server/desks/): digests from Sources' items and the satire desk, beside the blogs.
     const desks = opts.desks || require('./desks/desks').createDesks({ config, store, fetchImpl, log });
-    const ctx = { config, store, outbox, blogs, publication, posts, people, community, media, reading, effects, entitlements, vip, auth, viewers, access, worker, aiDrafts, changelog, desks, indexnow };
+    const ctx = { config, store, outbox, blogs, publication, posts, people, community, media, reading, effects, entitlements, vip, auth, viewers, access, worker, aiDrafts, changelog, patchNotes, desks, indexnow };
 
     const app = express();
     app.disable('x-powered-by');

@@ -35,7 +35,10 @@ const H = (n) => n.toString(16).padStart(40, 'a');
         return await json({}, 404);
     };
     const config = { ...t.ctx.config, changelog: { ...t.ctx.config.changelog, enabled: true, batchSize: 5, majorLines: 500, quietMs: 30 * 60 * 1000, maxAgeMs: 7 * 24 * 3600 * 1000, minGapMs: 6 * 3600 * 1000, since: null, aiDraft: false, blogHandle: 'openvibe', history: 0 } };
-    const cl = createChangelog({ config, store: t.ctx.store, blogs: t.ctx.blogs, posts: t.ctx.posts, aiDrafts: null, fetchImpl, log: { log() {}, warn() {} } });
+    // Patch notes v2: the changelog files a DRAFT through the patch-notes module and never publishes.
+    const drafts = [];
+    const patchNotes = { draftPending: async ({ entries, reason }) => { drafts.push({ entries, reason }); return { created: true, post: { id: `pst_draft${drafts.length}`, blog_id: 'blg_test' }, checks: { blocking: [], warnings: [] } }; } };
+    const cl = createChangelog({ config, store: t.ctx.store, blogs: t.ctx.blogs, posts: t.ctx.posts, aiDrafts: null, patchNotes, fetchImpl, log: { log() {}, warn() {} } });
     const commit = (i, msg) => ({ sha: H(i), commit: { message: msg, author: { date: new Date(t.clock.now()).toISOString() } } });
 
     await check('a service seen for the first time only records its release', async () => {
@@ -55,21 +58,18 @@ const H = (n) => n.toString(16).padStart(40, 'a');
         assert.strictEqual(e[0].major, false);
     });
 
-    await check('a major release publishes patch notes after a quiet spell', async () => {
+    await check('a major release after a quiet spell files a Patch notes draft, never a published post', async () => {
         releases.tools = 'bbbbbbb00002';
         compares.bbbbbbb00002 = { status: 'ahead', commits: [commit(3, 'Recent tools in the launcher: anonymous and account history'), commit(4, 'Tidy the docs')], files: [{ additions: 700, deletions: 20 }] };
         assert.strictEqual(await cl.tick(), null, 'major, but deploys are not quiet yet');
         t.clock.advance(31 * 60 * 1000);
         const r = await cl.tick();
-        assert.ok(r && r.post, 'published');
-        const post = await t.ctx.posts.get(r.post.id);
-        assert.strictEqual(post.state, 'published');
-        const head = await t.ctx.posts.head(post);
-        assert.match(head.fields.title, /^Patch notes: Recent tools in the launcher \([A-Z][a-z]{2} \d{1,2}\)$/, 'the day ends the title');
-        assert.ok(head.content.includes('## Highlights') && head.content.includes('**OpenVibe.Tools:** Recent tools in the launcher'));
-        assert.ok(head.content.includes('## OpenVibe.Live') && head.content.includes('Fix the chat scroll'));
-        assert.strictEqual(head.meta.authorship.mode, 'imported');
-        assert.strictEqual((await cl.entries()).filter((x) => !x.post_id).length, 0, 'every entry now belongs to the post');
+        assert.ok(r && r.post, 'drafted');
+        assert.strictEqual(drafts.length, 1);
+        assert.strictEqual(drafts[0].reason, 'major');
+        assert.deepStrictEqual(drafts[0].entries.map((e) => e.subject).sort(), ['Fix the chat scroll', 'Recent tools in the launcher: anonymous and account history', 'Tidy the docs']);
+        assert.strictEqual(r.post.state, undefined, 'a draft object from the fake; the real module creates a draft post');
+        assert.strictEqual((await cl.entries()).filter((x) => x.post_id).length, 0, 'nothing is published, so the feed has no post link');
     });
 
     await check('the public feed names the entries and the latest post', async () => {
@@ -78,9 +78,8 @@ const H = (n) => n.toString(16).padStart(40, 'a');
         assert.strictEqual(r.headers.get('access-control-allow-origin'), '*');
         const j = r.json();
         assert.deepStrictEqual(j.entries.map((x) => x.subject).sort(), ['Recent tools in the launcher: anonymous and account history', 'Tidy the docs']);
-        assert.ok(j.entries.every((x) => x.service === 'tools' && x.post_id));
-        assert.ok(j.latest_post && /\/@openvibe\//.test(j.latest_post.url), 'the latest patch notes post, to link to');
-        assert.match(j.latest_post.title, /^Patch notes: Recent tools in the launcher \([A-Z][a-z]{2} \d{1,2}\)$/);
+        assert.ok(j.entries.every((x) => x.service === 'tools' && x.post_id === null), 'a draft does not link its commits');
+        assert.strictEqual(j.latest_post, null, 'nothing is published from the pipeline');
     });
 
     await check('a batch publishes without a major, but never sooner than the gap after the last post', async () => {
@@ -90,7 +89,8 @@ const H = (n) => n.toString(16).padStart(40, 'a');
         t.clock.advance(6 * 3600 * 1000 + 1000);
         const r = await cl.tick();
         assert.ok(r && r.post);
-        assert.ok((await t.ctx.posts.head(await t.ctx.posts.get(r.post.id))).fields.title.match(/^Patch notes: 5 changes across 1 site \([A-Z][a-z]{2} \d{1,2}\)$/));
+        assert.strictEqual(drafts.length, 2);
+        assert.ok(drafts[1].entries.length >= 5, `all pending, not only the newest five: ${drafts[1].entries.length}`);
     });
 
     await check('subjects are cut at a word; version bumps count as major', async () => {
@@ -106,7 +106,7 @@ const H = (n) => n.toString(16).padStart(40, 'a');
     await check('history: each site\'s earlier commits once, never pending, with authors; the feed pages by cursor', async () => {
         history['OpenVibers/OpenVibe.Live'] = [20, 21, 22].map((i) => ({ sha: H(i), commit: { message: `Earlier change ${i}\n\nbody`, author: { name: 'OpenVibers', date: new Date(t.clock.now() - (30 - i) * 86400000).toISOString() } } }))
             .concat([{ sha: H(5), commit: { message: 'Small change 5', author: { name: 'OpenVibers', date: new Date(t.clock.now()).toISOString() } } }]);
-        const hc = createChangelog({ config: { ...config, changelog: { ...config.changelog, history: 50 } }, store: t.ctx.store, blogs: t.ctx.blogs, posts: t.ctx.posts, fetchImpl, log: { log() {}, warn() {} } });
+        const hc = createChangelog({ config: { ...config, changelog: { ...config.changelog, history: 50 } }, store: t.ctx.store, blogs: t.ctx.blogs, posts: t.ctx.posts, patchNotes, fetchImpl, log: { log() {}, warn() {} } });
         const before = (await hc.stats()).pending;
         await hc.collect();
         assert.strictEqual((await hc.stats()).pending, before, 'history never waits for a patch notes post');
@@ -123,7 +123,7 @@ const H = (n) => n.toString(16).padStart(40, 'a');
         assert.ok(p2.entries.length >= 1 && !p2.entries.some((e) => p1.entries.some((x) => x.sha === e.sha)), 'the next page continues without repeats');
         const r = (await t.get(`/api/v1/changelog?limit=2&before=${encodeURIComponent(p1.next)}`)).json();
         assert.ok(Array.isArray(r.sites) && r.sites.some((x) => x.service === 'live'), 'network-wide answers list the sites');
-        assert.ok(Array.isArray(r.posts) && r.posts.length >= 1);
+        assert.ok(Array.isArray(r.posts), 'the feed lists published posts; the pipeline makes none');
         const one = (await t.get('/api/v1/changelog?service=live&limit=1')).json();
         assert.strictEqual(one.sites, undefined);
         assert.ok(one.next);
@@ -144,7 +144,7 @@ const H = (n) => n.toString(16).padStart(40, 'a');
             if (u.hostname === 'api.github.com') seen.auth.push((opts.headers && opts.headers.Authorization) || null);
             return await fetchImpl(url, opts);
         };
-        const mk = (extra, oauth = { clientId: 'blog', clientSecret: 's3cret' }) => createChangelog({ config: { ...config, oauth, networkInternalUrl: 'http://network.internal', changelog: { ...config.changelog, ...extra } }, store: t.ctx.store, blogs: t.ctx.blogs, posts: t.ctx.posts, aiDrafts: null, fetchImpl: fx, log: { log() {}, warn() {} } });
+        const mk = (extra, oauth = { clientId: 'blog', clientSecret: 's3cret' }) => createChangelog({ config: { ...config, oauth, networkInternalUrl: 'http://network.internal', changelog: { ...config.changelog, ...extra } }, store: t.ctx.store, blogs: t.ctx.blogs, posts: t.ctx.posts, aiDrafts: null, patchNotes, fetchImpl: fx, log: { log() {}, warn() {} } });
         const release = async (cl2, n) => { releases.live = `aaaaaaa1000${n}`; compares[releases.live] = { status: 'ahead', commits: [commit(900 + n, `Token check ${n}`)], files: [{ additions: 1, deletions: 0 }] }; await cl2.collect(); };
 
         const net = mk({ githubToken: '' });

@@ -62,7 +62,7 @@ function createEditorRoutes(ctx) {
     router.post('/@:handle/settings', B('blog.blog.configure'));
     router.post(['/@:handle/members', '/@:handle/members/remove'], B('blog.member.manage'));
     router.post(['/posts/:id', '/posts/:id/revert'], B('blog.post.update'));
-    router.post(['/posts/:id/publish', '/posts/:id/schedule', '/posts/:id/unschedule', '/posts/:id/unpublish', '/posts/:id/review'], B('blog.post.publish'));
+    router.post(['/posts/:id/publish', '/posts/:id/schedule', '/posts/:id/unschedule', '/posts/:id/unpublish', '/posts/:id/review', '/posts/:id/checks'], B('blog.post.publish'));
     router.post('/posts/:id/delete', B('blog.post.delete'));
     router.post(['/posts/:id/media', '/posts/:id/media/:aid/remove'], B('blog.post.media'));
     router.post('*', form, (req, res, next) => {
@@ -87,6 +87,13 @@ function createEditorRoutes(ctx) {
     }
 
     const csrf = (req) => csrfToken(config, req.viewer);
+    // A link resolves when it answers 2xx (HEAD, 6s). The review gate's HTTP check, in the editor only.
+    const verifyLink = async (url) => {
+        try {
+            const r = await globalThis.fetch(url, { method: 'HEAD', redirect: 'follow', signal: AbortSignal.timeout(6000) });
+            return r.status >= 200 && r.status < 400;
+        } catch { return false; }
+    };
     const flashOf = (req) => (req.query.saved ? { kind: 'ok', text: String(req.query.saved).slice(0, 200) } : null);
 
     async function blogFor(req) {
@@ -205,8 +212,9 @@ function createEditorRoutes(ctx) {
         const review = await publication.reviewOf(post, head);
         const terms = await publication.termsOf(post);
         const decision = await publication.decide(blog, { ...post, state: 'published' }, head);
+        const patchNotes = ctx.patchNotes ? await ctx.patchNotes.load(post.id) : null;
         const body = editor.editPage({
-            blog, post, head, published, decision, jobs: await posts.pendingJobs(post), attachments: await posts.attachments(post), csrf: csrf(req),
+            blog, post, head, published, decision, patchNotes, jobs: await posts.pendingJobs(post), attachments: await posts.attachments(post), csrf: csrf(req),
             disclosure: rec ? authorship.disclosure(rec, review) : null,
             needsReview: rec ? !authorship.canPublish(rec, review).ok : false,
             publicUrl: publication.postPath(blog, post),
@@ -253,6 +261,14 @@ function createEditorRoutes(ctx) {
         return await posts.remove(req.viewer, post, tp(req));
     }, 'Deleted.');
     action('review', async (req, post, b) => await posts.review(req.viewer, post, { revision: b.revision, decision: b.decision, note: b.note || null }, tp(req)), (out) => `Review recorded: ${out.decision}.`);
+    action('checks', async (req, post) => {
+        if (!ctx.patchNotes) return { blocking: [], warnings: [] };
+        const phrases = req.body && req.body.phrases ? [].concat(req.body.phrases) : [];
+        const reason = req.body && req.body.reason ? String(formInput(req.body).reason || '') : '';
+        if (reason && phrases.length) await ctx.patchNotes.setOverride(post.id, { reason, phrases, by: req.viewer.subject });
+        const out = await ctx.patchNotes.check(post.id, { verifyLinks: verifyLink });
+        return out ? out.result : { blocking: [], warnings: [] };
+    }, (out) => `Checks run: ${((out && out.blocking) || []).length} blocking, ${((out && out.warnings) || []).length} warnings.`);
     action('revert', async (req, post, b) => await posts.revert(req.viewer, post, { toRevision: b.toRevision, expectedRevision: b.expectedRevision }), (out) => `Restored as revision ${out.revision.number}.`);
     action('media', async (req, post, b) => await posts.attach(req.viewer, post, { mediaId: b.mediaId, role: b.role, alt: b.alt, caption: b.caption }), 'Media attached.');
     router.post('/posts/:id/media/:aid/remove', wrap(async (req, res) => {
@@ -260,6 +276,18 @@ function createEditorRoutes(ctx) {
         if (!found) return notFound(req, res);
         await posts.detach(req.viewer, found.post, req.params.aid);
         res.redirect(303, `/write/posts/${found.post.id}?saved=${encodeURIComponent('Media removed.')}`);
+    }));
+
+    // Settings → How I write: the voice card the AI prompt uses.
+    router.get('/voice', wrap(async (req, res) => {
+        const mine = await ctx.patchNotes.voice.get(req.viewer.subject);
+        const official = await ctx.patchNotes.voice.official();
+        page(req, res, 'How I write', editor.voicePage({ viewer: req.viewer, mine, official, csrf: csrf(req), message: flashOf(req) }));
+    }));
+    router.post('/voice', wrap(async (req, res) => {
+        const b = formInput(req.body);
+        await ctx.patchNotes.voice.set(req.viewer.subject, { ...b, never: String(b.never || '').split(','), public: b.public === '1' });
+        res.redirect(303, `/write/voice?saved=${encodeURIComponent('Your card is saved.')}`);
     }));
 
     router.get('/posts/:id/revisions', wrap(async (req, res) => {
