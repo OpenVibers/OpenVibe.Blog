@@ -11,6 +11,7 @@ const { seedCard, OFFICIAL_TEXT } = require('../server/patch-notes/voice');
 const { scan } = require('../server/patch-notes/slop');
 const { evaluate } = require('../server/patch-notes/review');
 const { hasLooks, noLooks, noLooksTags } = require('../server/patch-notes/no-looks');
+const { intentOf } = require('../server/patch-notes/text');
 const fixture = require('./fixtures/changelog-2026-10-30.json');
 
 const entry = (service, sha, subject, body = null) => ({
@@ -29,6 +30,19 @@ const entry = (service, sha, subject, body = null) => ({
         assert.strictEqual(byTitle['One sign-in, twenty-three sites'].sites.length, 23);
         assert.ok(byTitle['The orbit stays put'].entries.length === 2);
         assert.ok(map.stories.every((s) => s.kind === 'fix' || s.kind === 'feature'));
+    });
+
+    await check('a one-off change is user-facing only when it names something a reader uses', async () => {
+        assert.strictEqual(intentOf({ service: 'network', repo: 'OpenVibers/OpenVibe.Network', subject: 'The site switcher follows the account (#430)' }).kind, 'feature');
+        assert.strictEqual(intentOf({ service: 'bench', repo: 'OpenVibers/OpenVibe.Bench', subject: 'Generation: a token cap per showcase kind (#17)' }).kind, 'internal');
+        assert.strictEqual(intentOf({ service: 'codes', repo: 'OpenVibers/OpenVibe.Codes', subject: 'engine/: the agent engine, ported from the portal (C1) (#159)' }).kind, 'internal');
+    });
+
+    await check('a product name in a sourced line is not the writer\'s slop; the story still is', async () => {
+        const sourced = scan({ body: "## What's next\n\n- **Next:** Showcase S2: seed rounds for the ten showcase tasks ([#19](https://github.com/OpenVibers/OpenVibe.Bench/pull/19)).\n\n## Also shipped\n\n- **Bench:** showcase: real outputs from two models.\n" });
+        assert.strictEqual(sourced.blocking.length, 0);
+        const story = scan({ body: '## A section\n\nWe showcase the new button.' });
+        assert.ok(story.blocking.some((b) => b.phrase === 'showcase'));
     });
 
     await check('a one-off change is an Also shipped line, never a section shared with unrelated changes', async () => {
