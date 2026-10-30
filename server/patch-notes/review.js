@@ -19,6 +19,7 @@ const LINK = /\[([^\]]*)\]\(([^)\s]+)\)/g;
 const TODO = /\[(TODO|FIXME|TBD)[^\]]*\]/i;
 const countWords = (s) => String(s || '').trim().split(/\s+/).filter(Boolean).length;
 const storyPart = (body) => String(body || '').split(/<details/i)[0];
+const withoutDetails = (body) => String(body || '').replace(/<details[\s\S]*?<\/details>/gi, ' ');
 
 function headingsOf(body) {
     const out = [];
@@ -64,7 +65,8 @@ async function evaluate(draft) {
         else blocking.push(b);
     }
     warnings.push(...slop.warnings);
-    const looksText = [title, dek, body, ...tags, ...captions].join('\n');
+    // The full list holds exact commit subjects (a "token cap" is not a hat); the story is what describes people.
+    const looksText = [title, dek, withoutDetails(body), ...tags, ...captions].join('\n');
     if (hasLooks(looksText)) add(blocking, 'looks.person', 'The text describes a person (looks, body, clothing, hair, age or a guessed gender). Public AI text never does. Say "the person" or "the streamer", or remove the sentence.');
     if (isExplicit(title, dek, body)) add(blocking, 'looks.explicit', 'The text describes sexual content. It cannot be published.');
     checklist.push({ code: 'voice', label: 'The voice card is followed; no banned phrases; no looks language', ok: !blocking.some((b) => /^(slop|looks)\./.test(b.code)), detail: blocking.filter((b) => /^(slop|looks)\./.test(b.code)).length ? `${blocking.filter((b) => /^(slop|looks)\./.test(b.code)).length} blocking` : 'clean' });
