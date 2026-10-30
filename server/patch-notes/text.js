@@ -70,13 +70,14 @@ function intentOf(entry) {
         const slug = String(trailer[1]).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40);
         const known = INTENTS.some(([key]) => key === slug) || ['docs', 'chore'].includes(slug) ? slug : `ws:${slug || 'workstream'}`;
         const face = /^\s*Player-facing\s*:\s*yes/im.test(body);
-        return { intent: known, kind: face ? 'feature' : entry.major ? 'feature' : 'fix', explicit: true };
+        return { intent: known, kind: face ? 'feature' : 'fix', explicit: true };
     }
     const subject = normaliseSubject(entry);
     if (DOCS.test(subject)) return { intent: 'docs', kind: 'chore' };
     for (const [key, re, kind] of INTENTS) if (re.test(subject)) return { intent: key, kind };
     if (CHORE.test(subject)) return { intent: 'chore', kind: 'chore' };
-    if (entry.major) return { intent: 'other', kind: 'feature' };
+    // A large diff is not a feature (devblog §3.2 step 6): only the subject decides whether a change with no
+    // workstream has a surface a reader can see.
     return { intent: 'other', kind: USER_FACING.test(subject) ? 'feature' : 'internal' };
 }
 
