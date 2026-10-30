@@ -10,7 +10,7 @@
  * answer replaces the story prose; the tail (list, next, sign-off) stays deterministic. Either way the result is
  * a DRAFT: this module never publishes.
  */
-const { siteLabel } = require('./text');
+const { siteLabel, normaliseSubject } = require('./text');
 const { sitesSentence, words } = require('./stories');
 
 const AUDIT = { homes: 42, targets: 2386, under: 2348, sitesUnder: 40, shared: 1628, source: 'research-2026-10-29/tap-targets.md' };
@@ -187,6 +187,15 @@ function whatsNext(pulls) {
     return `## What's next\n\n${lines.join('\n')}\n`;
 }
 
+/** The user-visible changes outside the top stories: one line each, no commit subjects. */
+function alsoShipped(also = []) {
+    if (!also.length) return '';
+    const lines = [...also]
+        .sort((a, b) => siteLabel(a).localeCompare(siteLabel(b)) || String(a.subject).localeCompare(String(b.subject)))
+        .map((e) => `- **${siteLabel(e)}:** ${lowerFirst(normaliseSubject(e)).replace(/\.$/, '')}.`);
+    return `## Also shipped\n\n${lines.join('\n')}\n`;
+}
+
 function fullList(map, stories) {
     const link = (e) => `- [${sentence(e.subject)}](${e.url || `https://github.com/${e.repo}/commit/${e.sha}`})`;
     const bySite = (list) => [...list].sort((a, b) => siteLabel(a).localeCompare(siteLabel(b)) || String(a.subject).localeCompare(String(b.subject)));
@@ -220,9 +229,10 @@ function compose({ map, voice, pulls = [] }) {
     const stories = map.stories;
     const signoff = (voice && voice.card && voice.card.signoff) || '— the OpenVibe crew';
     if (!stories.length) {
-        const body = [underTheHood(map.chores), fullList(map, []), '', signoff].filter((x) => x != null).join('\n');
+        const body = [map.also.length ? alsoShipped(map.also) : underTheHood(map.chores), fullList(map, []), '', signoff].filter((x) => x != null).join('\n');
         return {
-            title: 'The package versions moved', dek: 'Housekeeping only this round: package versions, lockfiles and docs, with no new user-facing change.',
+            title: map.also.length ? cap(normaliseSubject(map.also[0])) : 'The package versions moved',
+            dek: map.also.length ? 'The smaller changes this round, one line each, with the links below.' : 'Housekeeping only this round: package versions, lockfiles and docs, with no new user-facing change.',
             body: body.replace(/\n{3,}/g, '\n\n').trim(), tags: ['patch-notes'],
         };
     }
@@ -233,6 +243,7 @@ function compose({ map, voice, pulls = [] }) {
         '## The short version', '',
         ...shortVersionFor(stories).map((b) => `- ${b}`), '',
         ...forPost(stories).flatMap((s) => [`## ${s.title}`, '', ...sectionFor(s, {}), '']),
+        alsoShipped(map.also),
         underTheHood(map.chores),
         whatsNext(pulls),
         fullList(map, stories),
@@ -286,4 +297,4 @@ function mergeAi(aiBody, det, voice) {
     return `${body}\n\n${tail}`.replace(/\n{3,}/g, '\n\n').trim();
 }
 
-module.exports = { compose, briefFor, mergeAi, titleFor, dekFor, sectionFor, nextItems, AUDIT };
+module.exports = { compose, briefFor, mergeAi, titleFor, dekFor, sectionFor, alsoShipped, nextItems, AUDIT };

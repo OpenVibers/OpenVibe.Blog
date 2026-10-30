@@ -20,6 +20,7 @@
 const { normaliseSubject, intentOf, siteLabel } = require('./text');
 
 const WINDOW_MS = 72 * 3600 * 1000;
+const baseKeyOf = (key) => String(key || '').split('#')[0];
 const NUMBERS = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve',
     'thirteen', 'fourteen', 'fifteen', 'sixteen', 'seventeen', 'eighteen', 'nineteen'];
 const TENS = ['', '', 'twenty', 'thirty', 'forty', 'fifty', 'sixty'];
@@ -132,11 +133,14 @@ function scoreOf(group) {
 function build(entries, { maxStories = 6 } = {}) {
     const groups = mergeSharedChores(mergeByPackage(cluster(entries)));
     const stories = [];
+    const also = [];
     const chores = [];
     const internal = [];
     for (const g of groups) {
         if (g.kind === 'chore') { chores.push(g); continue; }
-        if (g.kind === 'internal' || g.key === 'outbox') { internal.push(g); continue; }
+        if (g.kind === 'internal' || baseKeyOf(g.key) === 'outbox') { internal.push(g); continue; }
+        // "Other" is not a workstream: unrelated one-off changes would be merged by site count alone.
+        if (baseKeyOf(g.key) === 'other') { also.push(...g.entries); continue; }
         stories.push(g);
     }
     for (const s of stories) {
@@ -146,7 +150,7 @@ function build(entries, { maxStories = 6 } = {}) {
     }
     stories.sort((a, b) => b.score - a.score || b.sites.length - a.sites.length || a.key.localeCompare(b.key));
     const top = stories.slice(0, maxStories);
-    const also = stories.slice(maxStories).flatMap((s) => s.entries);
+    also.push(...stories.slice(maxStories).flatMap((s) => s.entries));
     return { stories: top, also, chores: chores.flatMap((g) => g.entries), internal: internal.flatMap((g) => g.entries), groups };
 }
 
