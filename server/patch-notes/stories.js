@@ -83,6 +83,33 @@ function cluster(entries) {
     return [...groups.values()];
 }
 
+/**
+ * The module a commit belongs to, when it names one: `openvibe-sdk/sso`, `server/auth/sso.js` and
+ * "sign-in" are the same workstream. Kept narrow on purpose — `public/css/app.css` is shared by most
+ * sites and would merge unrelated stories.
+ */
+function packageKey(entry) {
+    const subject = String(entry.subject || '');
+    if (/\bopenvibe-sdk\/sso\b/i.test(subject) || /\bsign[- ]?in\b|\bsso\b|\boauth\b/i.test(subject)) return 'sso';
+    for (const f of Array.isArray(entry.files) ? entry.files : []) {
+        if (/(?:^|\/)server\/auth\/sso\.[cm]?js$/.test(f) || /openvibe-sdk\/sso/i.test(f)) return 'sso';
+    }
+    return null;
+}
+
+/** Two rounds of the same module merge; the groups' entries keep their order. */
+function mergeByPackage(groups) {
+    const out = [];
+    for (const g of groups) {
+        if (g.kind === 'chore') { out.push(g); continue; }
+        const keys = new Set(g.entries.map(packageKey).filter(Boolean));
+        if (!keys.size) { out.push(g); continue; }
+        const hit = out.find((x) => x.kind !== 'chore' && x.entries.some((e) => keys.has(packageKey(e))));
+        if (hit) { hit.entries.push(...g.entries); hit.lastAt = Math.max(hit.lastAt, g.lastAt); } else out.push(g);
+    }
+    return out;
+}
+
 /** A shared package pulls two commits of different intents together only when both are chores. */
 function mergeSharedChores(groups) {
     const chores = groups.filter((g) => isChoreKind(g.kind));
@@ -103,7 +130,7 @@ function scoreOf(group) {
  * "Also shipped" line, so nothing with a user-facing surface disappears.
  */
 function build(entries, { maxStories = 6 } = {}) {
-    const groups = mergeSharedChores(cluster(entries));
+    const groups = mergeSharedChores(mergeByPackage(cluster(entries)));
     const stories = [];
     const chores = [];
     const internal = [];
