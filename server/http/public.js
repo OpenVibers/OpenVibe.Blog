@@ -141,7 +141,7 @@ function createPublicRoutes(ctx) {
                 jsonLd: [blogLd, ...homePage.homeJsonLd({ base: config.baseUrl.replace(/\/+$/, ''), items })],
                 styles: [showcase.STYLESHEET], bodyClass: 'blog-home',
                 // The rule that shows the picked item of each pick list: one per item, written for this page.
-                inlineStyles: [`@supports selector(:has(*)){@media (max-width:640px){${pickListRules('week', week.length)}${pickListRules('desks', deskCount)}}}`],
+                inlineStyles: [`@supports selector(:has(*)){@media (max-width:640px){${pickListRules('desks', deskCount)}}}`],
                 body: homePage.homeBody({ blog, items, pager, feeds, stats, week, latestDesks, tags, series: seriesCounts, memberItems, signedIn: req.viewer.kind === 'user' })
                     // The shipped list is a part a reader rarely needs: a fold on a phone, the section it was where there is room.
                     + foldBlock({ id: 'shipped', head: '<h2 id="bh-shipped-h">Recently shipped on OpenVibe.Blog</h2>', html: frame.shipped({ service: 'blog', title: 'Recently shipped on OpenVibe.Blog' }) }),

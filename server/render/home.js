@@ -71,14 +71,12 @@ function homeBody(o) {
 ${blog.description ? h`<p class="sc-lede">${blog.description}</p>` : ''}
 ${feeds.length ? h`<p class="feeds">Follow: ${feeds.map((f) => h`<a href="${f.href}" type="${f.mime}">${f.label}</a> `)}</p>` : ''}
 ${items.length ? h`<ol class="bh-cards">${items.map(postCard)}</ol>${raw(ssr.paginationHtml(pager))}<p class="bh-more bh-all"><a href="/@${blog.handle}">Every post, newest first</a></p>` : h`<p class="empty">Nothing published here yet.</p>`}</section>
-${week.length ? raw(pickList({
-    key: 'week',
-    label: 'This week across OpenVibe',
-    head: 'This week across OpenVibe',
-    labels: week.map((w) => siteName(w.service)),
-    html: h`<section class="sc-sec bh-sec" aria-labelledby="bh-week-h"><h2 id="bh-week-h">This week across OpenVibe</h2>
+${week.length ? raw(foldBlock({
+    id: 'week',
+    head: '<h2 id="bh-week-h">This week across OpenVibe</h2>',
+    html: h`<section class="sc-sec bh-sec" aria-labelledby="bh-week-h"><h2>This week across OpenVibe</h2>
 <p class="sc-lede">${plural(stats.weekChanges, 'change')} shipped to ${plural(stats.weekSites, 'site')} in the last seven days. Patch notes on this blog round them up.</p>
-<ol class="bh-bars pick-list">${week.map((w, i) => h`<li data-i="${i}"><a href="https://openvibe.network/updates?site=${encodeURIComponent(w.service)}">${siteName(w.service)}</a><span class="bh-bar" aria-hidden="true"><span style="width:${String(Math.max(2, Math.round((w.changes / top) * 100)))}%"></span></span><span class="bh-n">${plural(w.changes, 'change')}</span></li>`)}</ol>
+<ol class="bh-bars">${week.map((w) => h`<li><a href="https://openvibe.network/updates?site=${encodeURIComponent(w.service)}">${siteName(w.service)}</a><span class="bh-bar" aria-hidden="true"><span style="width:${String(Math.max(2, Math.round((w.changes / top) * 100)))}%"></span></span><span class="bh-n">${plural(w.changes, 'change')}</span></li>`)}</ol>
 <p class="bh-more"><a href="https://openvibe.network/updates">Every change, as it ships</a>${series.length ? h` · <a href="${series[0].url}">${series[0].title}</a>` : ''}</p></section>`,
 })) : ''}
 ${desks.length ? raw(pickList({
