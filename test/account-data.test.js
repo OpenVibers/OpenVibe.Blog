@@ -8,9 +8,11 @@
  */
 const assert = require('assert');
 const http = require('http');
-const { createNetworkSender } = require('openvibe-sdk/account-data');
+const { createNetworkSender, uncovered } = require('openvibe-sdk/account-data');
 const { signDeliveryHeaders } = require('openvibe-sdk/events');
 const { boot, check, done } = require('./helpers/boot');
+const { TABLES } = require('../server/domain/account-data');
+const { testDb } = require('./helpers/db');
 
 const SECRET = `whsec_${'fixture'.repeat(6)}`;
 const LONG = Array.from({ length: 120 }, (_, i) => `word${i}`).join(' ');
@@ -32,6 +34,17 @@ async function startNetworkStub() {
 }
 
 (async () => {
+    await check('every table that names a person is covered or exempted with a reason', async () => {
+        const d = await testDb();
+        try {
+            const missing = await uncovered(d.db, {
+                tables: TABLES,
+                               exempt: {"account_data_events":"the ledger of requests itself: which export and deletion Blog applied","blog_index_revisions":"owner is the search-index document's owner (type/id), not a person; the row holds a revision and hash","changelog_entries":"subject is the git commit subject text, not a Network subject; author is the git author"},
+            });
+            assert.deepStrictEqual(missing, [], `a table with a person column is neither covered nor exempted: ${missing.join(', ')}`);
+        } finally { await d.close(); }
+    });
+
     const stub = await startNetworkStub();
     const t = await boot({ env: { BLOG_EVENTS_SECRET: SECRET }, accountSend: createNetworkSender({ networkInternalUrl: stub.url, clientId: 'blog', clientSecret: 'shh' }) });
     const alice = t.network.addUser('alice', { display_name: 'Alice Writer' });
