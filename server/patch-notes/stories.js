@@ -45,6 +45,8 @@ const HEADLINES = {
 
 function headlineFor(key, entries) {
     const sites = new Set(entries.map((e) => e.service)).size;
+    // "Wider than a phone" is a fit fix, not a sideways row: say which one this round is.
+    if (key === 'phone-home' && entries.every((e) => /wider than a phone/i.test(String(e.subject)))) return 'Homes that fit a phone';
     const h = HEADLINES[key];
     if (typeof h === 'function') return h(sites);
     if (h) return h;

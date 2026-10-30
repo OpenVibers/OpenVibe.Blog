@@ -29,7 +29,7 @@ VALUES (
         'never', jsonb_build_array('excited', 'thrilled', 'game-changing', 'seamless as filler'),
         'signoff', '— the OpenVibe crew'
     ),
-    1,
+    0,
     (extract(epoch FROM now()) * 1000)::bigint
 )
 ON CONFLICT (account) DO NOTHING;

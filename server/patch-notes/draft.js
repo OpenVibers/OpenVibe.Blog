@@ -143,11 +143,15 @@ function underTheHood(chores) {
     const versions = new Map();
     let docs = 0;
     for (const e of chores) {
-        const v = String(e.subject || '').match(/openvibe-(?:shared|sdk|contracts|publishing)\s+(v\d+\.\d+\.\d+)/i);
-        if (v) versions.set(v[1].toLowerCase(), (versions.get(v[1].toLowerCase()) || 0) + 1);
-        if (/in the docs|documentation|readme/i.test(String(e.subject || ''))) docs++;
+        const subject = String(e.subject || '');
+        const v = subject.match(/openvibe-(shared|sdk|contracts|publishing)\s+(v\d+\.\d+\.\d+)/i);
+        if (/in the docs|documentation|readme/i.test(subject)) { docs++; continue; }
+        if (v) {
+            const key = `openvibe-${v[1].toLowerCase()} ${v[2].toLowerCase()}`;
+            versions.set(key, (versions.get(key) || 0) + 1);
+        }
     }
-    const parts = [...versions.entries()].map(([v, n]) => `openvibe-shared ${v} on ${n} ${n === 1 ? 'site' : 'sites'}`);
+    const parts = [...versions.entries()].map(([v, n]) => `${v} on ${n} ${n === 1 ? 'site' : 'sites'}`);
     if (docs) parts.push(`the sign-in SDK's docs on ${docs} ${docs === 1 ? 'site' : 'sites'}`);
     const what = parts.length ? parts.join(', ') : `${chores.length} housekeeping ${chores.length === 1 ? 'commit' : 'commits'}`;
     return `## Under the hood\n\nThe batch also carried ${what}. Lockfiles, version strings and docs only: no new user-facing change, so they get this paragraph instead of a heading each.\n`;
