@@ -138,3 +138,13 @@ body.blog-home .page { max-width: 1120px; }
   .bh-desks > li { flex: 0 0 84%; min-width: 0; scroll-snap-align: start; }
   .bh-fold > summary span { display: none; }
 }
+
+/* Touch targets on phones (fleet audit, 2026-10-29): touch pointers only. */
+@media (pointer: coarse) {
+  .bh-chips a { min-height: 44px; }
+  .bh-faq summary { min-height: 44px; }
+  .bh-bars a { display: inline-block; min-height: 44px; }
+  .bh-card h3 a, .bh-desks h3 a { display: inline-block; min-height: 44px; }
+  .bh-more a:only-child { position: relative; display: inline-block; }
+  .bh-more a:only-child::after { content: ''; position: absolute; left: 0; right: 0; top: -12px; bottom: -12px; }
+}
