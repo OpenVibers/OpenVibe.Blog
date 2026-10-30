@@ -315,14 +315,28 @@ function createPublicRoutes(ctx) {
         }
     }
 
+    /**
+     * The series around this post: its place in the whole series, the previous and next parts, and up to 11 parts
+     * around it for the fold. Every part's row is read (they are small), but titles only for the parts shown.
+     */
     async function seriesView(blog, post) {
         const series = await blogs.seriesById(post.series_id);
         if (!series) return null;
-        const { posts: rows } = await posts.listPublished({ blogId: blog.id, seriesId: series.id, limit: 50, order: 'series' });
-        const revs = await store.revisions.getMany(rows.map((p) => ({ entityId: p.id, revision: p.published_revision })));
+        const { posts: rows, total } = await posts.listPublished({ blogId: blog.id, seriesId: series.id, limit: 5000, order: 'series' });
+        const at = rows.findIndex((p) => p.id === post.id);
+        const from = at < 0 ? 0 : Math.max(0, Math.min(at - 5, rows.length - 11));
+        const shown = rows.slice(from, from + 11);
+        const near = [at > 0 ? rows[at - 1] : null, at >= 0 && at + 1 < rows.length ? rows[at + 1] : null];
+        const want = [...shown, ...near.filter(Boolean)];
+        const revs = await store.revisions.getMany(want.map((p) => ({ entityId: p.id, revision: p.published_revision })));
+        const titleOf = new Map(want.map((p, i) => [p.id, (revs[i] || { fields: {} }).fields.title]));
+        const part = (p) => (p ? { title: titleOf.get(p.id), url: publication.postPath(blog, p) } : null);
         return {
-            title: series.title, url: reading.urls.series(blog, series), position: post.series_position,
-            items: rows.map((p, i) => ({ title: (revs[i] || { fields: {} }).fields.title, url: publication.postPath(blog, p), current: p.id === post.id })),
+            title: series.title, url: reading.urls.series(blog, series),
+            position: post.series_position || (at >= 0 ? at + 1 : null),
+            total: Number(total) || rows.length, start: from + 1,
+            prev: part(near[0]), next: part(near[1]),
+            items: shown.map((p) => ({ title: titleOf.get(p.id), url: publication.postPath(blog, p), current: p.id === post.id })),
         };
     }
 
@@ -343,6 +357,7 @@ function createPublicRoutes(ctx) {
         const csrf = req.viewer.kind === 'user' ? csrfToken(config, req.viewer) : '';
         send(req, res, status, {
             title: rev.fields.title,
+            bodyClass: 'post-page',
             description: rev.fields.summary || ssr.markdownToText(rev.content, 160),
             decision,
             canonical: publication.postUrl(blog, post),
