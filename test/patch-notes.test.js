@@ -36,6 +36,8 @@ const entry = (service, sha, subject, body = null) => ({
         assert.strictEqual(intentOf({ service: 'network', repo: 'OpenVibers/OpenVibe.Network', subject: 'The site switcher follows the account (#430)' }).kind, 'feature');
         assert.strictEqual(intentOf({ service: 'bench', repo: 'OpenVibers/OpenVibe.Bench', subject: 'Generation: a token cap per showcase kind (#17)' }).kind, 'internal');
         assert.strictEqual(intentOf({ service: 'codes', repo: 'OpenVibers/OpenVibe.Codes', subject: 'engine/: the agent engine, ported from the portal (C1) (#159)' }).kind, 'internal');
+        assert.strictEqual(intentOf({ service: 'blog', repo: 'OpenVibers/OpenVibe.Blog', subject: 'Patch notes v2: commits become stories, and a person publishes them (#131)', major: 1 }).kind, 'internal', 'a large diff is not a feature');
+        assert.strictEqual(intentOf({ service: 'blog', repo: 'OpenVibers/OpenVibe.Blog', subject: 'patch notes: one-off changes get a line, and the full list is not prose (#134)', major: 1 }).kind, 'internal');
     });
 
     await check('a product name in a sourced line is not the writer\'s slop; the story still is', async () => {
