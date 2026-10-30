@@ -23,6 +23,43 @@ function createAiDrafts({ config, store, posts, access, fetchImpl = globalThis.f
     }) : null;
     const ai = createAiClient({ baseUrl: config.aiUrl, tokenClient, fetch: fetchImpl });
 
+    /** The numbered sources, clipped to the workflow's schema (source_type is required, 2–64 chars). */
+    function sourcesOf(list) {
+        return (Array.isArray(list) ? list : []).slice(0, 50).map((s) => {
+            const out = { source_type: clean(s && s.source_type, 64) || 'source' };
+            for (const [k, n] of [['source_id', 256], ['url', 2048], ['title', 500], ['author', 200], ['published_at', 40], ['retrieved_at', 40], ['observed_at', 40]]) {
+                if (s && s[k] != null && String(s[k]) !== '') out[k] = String(s[k]).slice(0, n);
+            }
+            if (s && s.content != null) out.content = String(s.content).slice(0, 20000);
+            else if (s && s.snippet != null) out.snippet = String(s.snippet).slice(0, 4000);
+            return out;
+        });
+    }
+
+    /**
+     * One AI run, no post written: Patch notes composes the post itself (title, list, sign-off). Returns the raw
+     * answer and the workflow record for the authorship of the post it creates.
+     */
+    async function rawDraft(viewer, blog, input = {}, { traceparent } = {}) {
+        if (!viewer || !viewer.subject) throw new ApiError(401, 'subject.required', 'Sign in to ask for an AI draft');
+        if (!await access.canWrite(store, viewer, blog, 'create')) throw new ApiError(403, 'blog.forbidden', 'You cannot write on this blog');
+        const topic = clean(input.topic, 300);
+        if (!topic) throw new ApiError(422, 'ai_draft.topic_required', 'Say what the post should be about');
+        const brief = String(input.brief == null ? '' : input.brief).trim().slice(0, 4000);
+        const tone = clean(input.tone, 200);
+        const audience = clean(input.audience, 300);
+        const sources = sourcesOf(input.sources);
+        try {
+            const r = await ai.run('blog.draft_post', { topic, ...(brief ? { brief } : {}), ...(tone ? { tone } : {}), ...(audience ? { audience } : {}), ...(sources.length ? { sources } : {}) }, {
+                onBehalfOf: { type: 'user', id: viewer.subject }, target: { service: 'blog', type: 'blog', id: String(blog.id) }, traceparent,
+            });
+            return { runId: r.runId, output: r.output, workflow: r.workflow, synthetic: r.synthetic, citations: r.citations };
+        } catch (err) {
+            if (err instanceof AiRunError) throw new ApiError(err.status || 502, err.code, err.message);
+            throw err;
+        }
+    }
+
     async function draft(viewer, blog, input = {}, { traceparent } = {}) {
         if (!viewer || !viewer.subject) throw new ApiError(401, 'subject.required', 'Sign in to ask for an AI draft');
         if (!await access.canWrite(store, viewer, blog, 'create')) throw new ApiError(403, 'blog.forbidden', 'You cannot write on this blog');
@@ -60,7 +97,7 @@ function createAiDrafts({ config, store, posts, access, fetchImpl = globalThis.f
         }, { traceparent });
     }
 
-    return { enabled: ai.enabled, draft };
+    return { enabled: ai.enabled, draft, rawDraft };
 }
 
 module.exports = { createAiDrafts };

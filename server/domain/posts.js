@@ -174,6 +174,10 @@ function createPosts({ store, blogs, publication, access, outbox, log = console 
 
     // ── Reads ───────────────────────────────────────────────
 
+    // Patch notes v2 (server/patch-notes/index.js): refuses a publish the reviewer's checks block.
+    let publishGate = null;
+    function setPublishGate(fn) { publishGate = typeof fn === 'function' ? fn : null; }
+
     const api = {
         VISIBILITIES, MEDIA_ROLES,
 
@@ -345,6 +349,13 @@ function createPosts({ store, blogs, publication, access, outbox, log = console 
                 if (post.state === 'published' && post.published_revision === rev.number) return { changed: false, post };
                 const ok = authorship.canPublish(publication.authorshipOf(rev) || { mode: 'human' }, await publication.reviewOf(post, rev));
                 if (!ok.ok) throw new ApiError(409, 'post.review_required', `Revision ${rev.number} is AI-generated and needs a person's review before it can be published (${ok.reason})`);
+                if (publishGate) {
+                    const gate = await publishGate(post, rev);
+                    if (gate && gate.blocking && gate.blocking.length) {
+                        const codes = [...new Set(gate.blocking.map((b) => b.code))].join(', ');
+                        throw new ApiError(409, 'post.patch_notes_blocked', `This Patch notes draft has ${gate.blocking.length} blocking problem${gate.blocking.length === 1 ? '' : 's'} (${codes}). Fix them, or have the editor override a banned phrase with a reason, then publish.`);
+                    }
+                }
                 const before = publication.snapshot(await blogOf(post), post);
                 const now = store.now();
                 await db.prepare(`UPDATE blog_posts SET state = 'published', published_revision = ?, first_published_at = COALESCE(first_published_at, ?),
@@ -517,6 +528,8 @@ function createPosts({ store, blogs, publication, access, outbox, log = console 
             const pos = parseInt(position, 10);
             return await store.attachments.attach({ entityId: post.id, mediaId: id, role, alt: alt || null, caption: caption || null, position: Number.isInteger(pos) ? pos : 0 });
         },
+
+        setPublishGate,
 
         async detach(viewer, post, attachmentId) {
             actingSubject(viewer);

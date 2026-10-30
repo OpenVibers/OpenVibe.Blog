@@ -59,7 +59,14 @@ function load(env = process.env) {
             history: Math.max(0, Math.min(100, parseInt(env.CHANGELOG_HISTORY ?? '60', 10) || 0)),
             firstDelayMs: 60 * 1000,
             since: env.CHANGELOG_SINCE && !Number.isNaN(Date.parse(env.CHANGELOG_SINCE)) ? new Date(env.CHANGELOG_SINCE).toISOString() : null,
-            aiDraft: env.CHANGELOG_AI_DRAFT !== 'off',
+        },
+        // Patch notes v2 (server/patch-notes/): how many workstreams get an H2, and how many published posts the AI
+        // prompt gets as voice samples. The draft is always a draft; CHANGELOG_AI_DRAFT=off skips the AI prose and
+        // writes the deterministic one.
+        patchNotes: {
+            maxStories: Math.max(2, Math.min(8, int(env.BLOG_PATCH_NOTES_STORIES, 6))),
+            samples: Math.max(0, Math.min(4, int(env.BLOG_PATCH_NOTES_SAMPLES, 2))),
+            ai: env.CHANGELOG_AI_DRAFT !== 'off',
         },
         // OpenVibe.AI for "Draft with AI" (server/domain/ai-drafts.js); empty = the button is not offered.
         aiUrl: trim(env.OV_AI_INTERNAL_URL || ''),

@@ -4,9 +4,9 @@
 
 **Status:** alpha (roadmap Wave 16, Blog half). **Public at https://openvibe.blog since 2026-09-23**
 (the launch release also removed the domain from OpenVibe.Sites). Its capabilities and service
-manifest are released in openvibe-contracts v0.97.0. The network changelog publishes Patch notes
-posts on the official blog ([below](#the-network-changelog-and-patch-notes)); the seed post stays a
-draft until a person reviews it.
+manifest are released in openvibe-contracts v0.97.0. The network changelog files Patch notes
+**drafts** on the official blog ([below](#the-network-changelog-and-patch-notes)); a person reviews
+and publishes each one, and the seed post stays a draft until a person reviews it.
 **Domain:** `openvibe.blog` · **Port:** 4810 · **Service id:** `blog`
 **Plan:** OpenVibe End-to-End Realignment & Implementation Plan, revision 3 (20 Sep 2026), §12.6; roadmap §15.13, §29, §32.
 **License:** AGPL-3.0 (same as every OpenVibe service).
@@ -194,14 +194,37 @@ repository and current release from OpenVibe.Network's registry and takes the ne
 compare API. The first time it sees a site it also imports that site's last `CHANGELOG_HISTORY` commits
 (60 by default). Those history entries are shown in the feed but never go into a post.
 
-A **Patch notes** post on the official blog (series "Patch notes", imported authorship, grouped by
-site) is published when either of these happens:
+A **Patch notes draft** on the official blog (series "Patch notes") is filed when either of these
+happens:
 
 - `CHANGELOG_BATCH_SIZE` changes have gathered.
 - A large release (`CHANGELOG_MAJOR_LINES`, a version bump or `[major]`) has been quiet for 30 minutes.
 
-There is always at least a 6-hour gap between posts. An AI-written dev-blog version is filed as a draft
-for review.
+There is always at least a 6-hour gap between drafts. Nothing is published from the pipeline: the
+draft is the only artifact, and publishing it needs a person's approval of the revision. See
+`server/patch-notes/`:
+
+- **stories** — the commits become workstreams (sign-in, touch, phone-home, orbit, …), clustered by
+  intent, a `Workstream:` trailer or a shared package, split at 72 hours, classified feature / fix /
+  chore / internal and ranked by player impact. Lockfiles and version bumps fold into one "Under the
+  hood" paragraph.
+- **draft** — the §3.1 template: a title and dek, three player outcomes, one H2 per story with what
+  changed, why and how to see it, Under the hood, What's next from the open PRs (at most three, each
+  linked), and the full commit list under `<details>`. OpenVibe.AI's `blog.draft_post` writes the
+  prose from the numbered commits plus the voice card and the two newest published posts; without AI
+  the deterministic post is filed.
+- **voice** — one card per author account (`blog_voice_cards`; `official` is seeded), edited at
+  **Write → How I write**. It is private unless the author publishes it.
+- **slop** and **no-looks** — the banned phrases and the structures (a three-item list in every
+  paragraph, a restating conclusion, an em dash every other sentence), and the owner's rule that
+  public AI text never describes a person. The editor shows both.
+- **review** — the checks and the checklist the reviewer sees, and the hard gates that stop
+  `posts.publish`: a banned phrase (unless the editor overrides it with a reason), a looks word, an
+  unresolved `[TODO]`, a broken link, an image without alt text, AI-only text without approval, or
+  no named person's approval at all.
+
+`node scripts/patch-notes.js` files a draft from the pending commits (`--dry-run` prints it,
+`--no-ai` uses the deterministic post).
 
 `GET /api/v1/changelog?service=&limit=&before=` is public (CORS `*`, cached for 60 s). It returns:
 

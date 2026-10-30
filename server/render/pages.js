@@ -12,6 +12,25 @@ const { figureHtml } = require('openvibe-publishing/media');
 
 const { html: h, raw, escapeHtml: esc } = ssr;
 const MEDIA_LINE = /^[ \t]*\[\[media:(med_[0-9A-HJKMNP-TV-Z]{26})\]\][ \t]*$/m;
+// A post may fold a block away: <details><summary>…</summary>…</details>. The package's renderer
+// escapes raw HTML on purpose, so Blog renders exactly this one shape itself — the summary as text,
+// the inside as Markdown — and leaves every other tag to be escaped. Patch notes keep the full commit
+// list there.
+const DETAILS = /<details>\s*<summary>([\s\S]*?)<\/summary>([\s\S]*?)<\/details>/gi;
+function renderMarkdownWithDetails(source, opts) {
+    const text = String(source || '');
+    let out = '';
+    let last = 0;
+    DETAILS.lastIndex = 0;
+    let m;
+    while ((m = DETAILS.exec(text))) {
+        out += ssr.renderMarkdown(text.slice(last, m.index), opts);
+        out += `<details class="ov-details"><summary>${esc(m[1].replace(/<[^>]*>/g, '').trim())}</summary>${ssr.renderMarkdown(m[2], opts)}</details>`;
+        last = m.index + m[0].length;
+    }
+    out += ssr.renderMarkdown(text.slice(last), opts);
+    return out;
+}
 
 const dateLabel = (v) => (v ? new Date(v).toISOString().slice(0, 10) : null);
 const time = (v) => raw(ssr.timeTag(v == null ? null : new Date(v).toISOString(), { label: dateLabel(v) || undefined }));
@@ -27,7 +46,7 @@ function renderBody(content, attachments, { urlFor, rel }) {
     const parts = String(content || '').split(new RegExp(MEDIA_LINE.source, 'm'));
     let out = '';
     parts.forEach((part, i) => {
-        if (i % 2 === 0) { out += ssr.renderMarkdown(part, { rel }); return; }
+        if (i % 2 === 0) { out += renderMarkdownWithDetails(part, { rel }); return; }
         const att = byId.get(part);
         if (att) { used.add(att.id); out += figureHtml(att, { urlFor }); } else {
             out += `<figure class="ov-media ov-media-broken" data-media-id="${esc(part)}" data-state="not_attached"><div class="ov-media-missing" role="img" aria-label="Media not attached">This media is not attached to the post.</div></figure>`;
@@ -159,4 +178,4 @@ function message({ heading, text, action }) {
     return String(h`<section class="message"><h1>${heading}</h1><p>${text}</p>${action ? h`<p><a class="button" href="${action.href}">${action.label}</a></p>` : ''}</section>`);
 }
 
-module.exports = { renderBody, blogIndex, collection, postPage, membersTeaser, message, postList, categoryTree, time, dateLabel };
+module.exports = { renderBody, renderMarkdownWithDetails, blogIndex, collection, postPage, membersTeaser, message, postList, categoryTree, time, dateLabel };

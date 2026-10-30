@@ -11,16 +11,14 @@
  * library version bump like "1.7.0: …", or "[major]" in a message) marks its entries major. A service
  * seen for the first time only records its release, unless CHANGELOG_SINCE backfills from a date.
  *
- * Publish: pending entries (not yet in a post) become one "Patch notes" post on the blog
+ * Draft: pending entries (not yet in a draft) become one Patch notes DRAFT on the blog
  * (CHANGELOG_BLOG, default the official blog) when there are CHANGELOG_BATCH_SIZE of them, or when a
  * major release is pending and deploys have been quiet for CHANGELOG_QUIET_MS (a burst of deploys
- * becomes one post), or when the oldest has waited CHANGELOG_MAX_AGE_MS; never sooner than
- * CHANGELOG_MIN_GAP_MS after the last post unless twice the batch is waiting. The post is the commit
- * messages people wrote, grouped by site with links to each commit and the highlights first:
- * authorship "imported" (from GitHub), published at once by the blog's first configured owner, so it
- * reaches feeds, Search and Community Pulse like any post. With OpenVibe.AI configured and
- * CHANGELOG_AI_DRAFT on, an AI-written dev-blog version is also filed as a draft for a person to
- * review (AI text is never published unreviewed).
+ * becomes one draft), or when the oldest has waited CHANGELOG_MAX_AGE_MS; never sooner than
+ * CHANGELOG_MIN_GAP_MS after the last draft unless twice the batch is waiting (devblog §3.6: the
+ * pipeline never publishes). server/patch-notes/ turns the commits into workstreams and the §3.1
+ * template, with OpenVibe.AI's prose when it is configured, and a person reviews the draft before it
+ * can be published. The draft owns its entries; the public feed links them only once the post is live.
  *
  * Read: GET /api/v1/changelog?service=&limit= (public, CORS *) is what every site's "recently
  * shipped" shows, with the latest patch notes post to link to.
@@ -53,11 +51,11 @@ function subjectOf(message, n = 240) {
 const isVersionBump = (subject) => /^\d+\.\d+\.\d+\b/.test(subject);
 const isNoise = (subject) => /^Merge (branch|pull request|remote)/i.test(subject);
 
-function createChangelog({ config, store, blogs, posts, aiDrafts = null, fetchImpl = globalThis.fetch, log = console }) {
+function createChangelog({ config, store, blogs, posts, patchNotes = null, fetchImpl = globalThis.fetch, log = console }) {
     const c = config.changelog;
     const db = store.db;
     const nowMs = () => store.now();
-    const stats = { runs: 0, entries: 0, posts: 0, lastError: null, lastRunAt: null };
+    const stats = { runs: 0, entries: 0, posts: 0, drafts: 0, lastError: null, lastRunAt: null };
 
     const q = {
         state: db.prepare('SELECT * FROM changelog_state WHERE service = ?'),
@@ -72,6 +70,7 @@ function createChangelog({ config, store, blogs, posts, aiDrafts = null, fetchIm
         sites: db.prepare(`SELECT service, COUNT(*) AS entries, MAX(deployed_at) AS latest_at FROM changelog_entries GROUP BY service ORDER BY latest_at DESC`),
         pending: db.prepare('SELECT * FROM changelog_entries WHERE post_id IS NULL ORDER BY deployed_at, committed_at, id'),
         mark: db.prepare('UPDATE changelog_entries SET post_id = ? WHERE id = ? AND post_id IS NULL'),
+        enrich: db.prepare('UPDATE changelog_entries SET message_body = ?, files = ?, pr_number = ? WHERE service = ? AND sha = ?'),
         lastPost: db.prepare('SELECT * FROM changelog_posts ORDER BY created_at DESC LIMIT 1'),
         putPost: db.prepare(`INSERT INTO changelog_posts (post_id, blog_id, entries, from_at, to_at, reason, ai_draft_id, created_at)
             VALUES (@post_id, @blog_id, @entries, @from_at, @to_at, @reason, @ai_draft_id, @created_at)`),
@@ -229,73 +228,76 @@ function createChangelog({ config, store, blogs, posts, aiDrafts = null, fetchIm
         return { due: false, reason: 'waiting' };
     }
 
-    function render(list, services) {
-        const byService = new Map();
-        for (const e of list) { if (!byService.has(e.service)) byService.set(e.service, []); byService.get(e.service).push(e); }
-        const order = [...byService.keys()].sort((a, b) => byService.get(b).length - byService.get(a).length || a.localeCompare(b));
-        const name = (id) => (services.get(id) && services.get(id).name) || id;
-        const link = (e) => `[\`${e.sha.slice(0, 7)}\`](https://github.com/${e.repo}/commit/${e.sha})`;
-        // A highlight per major release: its most descriptive (longest) commit subject.
-        const majors = new Map();
-        for (const e of list) if (e.major) { const k = `${e.service}@${e.release}`; if (!majors.has(k) || e.subject.length > majors.get(k).subject.length) majors.set(k, e); }
-        const highlights = [...majors.values()].slice(0, 8);
-        const day = (iso) => new Date(iso).toISOString().slice(0, 10);
-        const from = day(list[0].deployed_at);
-        const to = day(list[list.length - 1].deployed_at);
-        const sites = order.map(name);
-        const lead = highlights[0] ? clean(highlights[0].subject.split(/[:.;(]/)[0], 70) : null;
-        // The day ends the title: titles made from the counts repeated ("Patch notes: 80 changes across 36 sites" three
-        // times by 2026-10-17), which search results and the feed cannot tell apart. The "Patch notes: " start stays
-        // (openvibe-shared/shipped.js strips it to show the rest).
-        const dayLabel = new Date(list[list.length - 1].deployed_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
-        const title = `Patch notes: ${lead && lead.length >= 12 ? lead : `${list.length} changes across ${order.length} ${order.length === 1 ? 'site' : 'sites'}`} (${dayLabel})`;
-        const summary = clean(`What shipped on OpenVibe ${from === to ? `on ${from}` : `from ${from} to ${to}`}: ${list.length} ${list.length === 1 ? 'change' : 'changes'} to ${sites.slice(0, 6).join(', ')}${sites.length > 6 ? ` and ${sites.length - 6} more` : ''}.`, 400);
-        const out = [`${summary} Every line below is a commit message from the OpenVibers repositories, linked to the change itself.`, ''];
-        if (highlights.length) {
-            out.push('## Highlights', '');
-            for (const e of highlights) out.push(`- **${name(e.service)}:** ${e.subject} (${link(e)})`);
-            out.push('');
+    /**
+     * Read the body, the files and the PR of commits that do not have them yet. The body is where the measurements
+     * live; the files are how a story that shared a package is found. Kept in the row, so a later draft does not ask
+     * GitHub again. Failures are not fatal: the draft is written from what is known.
+     */
+    async function enrich(list) {
+        const out = [];
+        for (const e of list) {
+            if (e.message_body || e.body) { out.push({ ...e, body: e.body || e.message_body }); continue; }
+            try {
+                const c = await gh(`/repos/${e.repo}/commits/${e.sha}`);
+                const body = String((c.commit && c.commit.message) || '');
+                const files = (Array.isArray(c.files) ? c.files : []).map((f) => f.filename).slice(0, 60);
+                const pr = Number((e.subject.match(/\(#(\d+)\)\s*$/) || [])[1]) || null;
+                await q.enrich.run(body, JSON.stringify(files), pr, e.service, e.sha);
+                out.push({ ...e, body, files, pr_number: pr });
+            } catch (err) {
+                if (err.status === 403 || err.status === 429) { out.push(...list.slice(out.length)); break; }
+                out.push({ ...e, body: e.subject });
+            }
         }
-        for (const id of order) {
-            const svc = services.get(id);
-            out.push(`## ${name(id)}`, '');
-            if (svc && svc.origin) out.push(`[${svc.origin.replace(/^https?:\/\//, '')}](${svc.origin}) · [repository](https://github.com/${svc.repo})`, '');
-            for (const e of byService.get(id)) out.push(`- ${e.subject} (${link(e)})`);
-            out.push('');
-        }
-        out.push('---', '', 'Patch notes are put together automatically when enough changes have shipped, or when a large feature lands. See every site\'s own updates page for the live list.');
-        return { title, summary, body: out.join('\n'), from: list[0].deployed_at, to: list[list.length - 1].deployed_at, tags: ['patch-notes', ...order.slice(0, 10)] };
+        return out;
     }
 
-    async function publish(list, reason) {
-        const blog = await blogs.byHandle(c.blogHandle) || (c.blogHandle === config.official.handle ? await blogs.ensureOfficial() : null);
-        const owner = config.official.owners.find((s) => /^usr_/.test(s));
-        if (!blog || !owner) { stats.lastError = !blog ? `no blog @${c.blogHandle}` : 'BLOG_OFFICIAL_OWNERS names no owner to publish as'; return null; }
-        const services = new Map((await registry().catch(() => [])).map((s) => [s.id, s]));
-        for (const e of list) if (!services.has(e.service)) services.set(e.service, { id: e.service, name: e.service, repo: e.repo, origin: null });
-        const doc = render(list, services);
-        const viewer = { kind: 'user', subject: owner, staff: false };
-        const { post } = await posts.create(viewer, blog, {
-            title: doc.title, summary: doc.summary, body: doc.body, tags: doc.tags.filter((t) => t.length <= 50).slice(0, 20), series: 'Patch notes',
-            authorship: { mode: 'imported', importedFrom: { label: 'Commit messages from the OpenVibers repositories on GitHub', originalAuthor: 'OpenVibers' } },
-            message: `Patch notes from ${list.length} commits (${reason})`,
-        });
-        await posts.publish(viewer, posts.get ? await posts.get(post.id) || post : post);
-        let aiDraftId = null;
-        if (c.aiDraft && aiDrafts && aiDrafts.enabled) {
-            try {
-                const brief = list.map((e) => `- [${e.service}] ${e.subject}`).join('\n').slice(0, 3900);
-                const d = await aiDrafts.draft(viewer, blog, { topic: `Dev blog: ${doc.title.replace(/^Patch notes: /, '')}`, brief: `Write a friendly developer-blog post about what just shipped on OpenVibe, for its community. Only use these changes:\n${brief}`, tone: 'plain, warm, specific', audience: 'OpenVibe members and contributors' });
-                aiDraftId = d.post.id;
-            } catch (err) { log.warn && log.warn(`[changelog] AI dev-blog draft not made: ${err.message}`); }
+    /** The pending commits, oldest first, with their URL: what a draft is made from. */
+    async function pendingEntries() {
+        return (await q.pending.all()).map((e) => ({ ...e, url: `https://github.com/${e.repo}/commit/${e.sha}` }));
+    }
+
+    /** A draft owns its commits (they are not in a second draft); the feed shows the link once the post publishes. */
+    async function markEntries(list, postId) {
+        for (const e of list) if (e.id != null) await q.mark.run(postId, e.id);
+    }
+
+    /**
+     * The open PRs of the organisation, for What's next. Search API, ten minutes cached: a rate limit answers [].
+     */
+    let pullsCache = { at: 0, value: [] };
+    async function openPulls() {
+        if (nowMs() - pullsCache.at < 10 * 60 * 1000) return pullsCache.value;
+        try {
+            const r = await gh(`/search/issues?q=${encodeURIComponent('org:OpenVibers type:pr state:open')}&per_page=50&sort=updated`);
+            const value = (Array.isArray(r.items) ? r.items : []).map((i) => ({
+                number: i.number, title: i.title, url: i.html_url,
+                repo: String(i.repository_url || '').split('/').slice(-2).join('/'),
+            })).filter((p) => p.number && p.url);
+            pullsCache = { at: nowMs(), value };
+            return value;
+        } catch (err) {
+            stats.lastError = `pulls: ${err.message}`;
+            return pullsCache.value;
         }
-        await store.tx(async () => {
-            for (const e of list) await q.mark.run(post.id, e.id);
-            await q.putPost.run({ post_id: post.id, blog_id: blog.id, entries: list.length, from_at: doc.from, to_at: doc.to, reason, ai_draft_id: aiDraftId, created_at: nowMs() });
-        });
-        stats.posts++;
-        log.log && log.log(`[changelog] published ${post.id} (${list.length} entries, ${reason})`);
-        return { post, aiDraftId };
+    }
+
+    /** File the draft: Patch notes are never published from here (devblog §3.6). */
+    async function fileDraft(list, reason) {
+        if (!patchNotes) return null;
+        try {
+            const out = await patchNotes.draftPending({ entries: list, reason });
+            if (out && out.created) {
+                stats.drafts++;
+                await q.putPost.run({ post_id: out.post.id, blog_id: out.post.blog_id, entries: list.length, from_at: list[0].deployed_at, to_at: list[list.length - 1].deployed_at, reason, ai_draft_id: null, created_at: nowMs() });
+                log.log && log.log(`[changelog] filed Patch notes draft ${out.post.id} (${list.length} entries, ${reason})`);
+            }
+            return out;
+        } catch (err) {
+            stats.lastError = `draft: ${err.message}`;
+            log.warn && log.warn(`[changelog] Patch notes draft not filed: ${err.message}`);
+            return null;
+        }
     }
 
     async function tick() {
@@ -304,7 +306,7 @@ function createChangelog({ config, store, blogs, posts, aiDrafts = null, fetchIm
             await collect();
             const list = await q.pending.all();
             const d = await due(list);
-            if (d.due) return await publish(list.slice(0, c.batchSize * 3), d.reason);
+            if (d.due) return await fileDraft(list.slice(0, c.batchSize * 3), d.reason);
             return null;
         } catch (err) { stats.lastError = err.message; log.warn && log.warn(`[changelog] ${err.message}`); return null; }
     }
@@ -327,13 +329,15 @@ function createChangelog({ config, store, blogs, posts, aiDrafts = null, fetchIm
         const args = [];
         if (service) { where.push('service = ?'); args.push(String(service)); }
         if (cur) { where.push('(deployed_at < ? OR (deployed_at = ? AND id < ?))'); args.push(cur.at, cur.at, cur.id); }
-        const rows = await db.prepare(`SELECT * FROM changelog_entries ${where.length ? `WHERE ${where.join(' AND ')}` : ''} ORDER BY deployed_at DESC, id DESC LIMIT ?`).all(...args, n + 1);
+        const rows = await db.prepare(`SELECT e.*, (SELECT p.state FROM blog_posts p WHERE p.id = e.post_id) AS post_state
+            FROM changelog_entries e ${where.length ? `WHERE ${where.join(' AND ')}` : ''} ORDER BY e.deployed_at DESC, e.id DESC LIMIT ?`).all(...args, n + 1);
         const more = rows.length > n;
         const shown = rows.slice(0, n);
         return {
             entries: shown.map((e) => ({
                 service: e.service, sha: e.sha, short: e.sha.slice(0, 7), subject: e.subject, author: e.author || null, committed_at: e.committed_at, deployed_at: e.deployed_at,
-                major: Boolean(e.major), url: `https://github.com/${e.repo}/commit/${e.sha}`, post_id: e.post_id && e.post_id !== 'history' ? e.post_id : null,
+                major: Boolean(e.major), url: `https://github.com/${e.repo}/commit/${e.sha}`,
+                post_id: e.post_id && e.post_id !== 'history' && e.post_state === 'published' ? e.post_id : null,
             })),
             next: more && shown.length ? encodeCursor(shown[shown.length - 1]) : null,
         };
@@ -344,7 +348,7 @@ function createChangelog({ config, store, blogs, posts, aiDrafts = null, fetchIm
     /** Every site with entries: [{ service, entries, latest_at }], most recently shipped first. */
     async function sites() { return await q.sites.all(); }
 
-    return { tick, collect, due, render, publish, start, stop, entries, page, latestPost, recentPosts, sites, importHistory, stats: async () => ({ enabled: c.enabled, ...stats, github_token: cachedToken.source, pending: (await q.pending.all()).length }) };
+    return { tick, collect, due, fileDraft, enrich, pendingEntries, markEntries, openPulls, start, stop, entries, page, latestPost, recentPosts, sites, importHistory, stats: async () => ({ enabled: c.enabled, ...stats, github_token: cachedToken.source, pending: (await q.pending.all()).length }) };
 }
 
 /** A stable id for a batch (tests). */
