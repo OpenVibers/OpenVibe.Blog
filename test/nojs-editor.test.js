@@ -73,7 +73,8 @@ const idFrom = (location) => (location.match(/\/write\/posts\/(pst_[0-9A-Z]+)/) 
         const page = await t.get('/@eve/notes-without-script');
         assert.strictEqual(page.status, 200);
         assert.match(page.text, /Plain <em>text<\/em>, edited\./);
-        assert.match(page.text, /Part 1 of the series <a href="\/@eve\/series\/field-notes">Field notes<\/a>/);
+        assert.match(page.text, /Part 1 of 1 in the series <a href="\/@eve\/series\/field-notes">Field notes<\/a>/);
+        assert.match(page.text, /class="read-time"[^>]*>≈ \d+ min read</, 'the post states a read time');
         assert.match((await t.get('/@eve/series/field-notes')).text, /Notes without script/);
     });
 

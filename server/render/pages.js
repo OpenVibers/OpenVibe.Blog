@@ -33,6 +33,65 @@ function renderMarkdownWithDetails(source, opts) {
 }
 
 const dateLabel = (v) => (v ? new Date(v).toISOString().slice(0, 10) : null);
+
+// ── The reading layout (owner ask 3, the blog outcomes: research-2026-10-30/market/outcomes/blog.md) ──
+// A stated read time, and a contents list built from the post's own sections. Markdown's "##" renders as <h3> (the
+// page's h1 is the title), so a post's sections are its top-level <h3>s; those inside a fold (<details>) get an id but
+// stay out of the list, since a link into a closed fold lands on nothing.
+const WORDS_PER_MINUTE = 265;
+/** "≈ N min read" from the Markdown: rounded, never 0; code blocks, media lines and link targets are not read. */
+function readMinutes(content) {
+    const text = String(content || '')
+        .replace(/```[\s\S]*?```/g, ' ')
+        .replace(/\[\[media:[^\]]*\]\]/g, ' ')
+        .replace(/\]\([^)]*\)/g, ' ')
+        .replace(/<[^>]+>/g, ' ');
+    const words = (text.match(/[\p{L}\p{N}][\p{L}\p{N}'’-]*/gu) || []).length;
+    return Math.max(1, Math.round(words / WORDS_PER_MINUTE));
+}
+const RESERVED_IDS = new Set(['main', 'comments', 'contents', 'sources', 'series', 'top']);
+const ENTITIES = { '&amp;': '&', '&lt;': '<', '&gt;': '>', '&quot;': '"', '&#39;': "'", '&#x27;': "'" };
+const decode = (t) => t.replace(/&(?:amp|lt|gt|quot|#39|#x27);/g, (m) => ENTITIES[m]);
+const slug = (t) => t.normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 64);
+/** The body with an id on every section heading, and the top-level sections for the contents list. */
+function sectionsOf(bodyHtml) {
+    const used = new Set(RESERVED_IDS);
+    const sections = [];
+    let depth = 0;
+    const html = String(bodyHtml).replace(/<details\b[^>]*>|<\/details>|<h3>([\s\S]*?)<\/h3>/g, (m, inner) => {
+        if (m.startsWith('<details')) { depth++; return m; }
+        if (m === '</details>') { depth = Math.max(0, depth - 1); return m; }
+        const text = decode(inner.replace(/<[^>]+>/g, '')).replace(/\s+/g, ' ').trim();
+        const base = slug(text) || 'section';
+        let id = base;
+        for (let n = 2; used.has(id); n++) id = `${base}-${n}`;
+        used.add(id);
+        if (depth === 0 && text) sections.push({ id, text });
+        return `<h3 id="${id}">${inner}</h3>`;
+    });
+    return { html, sections };
+}
+/** The contents list: a fold under the title on phones, a rail beside the text on wide screens (CSS picks one). */
+function contentsHtml(sections) {
+    const list = h`<ol>${sections.map((x) => h`<li><a href="#${x.id}">${x.text}</a></li>`)}</ol>`;
+    return String(h`<nav class="toc-rail" aria-labelledby="toc-rail-h"><h2 id="toc-rail-h">On this page</h2>${list}</nav>`);
+}
+function contentsFold(sections) {
+    const list = h`<ol>${sections.map((x) => h`<li><a href="#${x.id}">${x.text}</a></li>`)}</ol>`;
+    return String(h`<details class="toc-fold"><summary>On this page <span>${sections.length} sections</span></summary>${list}</details>`);
+}
+/** The series: one line under the title; the previous and next parts, and the parts around this one, after the text. */
+function seriesLine(series) {
+    const where = series.position && series.total ? `Part ${series.position} of ${series.total} in the series` : (series.position ? `Part ${series.position} of the series` : 'Part of the series');
+    return String(h`<p class="series-line">${where} <a href="${series.url}">${series.title}</a></p>`);
+}
+function seriesFoot(series) {
+    const step = (it, rel, label) => (it ? h`<a rel="${rel}" href="${it.url}"><small>${label}</small><span>${it.title}</span></a>` : '');
+    const nav = series.prev || series.next ? h`<nav class="series-nav" aria-label="${`More in ${series.title}`}">${step(series.prev, 'prev', 'Previous')}${step(series.next, 'next', 'Next')}</nav>` : '';
+    const items = series.items || [];
+    const more = items.length > 1 ? h`<details class="series-more"><summary>More in ${series.title}${series.total ? h` <span>${series.total} parts</span>` : ''}</summary><ol start="${series.start || 1}">${items.map((x) => (x.current ? h`<li aria-current="page">${x.title}</li>` : h`<li><a href="${x.url}">${x.title}</a></li>`))}</ol><p><a href="${series.url}">${series.total ? `All ${series.total} parts` : 'The whole series'}</a></p></details>` : '';
+    return String(h`${nav}${more}`);
+}
 const time = (v) => raw(ssr.timeTag(v == null ? null : new Date(v).toISOString(), { label: dateLabel(v) || undefined }));
 
 /**
@@ -139,25 +198,35 @@ function postPage(o) {
     const gallery = attachments.filter((a) => a.role === 'gallery');
     const badge = { members: 'Members only', private: 'Private', unlisted: 'Unlisted' }[post.visibility];
     const updated = rev.number > 1 && post.first_published_at && Date.parse(rev.createdAt) > post.first_published_at + 60000;
+    const body = sectionsOf(renderBody(rev.content, attachments, { urlFor, rel }));
+    const toc = body.sections.length >= 3 ? body.sections : null;
+    const minutes = readMinutes(rev.content);
     return String(h`${raw(ssr.breadcrumbsHtml(o.breadcrumbs))}
+<div class="post-wrap${toc ? ' has-toc' : ''}">
+${raw(toc ? contentsHtml(toc) : '')}
+<div class="post-main">
 <article class="post" data-post-id="${post.id}" data-revision="${rev.number}">
 <header>
 <h1>${rev.fields.title}</h1>
-<p class="byline">${author ? h`By <a href="${author.url}" rel="author">${author.name}</a>` : ''}${post.published_at ? h` · ${time(post.first_published_at || post.published_at)}` : ''}${updated ? h` · updated ${time(Date.parse(rev.createdAt))}` : ''}${badge ? h` <span class="badge">${badge}</span>` : ''}${post.state !== 'published' ? h` <span class="badge">${post.state}</span>` : ''}</p>
+<p class="byline">${author ? h`By <a href="${author.url}" rel="author">${author.name}</a> · ` : ''}${post.published_at ? h`${time(post.first_published_at || post.published_at)} · ` : ''}${updated ? h`updated ${time(Date.parse(rev.createdAt))} · ` : ''}<span class="read-time" title="At ${WORDS_PER_MINUTE} words a minute: a guide, not a promise">≈ ${minutes} min read</span>${badge ? h` <span class="badge">${badge}</span>` : ''}${post.state !== 'published' ? h` <span class="badge">${post.state}</span>` : ''}</p>
+${series ? raw(seriesLine(series)) : ''}
 ${disclosure ? h`<p class="disclosure" role="note"><strong>${disclosure.short}.</strong> ${disclosure.long}</p>` : ''}
-${series ? h`<nav class="series" aria-label="Series"><p>Part ${series.position || '?'} of the series <a href="${series.url}">${series.title}</a></p><ol>${series.items.map((s) => (s.current ? h`<li aria-current="page">${s.title}</li>` : h`<li><a href="${s.url}">${s.title}</a></li>`))}</ol></nav>` : ''}
+${raw(toc ? contentsFold(toc) : '')}
 ${raw(cover.map((a) => figureHtml(a, { urlFor })).join(''))}
 </header>
-<div class="post-body">${raw(renderBody(rev.content, attachments, { urlFor, rel }))}</div>
+<div class="post-body">${raw(body.html)}</div>
 ${raw(gallery.length ? `<div class="gallery">${gallery.map((a) => figureHtml(a, { urlFor })).join('')}</div>` : '')}
 ${citations.length ? h`<section class="sources"><h2>Sources</h2><ol>${citations.map((c) => h`<li>${c.url ? h`<a href="${c.url}" rel="noopener">${c.title || c.url}</a>` : (c.title || c.sourceItemId)}${c.quote && c.quote.text ? h` — “${c.quote.text}”` : ''}${c.retrievedAt ? h` (retrieved ${dateLabel(c.retrievedAt)})` : ''}</li>`)}</ol></section>` : ''}
+${series ? raw(seriesFoot(series)) : ''}
 <footer class="post-footer">
 ${tags.length ? h`<p class="tags">${tags.map((t) => h`<a href="${t.url}" rel="tag">#${t.name}</a> `)}</p>` : ''}
 ${categories.length ? h`<p class="categories">Filed under ${categories.map((c) => h`<a href="${c.url}">${c.name}</a> `)}</p>` : ''}
 <p class="meta">Revision ${rev.number}${decisionNote ? h` · ${decisionNote}` : ''} · <a href="${o.jsonUrl}">JSON</a> · <a href="${blogUrl}">More from ${blog.title}</a>${canEdit ? h` · <a href="/write/posts/${post.id}">Edit</a>` : ''}</p>
 </footer>
 </article>
-${raw(comments ? commentsSection(comments, o) : '')}`);
+${raw(comments ? commentsSection(comments, o) : '')}
+</div>
+</div>`);
 }
 
 /** A members-only post for a reader without access: title, the author's summary, a join link — never the text. */
@@ -178,4 +247,5 @@ function message({ heading, text, action }) {
     return String(h`<section class="message"><h1>${heading}</h1><p>${text}</p>${action ? h`<p><a class="button" href="${action.href}">${action.label}</a></p>` : ''}</section>`);
 }
 
-module.exports = { renderBody, renderMarkdownWithDetails, blogIndex, collection, postPage, membersTeaser, message, postList, categoryTree, time, dateLabel };
+module.exports = {
+    readMinutes, sectionsOf, renderBody, renderMarkdownWithDetails, blogIndex, collection, postPage, membersTeaser, message, postList, categoryTree, time, dateLabel };
