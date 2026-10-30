@@ -31,6 +31,19 @@ const entry = (service, sha, subject, body = null) => ({
         assert.ok(map.stories.every((s) => s.kind === 'fix' || s.kind === 'feature'));
     });
 
+    await check('a one-off change is an Also shipped line, never a section shared with unrelated changes', async () => {
+        const map = build([
+            { ...entry('network', '9'.repeat(40), 'The site switcher follows the account') },
+            { ...entry('codes', '8'.repeat(40), 'engine: the agent engine, ported from the portal') },
+        ]);
+        assert.strictEqual(map.stories.length, 0);
+        assert.strictEqual(map.also.length, 2);
+        const doc = compose({ map, voice: { card: seedCard() }, pulls: [] });
+        assert.ok(!/^## The site switcher/m.test(doc.body));
+        assert.ok(doc.body.includes('## Also shipped'));
+        assert.ok(/agent engine/i.test(doc.body));
+    });
+
     await check('the lockfile round folds into the chores, not into a story', async () => {
         const map = build(fixture.entries);
         assert.strictEqual(map.chores.filter((e) => /openvibe-shared v4\./.test(e.subject)).length, 24);
@@ -115,6 +128,8 @@ const entry = (service, sha, subject, body = null) => ({
         assert.deepStrictEqual(noLooksTags(['red-beanie', 'bearded', 'man', 'tanktop', 'hula hoop', 'laptop']), ['hula hoop', 'laptop']);
         const r = await evaluate({ title: 'A fix', dek: 'A plain dek about the page and what it does for you.', body: 'A shirtless man sits at a desk.', review: null, authorship: { mode: 'human' } });
         assert.ok(r.blocking.some((b) => b.code === 'looks.person'));
+        const ok = await evaluate({ title: 'A fix', dek: 'A plain dek about the page and what it does for you.', body: '## Story\n\nA change.\n\n<details>\n<summary>All</summary>\n\n- Generation: a token cap per showcase kind\n\n</details>', review: null, authorship: { mode: 'human' } });
+        assert.ok(!ok.blocking.some((b) => b.code === 'looks.person'), 'a commit subject in the full list is not a person');
     });
 
     // ── the service: a draft, the gates, a person ───────────

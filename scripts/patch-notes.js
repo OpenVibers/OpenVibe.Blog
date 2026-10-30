@@ -35,6 +35,8 @@ const opt = (name) => { const i = args.indexOf(`--${name}`); return i >= 0 ? arg
         const b = out.checks.blocking;
         console.log(`draft: ${out.post.id} (${out.post.state}) ${out.url}`);
         console.log(`${b.length} blocking, ${out.checks.warnings.length} warnings${out.usedAi ? ' (AI prose)' : ''}${b.length ? `: ${[...new Set(b.map((x) => x.code))].join(', ')}` : ''}`);
+        for (const s of out.stories || []) console.log(`story: ${s.title} (${s.kind}, ${s.sites.length} sites, ${s.entries.length} commits)`);
+        for (const c of (out.checks.checklist || [])) console.log(`${c.ok ? 'OK' : 'NO'} ${c.label}${c.detail ? ` — ${c.detail}` : ''}`);
         console.log('left as a draft: a person reviews it in /write, then approves the revision and publishes.');
     } catch (err) {
         console.error(`[patch-notes] ${err.message}`);
@@ -42,4 +44,6 @@ const opt = (name) => { const i = args.indexOf(`--${name}`); return i >= 0 ? arg
     } finally {
         await ctx.store.close();
     }
+    // A one-off process: the AI/HTTP keep-alive sockets and the outbox's timers would hold it open.
+    process.exit(process.exitCode || 0);
 })();
