@@ -239,7 +239,7 @@ function compose({ map, voice, pulls = [] }) {
         '',
         (voice && voice.card && voice.card.signoff) || '— the OpenVibe crew',
     ].filter((line) => line !== null && line !== undefined).join('\n');
-    return { title, dek, body: body.replace(/\n{3,}/g, '\n\n').trim(), tags: ['patch-notes', ...stories.map((s) => baseKey(s.key)).slice(0, 4)] };
+    return { title, dek, body: body.replace(/\n{3,}/g, '\n\n').trim(), tags: ['patch-notes'] };
 }
 
 /** The brief the AI gets: the template, the voice card and the story map (4,000 chars is the workflow's limit). */
