@@ -4,7 +4,7 @@
  *
  * evaluate() runs the checks on the draft and returns what the reviewer sees: the story map, the blocking issues,
  * the warnings, and a checklist. Hard gates block publishing — a banned phrase (unless the editor overrode it with
- * a reason), a looks word, an unresolved [TODO], a broken link, an attached image without alt text, AI-only text
+ * a reason), sex acts or porn, an unresolved [TODO], a broken link, an attached image without alt text, AI-only text
  * without a person's approval, or no approval at all. Warnings do not block: a title with a count, a section with
  * no screenshot, a commit subject in the story.
  *
@@ -12,7 +12,7 @@
  * draft made inside the worker does not, so a GitHub hiccup never stops the draft from being filed).
  */
 const { scan, proseOf } = require('./slop');
-const { hasLooks, isExplicit } = require('./no-looks');
+const { isExplicit } = require('./explicit');
 
 const H2 = /^##\s+(.+)$/gm;
 const LINK = /\[([^\]]*)\]\(([^)\s]+)\)/g;
@@ -56,7 +56,7 @@ async function evaluate(draft) {
     const checklist = [];
     const add = (list, code, message, extra = {}) => list.push({ code, message, ...extra });
 
-    // ── slop and looks ──
+    // ── slop, sex acts and porn ──
     const slop = scan({ title, dek, body, tags, captions });
     const forgiven = new Set(((override && override.phrases) || []).map((p) => String(p).toLowerCase()));
     for (const b of slop.blocking) {
@@ -64,11 +64,8 @@ async function evaluate(draft) {
         else blocking.push(b);
     }
     warnings.push(...slop.warnings);
-    // The full list holds exact commit subjects (a "token cap" is not a hat); the story is what describes people.
-    const looksText = [title, dek, proseOf(body), ...tags, ...captions].join('\n');
-    if (hasLooks(looksText)) add(blocking, 'looks.person', 'The text describes a person (looks, body, clothing, hair, age or a guessed gender). Public AI text never does. Say "the person" or "the streamer", or remove the sentence.');
-    if (isExplicit(title, dek, body)) add(blocking, 'looks.explicit', 'The text describes sexual content. It cannot be published.');
-    checklist.push({ code: 'voice', label: 'The voice card is followed; no banned phrases; no looks language', ok: !blocking.some((b) => /^(slop|looks)\./.test(b.code)), detail: blocking.filter((b) => /^(slop|looks)\./.test(b.code)).length ? `${blocking.filter((b) => /^(slop|looks)\./.test(b.code)).length} blocking` : 'clean' });
+    if (isExplicit(title, dek, proseOf(body))) add(blocking, 'explicit.sex', 'The text describes sex acts or pornography. It cannot be published.');
+    checklist.push({ code: 'voice', label: 'The voice card is followed; no banned phrases; no sex acts or porn', ok: !blocking.some((b) => /^(slop|explicit)\./.test(b.code)), detail: blocking.filter((b) => /^(slop|explicit)\./.test(b.code)).length ? `${blocking.filter((b) => /^(slop|explicit)\./.test(b.code)).length} blocking` : 'clean' });
 
     // ── unresolved placeholders ──
     if (TODO.test(body) || TODO.test(title) || TODO.test(dek)) add(blocking, 'draft.todo', 'An unresolved [TODO] is still in the draft.');

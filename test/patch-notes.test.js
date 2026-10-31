@@ -10,7 +10,7 @@ const { compose, briefFor, mergeAi, nextItems } = require('../server/patch-notes
 const { seedCard, OFFICIAL_TEXT } = require('../server/patch-notes/voice');
 const { scan } = require('../server/patch-notes/slop');
 const { evaluate } = require('../server/patch-notes/review');
-const { hasLooks, noLooks, noLooksTags } = require('../server/patch-notes/no-looks');
+const { isExplicit } = require('../server/patch-notes/explicit');
 const { intentOf } = require('../server/patch-notes/text');
 const fixture = require('./fixtures/changelog-2026-10-30.json');
 
@@ -137,15 +137,13 @@ const entry = (service, sha, subject, body = null) => ({
         assert.strictEqual(scan({ body }).blocking.length, 0);
     });
 
-    await check('no looks: a person is described by the role, never by looks; tags follow', async () => {
-        assert.strictEqual(hasLooks('A shirtless man sits in a room.'), true);
-        assert.strictEqual(noLooks('A shirtless man sits in a room with framed pictures on the wall.'), 'The streamer sits in a room with framed pictures on the wall.');
-        assert.strictEqual(noLooks('A man in a gray tank top sits against a plain light background.'), 'A person sits against a plain light background.');
-        assert.deepStrictEqual(noLooksTags(['red-beanie', 'bearded', 'man', 'tanktop', 'hula hoop', 'laptop']), ['hula hoop', 'laptop']);
+    await check('describing people is fine; sex acts and porn still block, nudity does not', async () => {
+        assert.strictEqual(isExplicit('The draft says explicit adult content follows.'), true);
+        assert.strictEqual(isExplicit('A nude figure study hangs on the wall.'), false);
         const r = await evaluate({ title: 'A fix', dek: 'A plain dek about the page and what it does for you.', body: 'A shirtless man sits at a desk.', review: null, authorship: { mode: 'human' } });
-        assert.ok(r.blocking.some((b) => b.code === 'looks.person'));
-        const ok = await evaluate({ title: 'A fix', dek: 'A plain dek about the page and what it does for you.', body: '## Story\n\nA change.\n\n<details>\n<summary>All</summary>\n\n- Generation: a token cap per showcase kind\n\n</details>', review: null, authorship: { mode: 'human' } });
-        assert.ok(!ok.blocking.some((b) => b.code === 'looks.person'), 'a commit subject in the full list is not a person');
+        assert.ok(!r.blocking.some((b) => b.code === 'explicit.sex'), 'describing a person is fine');
+        const sex = await evaluate({ title: 'A fix', dek: 'A plain dek about the page and what it does for you.', body: 'The clip shows sex acts.', review: null, authorship: { mode: 'human' } });
+        assert.ok(sex.blocking.some((b) => b.code === 'explicit.sex'));
     });
 
     // ── the service: a draft, the gates, a person ───────────
@@ -203,25 +201,25 @@ const entry = (service, sha, subject, body = null) => ({
         assert.strictEqual((await t.ctx.posts.get(post.id)).state, 'draft');
     });
 
-    await check('a banned phrase blocks; its override is recorded and the looks rule still blocks', async () => {
+    await check('a banned phrase blocks; its override is recorded and a sex act still blocks', async () => {
         let post = await t.ctx.posts.get(draft.post.id);
         let head = await t.ctx.posts.head(post);
-        await t.ctx.posts.update(owner, post, { body: `${head.content}\n\nWe leverage the new module. A shirtless man sits at a desk.`, expectedRevision: head.number });
+        await t.ctx.posts.update(owner, post, { body: `${head.content}\n\nWe leverage the new module. The clip shows sex acts.`, expectedRevision: head.number });
         const c1 = await t.ctx.patchNotes.check(post.id);
         assert.ok(c1.result.blocking.some((b) => b.code === 'slop.phrase' && b.phrase === 'leverage'));
-        assert.ok(c1.result.blocking.some((b) => b.code === 'looks.person'));
+        assert.ok(c1.result.blocking.some((b) => b.code === 'explicit.sex'));
         await t.ctx.patchNotes.setOverride(post.id, { reason: 'the word is the feature name here', phrases: ['leverage'], by: t.official.subject });
         const c2 = await t.ctx.patchNotes.check(post.id);
         assert.ok(!c2.result.blocking.some((b) => b.code === 'slop.phrase'), 'the phrase is overridden');
         assert.ok(c2.result.warnings.some((w) => w.code === 'slop.overridden'));
-        assert.ok(c2.result.blocking.some((b) => b.code === 'looks.person'), 'looks cannot be overridden');
+        assert.ok(c2.result.blocking.some((b) => b.code === 'explicit.sex'), 'sex acts cannot be overridden');
         await assert.rejects(async () => t.ctx.posts.publish(owner, await t.ctx.posts.get(post.id), {}), /blocking/i);
     });
 
-    await check('after the looks sentence goes and a person approves the revision, it publishes', async () => {
+    await check('after the sex-act sentence goes and a person approves the revision, it publishes', async () => {
         let post = await t.ctx.posts.get(draft.post.id);
         let head = await t.ctx.posts.head(post);
-        await t.ctx.posts.update(owner, post, { body: head.content.replace(' A shirtless man sits at a desk.', ''), expectedRevision: head.number });
+        await t.ctx.posts.update(owner, post, { body: head.content.replace(' The clip shows sex acts.', ''), expectedRevision: head.number });
         post = await t.ctx.posts.get(post.id);
         head = await t.ctx.posts.head(post);
         await t.ctx.posts.review(owner, post, { revision: head.number, decision: 'approved', note: 'checked' });
