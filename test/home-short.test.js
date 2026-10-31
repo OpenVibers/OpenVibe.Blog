@@ -20,39 +20,33 @@ const { boot, check, done } = require('./helpers/boot');
             await t.get('/api/v1/posts/' + post.json().post.id + '/publish', { as: t.official, json: {} });
         });
 
-        await check('the AI desks are a pick block: a chip per desk, the first picked, every desk in the page', async () => {
+        await check('the AI desks are one list: no chip row, every desk in the page', async () => {
             const r = await t.get('/');
             assert.strictEqual(r.status, 200, r.text);
             const page = r.text;
-            const start = page.indexOf('<div class="pick" id="pick-desks">');
-            assert.ok(start > 0, 'the desks are a pick block on the home');
-            const block = page.slice(start, start + 6000);
-            assert.match(block, /<div class="pick-row" role="radiogroup" aria-label="From the AI desks">/);
-            const chips = [...block.matchAll(/<input type="radio" name="pick-desks" id="pk-desks-(\d+)" value="\1"( checked)?><label for="pk-desks-\1">([^<]+)<\/label>/g)];
-            assert.ok(chips.length >= 1, 'a chip per desk (' + chips.length + ')');
-            assert.deepStrictEqual(chips.filter((m) => m[2]).map((m) => m[1]), [chips[0][1]], 'the first desk is picked');
-            const desks = [...block.matchAll(/<li data-i="(\d+)"><p class="bh-desk">/g)];
-            assert.strictEqual(desks.length, chips.length, 'every desk is in the page');
-            assert.deepStrictEqual(desks.map((m) => m[1]), chips.map((m) => m[1]), 'each desk knows its chip');
+            assert.ok(!page.includes('pick-desks'), 'the desks are no longer a pick block');
+            const desks = [...page.matchAll(/<li data-i="(\d+)"><p class="bh-desk">/g)];
+            assert.ok(desks.length >= 1, 'the desks are in the page (' + desks.length + ')');
+            assert.match(page, /<h2 id="bh-desks-h">From the AI desks<\/h2>/);
         });
 
-        await check('the CSS guard: the chips are hidden and the desks all show until 640 px and where :has() is understood', async () => {
-            const r = await t.get('/');
-            const page = r.text;
-            assert.match(page, /<style>@supports selector\(:has\(\*\)\)\{@media \(max-width:640px\)\{\.pick#pick-desks:has\(#pk-desks-0:checked\) \.pick-list>li\[data-i="0"\]\{display:block\}/, 'the rule that shows the picked desk');
+        await check('nothing hides a post, a summary, a bar or a tag on a phone', async () => {
             const css = require('fs').readFileSync(require('path').join(__dirname, '..', 'public', 'css', 'blog.css'), 'utf8');
-            assert.match(css, /\.pick-row \{ display: none; \}/, 'the chips are hidden by default');
-            assert.match(css, /@supports selector\(:has\(\*\)\) \{ @media \(max-width: 640px\) \{/, 'the phone rules are under :has() and 640 px');
-            assert.match(css, /\.pick-row label \{[^}]*min-height: 44px/, 'a chip is a 44 px target');
-            assert.match(css, /\.pick \.pick-list > li \{ display: none; \}/, 'the desks are hidden on a phone');
+            assert.ok(!/#posts \.bh-cards > li:nth-child\(n\+7\)/.test(css), 'no latest post is hidden');
+            assert.ok(!/\.bh-card \.bh-sum \{ display: none/.test(css), 'a post keeps its summary');
+            assert.ok(!/\.bh-bars > li:nth-child\(n\+6\)/.test(css), 'no week bar is hidden');
+            assert.ok(!/\.bh-chips > li:nth-child\(n\+13\)/.test(css), 'no topic is hidden');
+            assert.match(css, /#posts \.bh-cards \{ display: flex; overflow-x: auto;/, 'the latest posts scroll sideways instead');
+            const r = await t.get('/');
+            assert.ok(!r.text.includes('<style>@supports selector(:has(*)){@media (max-width:640px){.pick#pick-desks'), 'no pick rule is written for the desks');
         });
 
-        await check('the parts a reader rarely needs are folds, open in the page and closed on a phone', async () => {
+        await check('the parts a reader rarely needs are folds that start open on every screen', async () => {
             const r = await t.get('/');
             const page = r.text;
             for (const id of ['week', 'topics', 'faq', 'shipped']) {
                 assert.ok(page.includes('<details class="bl-fold bl-fold-block" id="' + id + '" open>'), id + ' is a fold, open in the page');
-                assert.ok(page.includes('document.getElementById("' + id + '")'), id + ' has the script that closes it on a phone');
+                assert.ok(!page.includes('document.getElementById("' + id + '")'), id + ' is never closed by script');
             }
             assert.match(page, /<h2 id="bh-week-h">This week across OpenVibe<\/h2>/);
             assert.match(page, /<h2 id="bh-tags-h">Topics<\/h2>/);

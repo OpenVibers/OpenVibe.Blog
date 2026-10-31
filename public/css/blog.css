@@ -113,9 +113,9 @@ body.blog-home .page { max-width: 1120px; }
   .bh-bars li { grid-template-columns: minmax(0, 1fr) auto; }
   .bh-bars .bh-bar { grid-column: 1 / -1; grid-row: 2; }
   .bh-stats dd { font-size: 1.3rem; }
-  /* Phones: a post card is its title, date and tags (the titles say what is inside); desks keep their one-line dek. */
+  /* Phones: a post card keeps its summary; desks keep their one-line dek. */
   .bh-card { padding: 12px 14px; }
-  .bh-card .bh-sum { display: none; }
+  .bh-cards .bh-sum { -webkit-line-clamp: 2; line-clamp: 2; }
   .bh-desks .bh-sum { -webkit-line-clamp: 2; line-clamp: 2; }
 }
 
@@ -130,13 +130,14 @@ body.blog-home .page { max-width: 1120px; }
 .bh-fold .sc-sec { margin: 0; max-width: none; padding: 0 16px 16px; }
 .bh-fold-go { margin: 0; padding: 0 16px 18px; }
 @media (max-width: 599px) {
-  #posts .bh-cards > li:nth-child(n+7), #posts .ov-pagination { display: none; }
+  /* Every post stays: the newest cards are one sideways row, and the pager is the way to the rest. */
+  #posts .bh-cards { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; scroll-padding-inline: 16px; scrollbar-width: none; gap: 10px; margin: 0 -16px; padding: 0 16px 4px; }
+  #posts .bh-cards::-webkit-scrollbar { display: none; }
+  #posts .bh-cards > li { flex: 0 0 84%; min-width: 0; scroll-snap-align: start; }
   #posts .bh-all { display: block; }
-  .bh-bars > li:nth-child(n+6), .bh-chips > li:nth-child(n+13) { display: none; }
   .bh-desks { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; scroll-padding-inline: 16px; scrollbar-width: none; gap: 10px; margin-left: -16px; margin-right: -16px; padding: 0 16px 4px; }
   .bh-desks::-webkit-scrollbar { display: none; }
   .bh-desks > li { flex: 0 0 84%; min-width: 0; scroll-snap-align: start; }
-  .bh-fold > summary span { display: none; }
 }
 
 /* Touch targets on phones (fleet audit, 2026-10-29): touch pointers only. */
