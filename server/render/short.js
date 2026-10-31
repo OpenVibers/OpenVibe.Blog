@@ -6,9 +6,7 @@
  *                inputs and :has(), no script: every block stays in the page for crawlers, and a wider screen (or a
  *                browser without :has()) shows them all and no chips.
  *   pickList()   a list of things of the same kind, one at a time on a phone, picked with a row of chips.
- *   foldBlock()  a part a reader rarely needs, closed on a phone and open where there is room. The page's own markup
- *                keeps it open, so a browser without the script shows it as before; the script closes it on a narrow
- *                screen and remembers the reader's choice.
+ *   foldBlock()  a part a reader rarely needs, in a fold that starts open on every screen: content is never hidden.
  *
  * The CSS for both lives in this site's own stylesheet; the rule that shows the picked block is written for the
  * page, because there is one per block.
@@ -41,16 +39,15 @@ function pickRules(key, ids) {
 }
 
 /**
- * A pick list: a list of things of the same kind, one at a time on a phone, picked with a row of chips. The list
- * keeps its own markup and every item stays in the page; the caller marks each item with the index its chip picks.
+ * A pick list (the owner's rule, 2026-10-31): every item is on the page on every screen. The chip row is gone; it
+ * picked one item at a time on a phone and hid the rest.
  *
- *   pickList({ key, label, head, labels, html })   labels: the chip labels, in the order of the items
+ *   pickList({ key, label, head, labels, html })
  */
 function pickList({ key, label, head = '', labels, html }) {
     labels = labels || [];
     if (!labels.length) return '';
-    const chips = labels.map((l, i) => '<input type="radio" name="pick-' + esc(key) + '" id="pk-' + esc(key) + '-' + i + '" value="' + i + '"' + (i === 0 ? ' checked' : '') + '><label for="pk-' + esc(key) + '-' + i + '">' + esc(l) + '</label>').join('');
-    return '<div class="pick" id="pick-' + esc(key) + '"><div class="pick-bar"><div class="pick-head"><h2>' + esc(head || label) + '</h2></div><div class="pick-row" role="radiogroup" aria-label="' + esc(label) + '">' + chips + '</div></div>' + html + '</div>';
+    return html;
 }
 
 /** The rule that shows the picked item of a pick list: one per item, so the CSS is written for the page. */
@@ -69,7 +66,7 @@ function pickListRules(key, n) {
  *   foldBlock({ id, head, html })
  */
 function foldBlock({ id, head, html }) {
-    return '<details class="bl-fold bl-fold-block" id="' + esc(id) + '" open><summary>' + head + '<span class="bl-fold-hint">tap to open</span></summary>' + html + '</details>' + foldScript(id);
+    return '<details class="bl-fold bl-fold-block" id="' + esc(id) + '" open><summary>' + head + '</summary>' + html + '</details>';
 }
 
 /** The script a fold carries: closed on a phone unless the reader opened it before, and it remembers that. */
