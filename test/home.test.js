@@ -84,6 +84,13 @@ const ld = (text) => [...text.matchAll(/<script type="application\/ld\+json">([\
         for (const q of faq.mainEntity) assert.ok(text.includes(`<summary>${q.name.replace(/'/g, '&#39;')}</summary>`), q.name);
     });
 
+    await check('a tag page: every post tagged so, newest first, each carrying its tag links', async () => {
+        const r = await t.get('/tags/patch-notes');
+        assert.strictEqual(r.status, 200);
+        assert.ok(r.text.indexOf('Patch notes: The Rundown') < r.text.indexOf('Patch notes: Voice channels'), 'newest first');
+        assert.ok(r.text.includes('<a href="/tags/patch-notes">#patch-notes</a>') && r.text.includes('<a href="/tags/chat">#chat</a>'), 'each post keeps its tags');
+    });
+
     await check('an empty network: sections with nothing to show are left out', async () => {
         await db.prepare('DELETE FROM changelog_entries').run();
         await db.prepare('DELETE FROM blog_desk_posts').run();
