@@ -215,9 +215,9 @@ draft is the only artifact, and publishing it needs a person's approval of the r
   the deterministic post is filed.
 - **voice** — one card per author account (`blog_voice_cards`; `official` is seeded), edited at
   **Write → How I write**. It is private unless the author publishes it.
-- **slop** — the banned phrases and the structures (a three-item list in every
+- **slop** and **no-looks** — the banned phrases and the structures (a three-item list in every
   paragraph, a restating conclusion, an em dash every other sentence), and the owner's rule that
-  AI text may describe people; only sex acts and porn block publication. The editor shows it.
+  public AI text never describes a person. The editor shows both.
 - **review** — the checks and the checklist the reviewer sees, and the hard gates that stop
   `posts.publish`: a banned phrase (unless the editor overrides it with a reason), a looks word, an
   unresolved `[TODO]`, a broken link, an image without alt text, AI-only text without approval, or
@@ -332,7 +332,7 @@ Called elsewhere, as the service principal `blog`: `identity.subject.resolve` an
   `openvibe-sdk/db`; Valkey holds the per-actor limit counters (optional: without `VALKEY_URL` they count per process).
 - **Packages** (all pinned by release tarball): `openvibe-publishing` v1.4.1 (async PostgreSQL stores: revisions,
   schedule, taxonomy, citations, media, discussion, seo, authorship, index-hooks, ssr, layout), `openvibe-contracts`
-  v0.97.0, `openvibe-shared` v4.55.0 (Frame, app icon, footer, legal, release, metrics, ready, theme presets),
+  v0.97.0, `openvibe-shared` v4.93.2 (Frame, app icon, footer, legal, release, metrics, ready, theme presets),
   `openvibe-sdk` v0.74.0 (sso, db, PostgreSQL events outbox, service tokens, per-actor limits, testing).
 - **OpenVibe.Network:**
   - SSO: the OAuth client `blog` is already seeded with redirect
@@ -542,7 +542,7 @@ Part of the [OpenVibe network](https://openvibe.network). Built in the open by [
 
 <!-- versions:start -->
 - openvibe-contracts: v0.242.1
-- openvibe-sdk: v0.77.0
-- openvibe-shared: v4.55.0
+- openvibe-sdk: v0.74.0
+- openvibe-shared: v4.93.2
 - openvibe-publishing: v1.4.1
 <!-- versions:end -->

@@ -41,33 +41,31 @@ function createReading({ store, blogs, posts: postsApi, publication, people, med
         };
     }
 
-    /** Blogs of these rows, one lookup per distinct blog. */
+    /** Blogs of these rows, one lookup per distinct blog, all at once. */
     async function blogsFor(rows) {
-        const out = new Map();
-        for (const id of new Set(rows.map((p) => p.blog_id))) out.set(id, await blogs.get(id));
-        return out;
+        const ids = [...new Set(rows.map((p) => p.blog_id))];
+        return new Map(await Promise.all(ids.map(async (id) => [id, await blogs.get(id)])));
     }
     const revRefs = (rows) => rows.map((p) => ({ entityId: p.id, revision: p.published_revision }));
 
-    /** List items for rows of published posts (possibly from several blogs): revisions in one query (no N+1). */
+    /** List items for rows of published posts (possibly from several blogs): revisions in one query (no N+1), each post's tags in parallel. */
     async function listItems(rows, { perBlogLinks = true } = {}) {
         const [who, revs, blogById] = await Promise.all([people.many(rows.map((p) => p.author_subject)), store.revisions.getMany(revRefs(rows)), blogsFor(rows)]);
-        const out = [];
-        for (const [i, post] of rows.entries()) {
+        const out = await Promise.all(rows.map(async (post, i) => {
             const rev = revs[i];
-            if (!rev) continue;
+            if (!rev) return null;
             const blog = blogById.get(post.blog_id);
             const person = who.get(post.author_subject);
             const { tags } = await termsView(post, blog, { networkTags: !perBlogLinks });
-            out.push({
+            return {
                 post, rev, blog,
                 url: publication.postPath(blog, post),
                 author: person ? { name: person.name, url: urls.author(person, blog) } : null,
                 tags,
                 badge: { members: 'Members only', private: 'Private' }[post.visibility] || null,
-            });
-        }
-        return out;
+            };
+        }));
+        return out.filter(Boolean);
     }
 
     async function categoriesTree(blog) {
