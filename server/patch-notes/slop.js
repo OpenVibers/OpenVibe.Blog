@@ -3,7 +3,7 @@
  * The slop check (devblog §3.7, §4.5): a deterministic copy editor, not an AI detector.
  *
  * A word is not banned because a model likes it; it is banned as filler ("seamless warping" is a feature name,
- * "a seamless experience" is slop). Blocking: a phrase from the list, and a looks word (no-looks). Warnings: the
+ * "a seamless experience" is slop). Blocking: a phrase from the list. Warnings: the
  * structures that give generated prose away — "not only X, but also Y", "it's not just X, it's Y", a three-item
  * list in every paragraph, one length for every paragraph, an em dash every other sentence, a conclusion that
  * restates the intro.
