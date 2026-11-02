@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Patch notes: one waiting draft per day (2026-11-02). A person reviews every Patch notes post, and drafts filed every
+  few hours piled up faster than anyone could read them (27 waiting, none published since v2). A batch whose day
+  already has a waiting draft nobody has touched is folded into it: a fresh draft from all of the day's commits, the
+  old one soft-deleted, so a reviewer opens one post per day. Each tick folds the backlog the same way. A draft a
+  person edited or reviewed is never folded.
 - Account export and deletion (ADR-033): `POST /internal/events` (loopback, `BLOG_EVENTS_SECRET`) answers network.account.export_requested and network.account.deleted through `server/domain/account-data.js` over `openvibe-sdk/account-data` (SDK v0.37.0, was v0.35.0).
   - **Their own blog:** its posts are removed and the blog closed.
   - **Elsewhere:** their posts stay without their id.

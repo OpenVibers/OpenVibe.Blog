@@ -70,6 +70,9 @@ function createChangelog({ config, store, blogs, posts, patchNotes = null, fetch
         sites: db.prepare(`SELECT service, COUNT(*) AS entries, MAX(deployed_at) AS latest_at FROM changelog_entries GROUP BY service ORDER BY latest_at DESC`),
         pending: db.prepare('SELECT * FROM changelog_entries WHERE post_id IS NULL ORDER BY deployed_at, committed_at, id'),
         mark: db.prepare('UPDATE changelog_entries SET post_id = ? WHERE id = ? AND post_id IS NULL'),
+        ownedBy: db.prepare('SELECT * FROM changelog_entries WHERE post_id = ? ORDER BY deployed_at, committed_at, id'),
+        move: db.prepare('UPDATE changelog_entries SET post_id = ? WHERE post_id = ?'),
+        dropPost: db.prepare('DELETE FROM changelog_posts WHERE post_id = ?'),
         enrich: db.prepare('UPDATE changelog_entries SET message_body = ?, files = ?, pr_number = ? WHERE service = ? AND sha = ?'),
         lastPost: db.prepare('SELECT * FROM changelog_posts ORDER BY created_at DESC LIMIT 1'),
         putPost: db.prepare(`INSERT INTO changelog_posts (post_id, blog_id, entries, from_at, to_at, reason, ai_draft_id, created_at)
@@ -257,6 +260,17 @@ function createChangelog({ config, store, blogs, posts, patchNotes = null, fetch
         return (await q.pending.all()).map((e) => ({ ...e, url: `https://github.com/${e.repo}/commit/${e.sha}` }));
     }
 
+    /** The commits a draft owns, oldest first, with their URL (a fold rewrites a day's draft from them). */
+    async function entriesOf(postId) {
+        return (await q.ownedBy.all(String(postId))).map((e) => ({ ...e, url: `https://github.com/${e.repo}/commit/${e.sha}` }));
+    }
+
+    /** A folded draft's commits go to the draft that replaced it, and its row in the draft log goes. */
+    async function moveEntries(fromPostId, toPostId) {
+        await q.move.run(String(toPostId), String(fromPostId));
+        await q.dropPost.run(String(fromPostId));
+    }
+
     /** A draft owns its commits (they are not in a second draft); the feed shows the link once the post publishes. */
     async function markEntries(list, postId) {
         for (const e of list) if (e.id != null) await q.mark.run(postId, e.id);
@@ -304,6 +318,9 @@ function createChangelog({ config, store, blogs, posts, patchNotes = null, fetch
         stats.runs++; stats.lastRunAt = new Date(nowMs()).toISOString();
         try {
             await collect();
+            if (patchNotes && patchNotes.compact) {
+                try { await patchNotes.compact(); } catch (err) { log.warn && log.warn(`[changelog] fold skipped: ${err.message}`); }
+            }
             const list = await q.pending.all();
             const d = await due(list);
             if (d.due) return await fileDraft(list.slice(0, c.batchSize * 3), d.reason);
@@ -348,7 +365,7 @@ function createChangelog({ config, store, blogs, posts, patchNotes = null, fetch
     /** Every site with entries: [{ service, entries, latest_at }], most recently shipped first. */
     async function sites() { return await q.sites.all(); }
 
-    return { tick, collect, due, fileDraft, enrich, pendingEntries, markEntries, openPulls, start, stop, entries, page, latestPost, recentPosts, sites, importHistory, stats: async () => ({ enabled: c.enabled, ...stats, github_token: cachedToken.source, pending: (await q.pending.all()).length }) };
+    return { tick, collect, due, fileDraft, enrich, pendingEntries, markEntries, entriesOf, moveEntries, openPulls, start, stop, entries, page, latestPost, recentPosts, sites, importHistory, stats: async () => ({ enabled: c.enabled, ...stats, github_token: cachedToken.source, pending: (await q.pending.all()).length }) };
 }
 
 /** A stable id for a batch (tests). */

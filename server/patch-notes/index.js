@@ -31,6 +31,9 @@ function createPatchNotes({ config, store, blogs, posts, publication, aiDrafts =
                 voice_card = excluded.voice_card, override = COALESCE(excluded.override, blog_patch_note_drafts.override), updated_at = excluded.updated_at`),
         checks: db.prepare('UPDATE blog_patch_note_drafts SET checks = ?, updated_at = ? WHERE post_id = ?'),
         override: db.prepare('UPDATE blog_patch_note_drafts SET override = ?, updated_at = ? WHERE post_id = ?'),
+        waiting: db.prepare(`SELECT d.post_id FROM blog_patch_note_drafts d JOIN blog_posts p ON p.id = d.post_id
+            WHERE d.blog_id = ? AND p.state = 'draft' ORDER BY d.created_at DESC`),
+        reviewed: db.prepare('SELECT 1 AS x FROM blog_post_reviews WHERE entity_id = ? LIMIT 1'),
     };
     const parse = (v) => (v == null ? null : typeof v === 'string' ? JSON.parse(v) : v);
 
@@ -114,11 +117,78 @@ function createPatchNotes({ config, store, blogs, posts, publication, aiDrafts =
         return { doc: det, map, card, samples, usedAi, ai, authorship, checks, owner, entries: list };
     }
 
+    // ── One waiting draft per day (11-02) ──────────────────────────────────────────────────────────────────
+    // A person reviews every Patch notes post (devblog §3.6). Filed every few hours, the drafts piled up faster than
+    // anyone could read them (27 waiting on 11-02, none published since v2). So a day has one waiting draft: a batch
+    // whose day already has one nobody has touched is folded into it. The fold writes a fresh draft from all of the
+    // day's commits and soft-deletes the old one (posts.remove); rewriting the old one in place would record the
+    // pipeline's second pass as a person's edit. A draft someone edited or reviewed is never folded.
+    const dayOf = (list) => {
+        const t = (list || []).reduce((m, e) => Math.max(m, Date.parse(e.deployed_at) || Number(e.deployed_at) || 0), 0);
+        return t ? new Date(t).toISOString().slice(0, 10) : null;
+    };
+    const pipelineAuthor = (rev) => /^svc:patch-notes( |$)/.test(String((rev && rev.author) || ''));
+
+    /** The waiting drafts nobody has touched (one revision, the pipeline's; no review), newest first, with their day. */
+    async function waitingDrafts(blog) {
+        if (!changelog || !changelog.entriesOf) return [];
+        const out = [];
+        for (const r of await q.waiting.all(blog.id)) {
+            const post = await posts.get(r.post_id);
+            if (!post || post.state !== 'draft') continue;
+            const head = await posts.head(post);
+            if (!head || head.number !== 1 || !pipelineAuthor(head)) continue;
+            if (await q.reviewed.get(post.id)) continue;
+            const owned = await changelog.entriesOf(post.id);
+            if (!owned.length) continue;
+            out.push({ post, entries: owned, day: dayOf(owned) });
+        }
+        return out;
+    }
+
+    /** A fresh draft from the drafts' commits and any new ones; the drafts it replaces are soft-deleted. */
+    async function fold(drafts, extra = [], opts = {}) {
+        const seen = new Set();
+        const all = [...drafts.flatMap((d) => d.entries), ...extra].filter((e) => (e.id == null || !seen.has(e.id)) && (e.id == null || seen.add(e.id)))
+            .sort((a, b) => (Date.parse(a.deployed_at) || 0) - (Date.parse(b.deployed_at) || 0) || Number(a.id || 0) - Number(b.id || 0));
+        const out = await draftPending({ ...opts, entries: all, reason: opts.reason || 'folded', noFold: true });
+        if (!out || !out.created) return out;
+        const owner = ownerSubject();
+        for (const d of drafts) {
+            await changelog.moveEntries(d.post.id, out.post.id);
+            await posts.remove({ kind: 'service', service: 'svc:patch-notes', origin: 'patch-notes', subject: owner }, d.post);
+        }
+        log.log && log.log(`[patch-notes] folded ${drafts.length} waiting draft(s) of ${dayOf(all)} into ${out.post.id} (${all.length} commits)`);
+        return { ...out, folded: drafts.map((d) => d.post.id) };
+    }
+
+    /** The backlog: every day with more than one untouched waiting draft becomes one. Returns the days folded. */
+    async function compact() {
+        const blog = await blogs.byHandle(config.changelog.blogHandle);
+        if (!blog) return [];
+        const byDay = new Map();
+        for (const d of await waitingDrafts(blog)) {
+            if (!byDay.has(d.day)) byDay.set(d.day, []);
+            byDay.get(d.day).push(d);
+        }
+        const done = [];
+        for (const [day, list] of byDay) {
+            if (list.length < 2) continue;
+            const out = await fold(list);
+            if (out && out.created) done.push(day);
+        }
+        return done;
+    }
+
     /** Write the draft (never publish). Returns { created, post, url, checks, doc }. */
-    async function draftPending({ entries = null, pullRequests = null, reason = 'manual', account = 'official', useAi = true, traceparent = null } = {}) {
+    async function draftPending({ entries = null, pullRequests = null, reason = 'manual', account = 'official', useAi = true, traceparent = null, noFold = false } = {}) {
         const blog = await blogs.byHandle(config.changelog.blogHandle) || await blogs.ensureOfficial();
         let list = entries;
         if (!list) list = changelog ? await changelog.pendingEntries() : [];
+        if (!noFold && list.length) {
+            const same = (await waitingDrafts(blog)).filter((d) => d.day === dayOf(list));
+            if (same.length) return await fold(same, list, { pullRequests, reason, account, useAi, traceparent });
+        }
         if (changelog && changelog.enrich && list.length && list.some((e) => e.id != null)) {
             try { list = await changelog.enrich(list); } catch (err) { log.warn && log.warn(`[patch-notes] enrichment skipped: ${err.message}`); }
         }
@@ -198,7 +268,7 @@ function createPatchNotes({ config, store, blogs, posts, publication, aiDrafts =
     async function storyMap(postId) { const row = await load(postId); return row ? row.stories : []; }
     async function isPatchNotes(postId) { return Boolean(await q.get.get(String(postId))); }
 
-    const api = { plan, draftPending, check, gate, load, setOverride, storyMap, isPatchNotes, attach, voice, ownerSubject, samplesOf };
+    const api = { plan, draftPending, compact, waitingDrafts, check, gate, load, setOverride, storyMap, isPatchNotes, attach, voice, ownerSubject, samplesOf };
     return api;
 }
 
