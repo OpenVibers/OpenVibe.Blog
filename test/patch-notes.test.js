@@ -242,6 +242,63 @@ const entry = (service, sha, subject, body = null) => ({
         assert.ok(page.text.includes('Checklist'));
     });
 
+    // ── one waiting draft per day (11-02) ─────────────────────
+    let seq = 0;
+    const put = async (day, subject) => {
+        seq++;
+        const sha = String(seq).padStart(40, '0');
+        await db.prepare(`INSERT INTO changelog_entries (service, repo, sha, subject, author, committed_at, deployed_at, release, release_lines, major, post_id, message_body)
+            VALUES ('help', 'OpenVibers/OpenVibe.Help', ?, ?, 'OpenVibers', ?, ?, 'r2', 5, 0, NULL, ?)`).run(sha, subject, `${day}T0${seq % 9}:00:00.000Z`, `${day}T0${seq % 9}:30:00.000Z`, subject);
+    };
+    const pend = async () => await t.ctx.changelog.pendingEntries();
+    const draftNow = async (o = {}) => await t.ctx.patchNotes.draftPending({ entries: await pend(), pullRequests: [], useAi: false, reason: 'test', ...o });
+
+    await check('a later batch of the same day folds into its waiting draft: one draft, every commit, the old one gone', async () => {
+        await put('2026-11-01', 'Help: every answer says when it last changed (#201)');
+        const first = await draftNow();
+        assert.ok(first.created);
+        await put('2026-11-01', 'Help: the ticket form keeps a draft (#202)');
+        const second = await draftNow();
+        assert.ok(second.created, JSON.stringify(second).slice(0, 200));
+        assert.deepStrictEqual(second.folded, [first.post.id], 'the first draft was folded');
+        assert.strictEqual((await t.ctx.posts.get(first.post.id)).state, 'deleted', 'soft-deleted, not removed');
+        const owned = await t.ctx.changelog.entriesOf(second.post.id);
+        assert.strictEqual(owned.length, 2, 'the new draft owns both batches');
+        assert.strictEqual((await t.ctx.patchNotes.waitingDrafts(await t.ctx.blogs.byHandle(t.ctx.config.changelog.blogHandle))).filter((d) => d.day === '2026-11-01').length, 1);
+    });
+
+    await check('another day is another draft; a draft a person edited is never folded', async () => {
+        await put('2026-11-02', 'Help: phones keep the search box in view (#203)');
+        const nextDay = await draftNow();
+        assert.ok(nextDay.created && !nextDay.folded, 'a new day starts its own draft');
+        // A person edits the 11-02 draft: it is theirs now.
+        const post = await t.ctx.posts.get(nextDay.post.id);
+        const head = await t.ctx.posts.head(post);
+        await t.ctx.posts.update(owner, post, { title: 'Help, rewritten by a person', expectedRevision: head.number });
+        await put('2026-11-02', 'Help: answers link their sources (#204)');
+        const after = await draftNow();
+        assert.ok(after.created && !after.folded, 'not folded into an edited draft');
+        assert.strictEqual((await t.ctx.posts.get(nextDay.post.id)).state, 'draft', 'the edited draft stays');
+    });
+
+    await check('the backlog: compact() makes each day one draft, and leaves the edited one', async () => {
+        await put('2026-10-31', 'Help: one (#205)');
+        const a1 = await draftNow({ noFold: true });
+        await put('2026-10-31', 'Help: two (#206)');
+        const a2 = await draftNow({ noFold: true });
+        await put('2026-10-31', 'Help: three (#207)');
+        const a3 = await draftNow({ noFold: true });
+        assert.ok(a1.created && a2.created && a3.created);
+        const days = await t.ctx.patchNotes.compact();
+        assert.deepStrictEqual(days, ['2026-10-31']);
+        for (const d of [a1, a2, a3]) assert.strictEqual((await t.ctx.posts.get(d.post.id)).state, 'deleted');
+        const waiting = await t.ctx.patchNotes.waitingDrafts(await t.ctx.blogs.byHandle(t.ctx.config.changelog.blogHandle));
+        const oct31 = waiting.filter((d) => d.day === '2026-10-31');
+        assert.strictEqual(oct31.length, 1, 'one draft for the day');
+        assert.strictEqual(oct31[0].entries.length, 3, 'with all three commits');
+        assert.deepStrictEqual(await t.ctx.patchNotes.compact(), [], 'nothing left to fold');
+    });
+
     await t.close();
     done();
 })();
