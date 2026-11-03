@@ -80,19 +80,22 @@ function createDiscoveryRoutes({ config, store, blogs, publication, reading }) {
         res.type('text/plain').set('Cache-Control', cache.htmlHeaders({ maxAge: 3600 })).send(sharedSeo.llmsTxt({
             name: 'OpenVibe.Blog',
             summary: SITE_SUMMARY,
+            // AGT-5: own pages link their Markdown twins (openvibe-shared 4.108.0); ## Optional is what an agent may skip.
+            markdown: true,
+            base: config.baseUrl,
             details: 'Only public, published posts are listed, fed or mapped. Every post page has a machine-readable twin at <post URL>.json with the same content, its revision, authorship (human, AI-assisted or AI-generated, and whether a person reviewed it), sources and indexability reasons. AI-generated drafts are never published or indexed before a person reviews them.',
             sections: [
                 { title: 'Start here', links: [
                     { title: official ? official.title : 'The OpenVibe blog', url: abs('/'), note: 'official announcements and release notes' },
-                    { title: 'Sitemap', url: abs('/sitemap.xml') },
                 ] },
-                { title: 'Feeds', links: [
-                    { title: 'RSS', url: abs('/feed.xml') }, { title: 'Atom', url: abs('/atom.xml') }, { title: 'JSON Feed', url: abs('/feed.json') },
-                    { title: 'Member blogs', url: abs('/sitemaps/blogs.xml'), note: 'each member blog has /@handle/feed.xml, /@handle/atom.xml and /@handle/feed.json' },
-                ] },
-                { title: 'Data', links: [{ title: 'Post JSON', url: abs('/'), note: 'append .json to any post URL (/@handle/slug.json)' }] },
-                { title: 'API', links: [{ title: 'OpenAPI 3.1 document', url: abs('/openapi.json'), note: 'every /api/v1 route, with its fields' }] },
-                { title: 'AI desks', links: [{ title: 'AI desks', url: abs('/desks'), note: 'digests OpenVibe.AI writes from OpenVibe.Sources items (news, food recalls, deals, hosting plans, developer releases) and a satire column; labelled as AI, every digest section cited, never indexed; each desk has /desks/<desk>/feed.xml and each post a .json twin' }] },
+                { title: 'API', links: [{ title: 'OpenAPI 3.1 document', url: abs('/openapi.json'), note: 'every /api/v1 route, with its fields; any post as JSON: append .json to its URL (/@handle/slug.json)' }] },
+                { title: 'AI desks', links: [{ title: 'AI desks', url: abs('/desks'), html: true, note: 'digests OpenVibe.AI writes from OpenVibe.Sources items (news, food recalls, deals, hosting plans, developer releases) and a satire column; labelled as AI, every digest section cited, never indexed; each desk has /desks/<desk>/feed.xml and each post a .json twin' }] },
+            ],
+            optional: [
+                { title: 'Sitemap', url: abs('/sitemap.xml') },
+                { title: 'RSS', url: abs('/feed.xml') }, { title: 'Atom', url: abs('/atom.xml') }, { title: 'JSON Feed', url: abs('/feed.json') },
+                { title: 'Member blogs', url: abs('/sitemaps/blogs.xml'), note: 'each member blog has /@handle/feed.xml, /@handle/atom.xml and /@handle/feed.json' },
+                { title: 'Full text for language models', url: abs('/llms-full.txt') },
             ],
         }));
     });
