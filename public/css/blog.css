@@ -235,3 +235,19 @@ body.post-page .page { max-width: 1160px; }
   .toc-rail a { display: block; padding: 5px 0 5px 12px; border-left: 2px solid var(--border, #1f2d47); color: var(--text-secondary, #96a7c2); font-size: .9rem; line-height: 1.35; text-decoration: none; }
   .toc-rail a:hover { color: var(--text-primary); border-left-color: var(--accent, #3b82f6); }
 }
+
+/* On a phone a fold is a card row (11-03): its heading, what it holds counted on the right, no browser triangle; open,
+   its content sits inside the card. A wider screen shows the section as before. */
+@media (max-width: 640px) {
+  .bl-fold-block { border: 1px solid var(--border, #1f2d47); border-radius: 14px; background: var(--bg-card, #131c2e); }
+  .bl-fold-block > summary { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 52px; padding: 4px 16px; cursor: pointer; list-style: none; }
+  .bl-fold-block > summary::-webkit-details-marker { display: none; }
+  .bl-fold-block > summary::marker { content: ''; }
+  .bl-fold-block > summary h2 { margin: 0; padding: 0; border: 0; font-size: 1.12rem; }
+  .bl-fold-block > summary span { flex: none; color: var(--text-muted, #7386a3); font-weight: 600; font-size: .86rem; white-space: nowrap; }
+  .bl-fold-block > summary:focus-visible { outline: 2px solid var(--accent, #3b82f6); outline-offset: -2px; border-radius: 14px; }
+  /* The content sits 16px inside the card, whatever spacing its own section had for a page without a card. */
+  .bl-fold-block > summary ~ * { margin-left: 0 !important; margin-right: 0 !important; padding-left: 16px !important; padding-right: 16px !important; }
+  .bl-fold-block > summary + * { margin-top: 0 !important; padding-top: 4px !important; }
+  .bl-fold-block[open] { padding-bottom: 12px; }
+}
