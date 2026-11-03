@@ -29,7 +29,7 @@ const pages = require('../render/pages');
 const homePage = require('../render/home');
 const deskCatalog = require('../desks/catalog');
 // The short home (the owner's rule, 2026-10-30): pick blocks and folds.
-const { pickListRules, foldBlock } = require('../render/short');
+const { foldBlock } = require('../render/short');
 const { createHome } = require('../domain/home');
 
 // The home's own words in search results and share cards (the official blog's later pages keep the blog's).
@@ -141,7 +141,6 @@ function createPublicRoutes(ctx) {
                 jsonLd: [blogLd, ...homePage.homeJsonLd({ base: config.baseUrl.replace(/\/+$/, ''), items })],
                 styles: [showcase.STYLESHEET], bodyClass: 'blog-home',
                 // The rule that shows the picked item of each pick list: one per item, written for this page.
-                inlineStyles: [`@supports selector(:has(*)){@media (max-width:640px){${pickListRules('desks', deskCount)}}}`],
                 body: homePage.homeBody({ blog, items, pager, feeds, stats, week, latestDesks, tags, series: seriesCounts, memberItems, signedIn: req.viewer.kind === 'user' })
                     // The shipped list is a part a reader rarely needs: a fold on a phone, the section it was where there is room.
                     + foldBlock({ id: 'shipped', head: '<h2 id="bh-shipped-h">Recently shipped on OpenVibe.Blog</h2>', html: frame.shipped({ service: 'blog', title: 'Recently shipped on OpenVibe.Blog' }) }),
