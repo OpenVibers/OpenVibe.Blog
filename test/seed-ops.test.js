@@ -77,6 +77,11 @@ const { seedOfficialPost, loadFacts, SLUG } = require('../server/seed');
         const llms = (await t.get('/llms.txt')).text;
         assert.match(llms, /^# OpenVibe\.Blog/);
         assert.match(llms, /\.json/);
+        // AGT-5: the home links its Markdown twin, the desks (no twin) are marked HTML, feeds keep their URL, Optional last.
+        assert.ok(llms.includes('(https://openvibe.blog/index.md)'), 'the home links its twin');
+        assert.ok(llms.includes('(https://openvibe.blog/desks) (HTML)'));
+        assert.ok(llms.includes('(https://openvibe.blog/feed.xml)') && llms.includes('(https://openvibe.blog/openapi.json)'));
+        assert.ok(llms.includes('\n## Optional\n') && llms.lastIndexOf('\n## ') === llms.indexOf('\n## Optional\n'), 'Optional is last');
         const idx = (await t.get('/sitemap.xml')).text;
         assert.match(idx, /<sitemapindex/);
         assert.match(idx, /sitemaps\/posts\.xml/);
