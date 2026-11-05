@@ -18,6 +18,7 @@
  */
 const { ids } = require('openvibe-contracts');
 const { slugify } = require('openvibe-publishing/taxonomy');
+const seo = require('openvibe-publishing/seo');
 const authorship = require('openvibe-publishing/authorship');
 const { isMediaId } = require('openvibe-publishing/media');
 const { ApiError } = require('../http/errors');
@@ -502,6 +503,43 @@ function createPosts({ store, blogs, publication, access, outbox, log = console 
                 await db.prepare('UPDATE blog_posts SET updated_at = ? WHERE id = ?').run(store.now(), post.id);
                 return { revision, post: await q.byId.get(post.id) };
             });
+        },
+
+        /**
+         * Posts whose head revision is AI-generated and nobody has approved it yet: what a person
+         * still has to review before the post can be published or indexed. Only posts this viewer
+         * may review, oldest first. The gate's own reasons and words come with each item.
+         */
+        async pendingReviews(viewer) {
+            const rows = await db.prepare(`SELECT p.* FROM blog_posts p JOIN blogs b ON b.id = p.blog_id
+                WHERE p.deleted_at IS NULL AND p.state IN ('draft', 'published') AND b.status = 'active'
+                ORDER BY p.created_at, p.id LIMIT 1000`).all();
+            const items = [];
+            for (const post of rows) {
+                const blog = await blogOf(post);
+                if (!blog || !await access.canWrite(store, viewer, blog, 'publish', post)) continue;
+                const head = await store.revisions.head(post.id);
+                const rec = publication.authorshipOf(head);
+                if (!head || !rec || !authorship.needsReview(rec)) continue;
+                const review = await store.reviews.latest(post.id, head.number);
+                if (review) continue;   // a decision, approved or rejected, has been made for this revision
+                const decision = await publication.decide(blog, post, head);
+                items.push({
+                    site: 'blog',
+                    kind: post.state === 'draft' ? 'blog_draft' : 'blog_post',
+                    id: post.id,
+                    title: head.fields.title || post.slug,
+                    revision: head.number,
+                    state: post.state,
+                    url: publication.postUrl(blog, post),
+                    editUrl: `/write/posts/${post.id}`,
+                    createdAt: new Date(head.createdAt).toISOString(),
+                    reasons: decision.reasons.map((r) => ({ ...r, text: (seo.REASON_BY_CODE[r.code] || {}).description || r.code })),
+                    review: { method: 'POST', path: `/api/v1/posts/${encodeURIComponent(post.id)}/reviews` },
+                    ...(post.state === 'draft' ? { publish: { method: 'POST', path: `/api/v1/posts/${encodeURIComponent(post.id)}/publish` } } : {}),
+                });
+            }
+            return items.sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt));
         },
 
         /** A person's review of one revision (what lets an AI draft be published and indexed). */
