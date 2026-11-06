@@ -376,10 +376,11 @@ function createPublicRoutes(ctx) {
                 disclosure: rec ? authorship.disclosure(rec, review) : null,
                 decisionNote: preview ? `preview · ${decision.robots}` : null,
                 comments, canEdit: await access.canWrite(store, req.viewer, blog, 'edit', post),
-                urlFor: media.urlFor, breadcrumbs: crumbs, jsonUrl: `${path}.json`,
+                urlFor: media.urlFor, shareUrl: publication.postUrl(blog, post), breadcrumbs: crumbs, jsonUrl: `${path}.json`,
                 postPath: path, csrf, signedIn: req.viewer.kind === 'user' && Boolean(req.viewer.subject),
                 loginUrl: `/auth/login?next=${encodeURIComponent(path)}`,
             }),
+            styles: ['kit.css'],
         }, { cacheable });
     }
 
