@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- The screenshot pass, from the Blog's side (plan L9, devblog §3.3): when the patch notes are drafted, Blog reads the shots
+  OpenVibe.Host captured (the newest one taken before the release and the first one taken after it, per page and viewport).
+  When the two differ by more than 0.5 % of the pixels, both are attached to the draft (before, after) with the alt text and the
+  caption of §3.3; when they do not, only the shot after the release is attached; when there is no shot, the draft keeps its
+  "No screenshot" line. A person still reviews the draft; nothing publishes itself.
+
 - Patch notes: one waiting draft per day (2026-11-02). A person reviews every Patch notes post, and drafts filed every
   few hours piled up faster than anyone could read them (27 waiting, none published since v2). A batch whose day
   already has a waiting draft nobody has touched is folded into it: a fresh draft from all of the day's commits, the

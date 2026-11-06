@@ -11,6 +11,7 @@
  * blocking check or a missing person's approval stops posts.publish.
  */
 const { build } = require('./stories');
+const shotsMod = require('./shots');
 const { compose, briefFor, mergeAi } = require('./draft');
 const review = require('./review');
 const { createVoiceCards } = require('./voice');
@@ -18,7 +19,7 @@ const { createVoiceCards } = require('./voice');
 const clean = (v, n) => String(v == null ? '' : v).replace(/\s+/g, ' ').trim().slice(0, n);
 const asJson = (v) => (v && typeof v === 'object' ? JSON.stringify(v) : v);
 
-function createPatchNotes({ config, store, blogs, posts, publication, aiDrafts = null, voiceCards = null, changelog = null, fetchImpl = globalThis.fetch, log = console }) {
+function createPatchNotes({ config, store, blogs, posts, publication, aiDrafts = null, voiceCards = null, changelog = null, media = null, fetchImpl = globalThis.fetch, log = console }) {
     const db = store.db;
     const voice = voiceCards || createVoiceCards({ store });
     const maxStories = Math.max(2, Math.min(8, (config.patchNotes && config.patchNotes.maxStories) || 6));
@@ -117,6 +118,67 @@ function createPatchNotes({ config, store, blogs, posts, publication, aiDrafts =
         return { doc: det, map, card, samples, usedAi, ai, authorship, checks, owner, entries: list };
     }
 
+    /**
+     * The screenshot pass (plan L9, devblog §3.3): for every story, the shots Host captured of the pages
+     * that story names — the newest one taken before the release and the first one taken after it. When the
+     * two differ by more than 0.5 % of the pixels, both are attached (before, after); when they do not, only
+     * the one after is attached; when there is no shot, the draft keeps its "No screenshot" line.
+     *
+     * Nothing is published here: the shots go on the draft, and a person still reviews it.
+     */
+    async function attachShots(viewer, post, { entries = [], stories = [] } = {}) {
+        if (!media || typeof media.listShots !== 'function') return { attached: [], reason: 'the shot index is not configured' };
+        let shots = [];
+        try { shots = await media.listShots(); } catch (err) {
+            log.warn && log.warn(`[patch-notes] the shots were not read: ${err.message}`);
+            return { attached: [], reason: 'the shots could not be read' };
+        }
+        if (!shots.length) return { attached: [], reason: 'no shot yet' };
+        const groups = new Map();
+        for (const s of shots) {
+            const key = shotsMod.groupKey(s);
+            if (!groups.has(key)) groups.set(key, []);
+            groups.get(key).push(s);
+        }
+        const attached = [];
+        for (const story of stories || []) {
+            const at = (story.entries || []).map((e) => Date.parse(e.deployed_at || 0)).filter(Boolean).sort((a, b) => b - a)[0] || null;
+            let best = null;
+            for (const [key, list] of groups) {
+                const service = String(key).split('|')[0];
+                if (!story.sites || !story.sites.includes(service)) continue;
+                const pair = shotsMod.pickPair(list, at);
+                if (!pair.after) continue;
+                let ratio = 1;
+                if (pair.before) {
+                    try {
+                        const [a, b] = await Promise.all([media.download(pair.before.id), media.download(pair.after.id)]);
+                        ratio = shotsMod.diffRatio(a, b);
+                    } catch (err) {
+                        log.warn && log.warn(`[patch-notes] the shots of ${key} were not compared: ${err.message}`);
+                        continue;
+                    }
+                }
+                const mode = shotsMod.decide(pair.before, pair.after, ratio);
+                if (!best || ratio > best.ratio) best = { key, ...pair, ratio, mode };
+            }
+            if (!best || best.mode === 'none') continue;
+            const meta = (best.after.metadata || {});
+            const date = String(meta.captured_at || new Date().toISOString()).slice(0, 10);
+            const whatChanged = (story.title || 'the page changed');
+            const whatWasWrong = 'the page looked different before this release';
+            const caption = shotsMod.captionFor({ before: best.before, after: best.after, viewport: meta.viewport, date, whatWasWrong, whatChanged });
+            const alt = shotsMod.altFor({ mode: best.mode, whatWasWrong, whatChanged });
+            if (best.mode === 'both' && best.before) {
+                attached.push(await posts.attach(viewer, post, { mediaId: best.before.id, role: 'inline', alt, caption, position: 0 }));
+                attached.push(await posts.attach(viewer, post, { mediaId: best.after.id, role: 'inline', alt, caption, position: 1 }));
+            } else {
+                attached.push(await posts.attach(viewer, post, { mediaId: best.after.id, role: 'inline', alt, caption, position: 0 }));
+            }
+        }
+        return { attached };
+    }
+
     // ── One waiting draft per day (11-02) ──────────────────────────────────────────────────────────────────
     // A person reviews every Patch notes post (devblog §3.6). Filed every few hours, the drafts piled up faster than
     // anyone could read them (27 waiting on 11-02, none published since v2). So a day has one waiting draft: a batch
@@ -209,9 +271,10 @@ function createPatchNotes({ config, store, blogs, posts, publication, aiDrafts =
             post_id: post.id, blog_id: blog.id, stories: asJson(p.map.stories.map((s) => ({ key: s.key, title: s.title, kind: s.kind, sites: s.sites, commits: s.entries.map((e) => e.sha) }))),
             entries: asJson(list.map(entryView)), checks: asJson(p.checks), voice_card: asJson(p.card.card), override: null, now: store.now(),
         });
+        const shotResult = await attachShots(viewer, post, { entries: list, stories: p.map.stories });
         if (changelog && changelog.markEntries) await changelog.markEntries(list, post.id);
         log.log && log.log(`[patch-notes] drafted ${post.id} from ${list.length} commits${p.usedAi ? ' (AI prose)' : ''}`);
-        return { created: true, post, revision, url: publication.postUrl(blog, post), doc: p.doc, checks: p.checks, usedAi: p.usedAi, stories: p.map.stories };
+        return { created: true, post, revision, url: publication.postUrl(blog, post), doc: p.doc, checks: p.checks, usedAi: p.usedAi, stories: p.map.stories, shots: shotResult };
     }
 
     async function load(postId) {

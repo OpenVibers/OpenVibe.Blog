@@ -98,7 +98,7 @@ async function createApp(opts = {}) {
     const aiDrafts = opts.aiDrafts || require('./domain/ai-drafts').createAiDrafts({ config, store, posts, access, fetchImpl });
     // Patch notes v2: the story map, the template, the voice cards and the review gate. The changelog files drafts
     // through it; posts.publish refuses a draft with a blocking check or no person's approval.
-    const patchNotes = opts.patchNotes || require('./patch-notes').createPatchNotes({ config, store, blogs, posts, publication, aiDrafts, fetchImpl, log });
+    const patchNotes = opts.patchNotes || require('./patch-notes').createPatchNotes({ config, store, blogs, posts, publication, aiDrafts, media, fetchImpl, log });
     const changelog = opts.changelog || require('./changelog').createChangelog({ config, store, blogs, posts, patchNotes, fetchImpl, log });
     if (patchNotes.attach) patchNotes.attach({ changelog });
     posts.setPublishGate(patchNotes.gate);
