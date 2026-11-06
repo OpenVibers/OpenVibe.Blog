@@ -9,6 +9,7 @@
  */
 const ssr = require('openvibe-publishing/ssr');
 const { figureHtml } = require('openvibe-publishing/media');
+const kit = require('openvibe-shared/kit');
 
 const { html: h, raw, escapeHtml: esc } = ssr;
 const MEDIA_LINE = /^[ \t]*\[\[media:(med_[0-9A-HJKMNP-TV-Z]{26})\]\][ \t]*$/m;
@@ -197,7 +198,7 @@ function postPage(o) {
     const cover = attachments.filter((a) => a.role === 'cover');
     const gallery = attachments.filter((a) => a.role === 'gallery');
     const shareImage = cover.length && cover[0].mediaId ? urlFor(cover[0].mediaId) : null;
-    const share = shareUrl ? h`<p class="post-share"><button type="button" class="button" data-ov-share-sheet data-url="${shareUrl}" data-title="${rev.fields.title}"${rev.fields.summary ? h` data-text="${rev.fields.summary}"` : ''}${shareImage ? h` data-image="${shareImage}"` : ''}>Share</button></p>` : '';
+    const share = shareUrl ? h`<p class="post-share">${raw(kit.share({ title: rev.fields.title, url: shareUrl, text: rev.fields.summary || '', image: shareImage || null }))}</p>` : '';
     const badge = { members: 'Members only', private: 'Private', unlisted: 'Unlisted' }[post.visibility];
     const updated = rev.number > 1 && post.first_published_at && Date.parse(rev.createdAt) > post.first_published_at + 60000;
     const body = sectionsOf(renderBody(rev.content, attachments, { urlFor, rel }));

@@ -22,6 +22,7 @@ const { boot } = require('./helpers/boot');
         assert.ok(r.text.includes('data-title="A shareable post"'), 'its title');
         assert.ok(r.text.includes('data-text="One line about the post."'), 'its summary');
         assert.ok(r.text.includes('<p class="post-share">'), 'under the title');
+        assert.ok(r.text.includes('class="ovk-btn ovk-btn--quiet"') && r.text.includes('<span>Share</span>'), 'the shared kit button');
         console.log('blog share sheet ok');
     } finally {
         await t.close();

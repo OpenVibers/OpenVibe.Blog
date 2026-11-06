@@ -380,6 +380,7 @@ function createPublicRoutes(ctx) {
                 postPath: path, csrf, signedIn: req.viewer.kind === 'user' && Boolean(req.viewer.subject),
                 loginUrl: `/auth/login?next=${encodeURIComponent(path)}`,
             }),
+            styles: ['kit.css'],
         }, { cacheable });
     }
 
