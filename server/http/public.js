@@ -40,7 +40,7 @@ const { csrfToken, checkCsrf } = require('../auth/forms');
 const PER_PAGE = 15;
 
 function createPublicRoutes(ctx) {
-    const { config, store, blogs, posts, publication, reading, people, community, media, access, entitlements, viewers, limits, desks } = ctx;
+    const { config, store, blogs, posts, publication, reading, people, community, media, access, entitlements, viewers, limits, desks, sharing } = ctx;
     const homeData = ctx.home || createHome({ store });
     const router = express.Router();
     router.use(viewers.middleware({ services: false }));
@@ -413,7 +413,7 @@ function createPublicRoutes(ctx) {
             });
             if (r && r.status === 301) {
                 const target = await posts.get(r.entityId);
-                const decision = await access.canReadPost(store, req.viewer, await blogs.get(target.blog_id), target, entitlements);
+                const decision = await access.canReadPost(store, req.viewer, await blogs.get(target.blog_id), target, entitlements, sharing);
                 if (decision.allowed) {
                     cacheHeaders(res, { cacheable: target.state === 'published' && target.visibility === 'public' && req.viewer.kind === 'anonymous' });
                     res.redirect(301, r.location + (req.path.endsWith('.json') ? '.json' : ''));
@@ -427,10 +427,24 @@ function createPublicRoutes(ctx) {
             notFound(req, res);
             return null;
         }
-        const decision = await access.canReadPost(store, req.viewer, blog, post, entitlements);
+        const decision = await access.canReadPost(store, req.viewer, blog, post, entitlements, sharing);
         if (!decision.allowed) {
             if (decision.status === 403) await membersOnly(req, res, blog, post, decision);
-            else notFound(req, res);
+            else if (decision.reason === 'private' && sharing) {
+                // The gate: the audience, never the title, text or pictures. "Ask for access" when signed in.
+                const s = await sharing.shareOf(post.id).catch(() => null);
+                if (s && s.audience === 'people') {
+                    send(req, res, 404, {
+                        title: 'A post on OpenVibe.Blog',
+                        description: 'A post shared with specific people on OpenVibe.Blog.',
+                        decision: pageDecision(req.path, { indexable: false }),
+                        body: pages.sharedGate({ id: post.id, signedInAs: req.viewer && req.viewer.subject ? req.viewer.subject : null,
+                            signInUrl: `/auth/login?next=${encodeURIComponent(req.originalUrl)}` }),
+                    });
+                    return null;
+                }
+            }
+            notFound(req, res);
             return null;
         }
         return post;

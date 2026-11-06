@@ -41,7 +41,7 @@ function listOf(v) {
     return arr.map((s) => String(s).replace(/\s+/g, ' ').trim()).filter(Boolean);
 }
 
-function createPosts({ store, blogs, publication, access, outbox, log = console }) {
+function createPosts({ store, blogs, publication, access, outbox, log = console, sharing = null }) {
     const { db } = store;
     const q = {
         byId: db.prepare('SELECT * FROM blog_posts WHERE id = ?'),
@@ -269,6 +269,8 @@ function createPosts({ store, blogs, publication, access, outbox, log = console 
                     meta: { authorship: rec }, author: authorLabel(viewer), message: input.message || 'First draft',
                 });
                 await attachCitations({ id }, revision.number, input.citations);
+                // A new post is a draft: Only me until its author shares it (the Share sheet) or publishes it.
+                if (sharing) await sharing.register(viewer, id, 'private');
                 const post = await q.byId.get(id);
                 await setTerms(blog, post, input);
                 await outbox.emit({
@@ -334,6 +336,8 @@ function createPosts({ store, blogs, publication, access, outbox, log = console 
                 const keys = Object.keys(sets);
                 await db.prepare(`UPDATE blog_posts SET ${keys.map((k) => `${k} = @${k}`).concat('updated_at = @now').join(', ')} WHERE id = @id`)
                     .run({ ...sets, now: store.now(), id: post.id });
+                // The editor's "Who can read it" moves the share row too, so the sheet and the select never disagree.
+                if (sharing && sets.visibility) await sharing.syncAudience(post.id, sets.visibility);
                 await setTerms(blog, post, input);
                 const { post: after } = await publication.afterChange(before, post.id, { actor: viewer, traceparent });
                 return { post: after, revision, created };
@@ -361,6 +365,8 @@ function createPosts({ store, blogs, publication, access, outbox, log = console 
                 const now = store.now();
                 await db.prepare(`UPDATE blog_posts SET state = 'published', published_revision = ?, first_published_at = COALESCE(first_published_at, ?),
                             published_at = ?, updated_at = ? WHERE id = ?`).run(rev.number, now, now, now, post.id);
+                // Publishing a draft that was never shared widens it to the visibility the author chose.
+                if (sharing) await sharing.syncAudience(post.id, post.visibility);
                 const out = await publication.afterChange(before, post.id, { actor, traceparent });
                 return { changed: true, post: out.post };
             });

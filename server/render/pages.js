@@ -10,6 +10,7 @@
 const ssr = require('openvibe-publishing/ssr');
 const { figureHtml } = require('openvibe-publishing/media');
 const kit = require('openvibe-shared/kit');
+const ovServe = require('openvibe-shared/serve');
 
 const { html: h, raw, escapeHtml: esc } = ssr;
 const MEDIA_LINE = /^[ \t]*\[\[media:(med_[0-9A-HJKMNP-TV-Z]{26})\]\][ \t]*$/m;
@@ -198,7 +199,7 @@ function postPage(o) {
     const cover = attachments.filter((a) => a.role === 'cover');
     const gallery = attachments.filter((a) => a.role === 'gallery');
     const shareImage = cover.length && cover[0].mediaId ? urlFor(cover[0].mediaId) : null;
-    const share = shareUrl ? h`<p class="post-share">${raw(kit.share({ title: rev.fields.title, url: shareUrl, text: rev.fields.summary || '', image: shareImage || null }))}</p>` : '';
+    const share = shareUrl ? h`<p class="post-share">${raw(kit.share({ title: rev.fields.title, url: shareUrl, text: rev.fields.summary || '', image: shareImage || null, kind: 'post', id: post.id }))}</p>` : '';
     const badge = { members: 'Members only', private: 'Private', unlisted: 'Unlisted' }[post.visibility];
     const updated = rev.number > 1 && post.first_published_at && Date.parse(rev.createdAt) > post.first_published_at + 60000;
     const body = sectionsOf(renderBody(rev.content, attachments, { urlFor, rel }));
@@ -247,9 +248,33 @@ ${signedIn ? '' : h`<p>Already a member? <a href="${loginUrl}">Sign in</a>.</p>`
 </article>`);
 }
 
+/**
+ * The page a person who is not on the list sees (design 2026-11-06): it never shows the title, the
+ * text, the comments or the pictures. OVShare.gate offers "Ask for access" to a signed-in person and
+ * "Sign in" to everybody else; the plain fallback is removed by the script.
+ */
+function sharedGate({ id, signedInAs = null, signInUrl = '/auth/login' }) {
+    return String(h`<section class="message">
+<h1>A post on OpenVibe.Blog</h1>
+<p>This is shared with specific people.</p>
+<div id="post-gate">
+<p>This post is shared with specific people on OpenVibe.Blog.</p>
+<p><a class="button" href="${signInUrl}">Sign in</a></p>
+</div>
+<script src="${ovServe.url('ov-share.js')}" defer></script>
+<script>
+window.addEventListener('DOMContentLoaded', function () {
+  var el = document.getElementById('post-gate');
+  if (el && window.OVShare) OVShare.gate(el, { kind: 'post', id: ${JSON.stringify(id)},
+    signedInAs: ${JSON.stringify(signedInAs || '')}, signInUrl: ${JSON.stringify(signInUrl)} });
+});
+</script>
+</section>`);
+}
+
 function message({ heading, text, action }) {
     return String(h`<section class="message"><h1>${heading}</h1><p>${text}</p>${action ? h`<p><a class="button" href="${action.href}">${action.label}</a></p>` : ''}</section>`);
 }
 
 module.exports = {
-    readMinutes, sectionsOf, renderBody, renderMarkdownWithDetails, blogIndex, collection, postPage, membersTeaser, message, postList, categoryTree, time, dateLabel };
+    readMinutes, sectionsOf, renderBody, renderMarkdownWithDetails, blogIndex, collection, postPage, membersTeaser, message, sharedGate, postList, categoryTree, time, dateLabel };

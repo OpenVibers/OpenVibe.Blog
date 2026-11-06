@@ -6,6 +6,7 @@
  */
 const ssr = require('openvibe-publishing/ssr');
 const { time } = require('./pages');
+const kit = require('openvibe-shared/kit');
 
 const { html: h, raw } = ssr;
 
@@ -76,7 +77,8 @@ ${post ? h`<label for="slug">URL slug</label><input id="slug" name="slug" value=
 <label for="series">Series <span class="meta">(title; empty for none)</span></label><input id="series" name="series" value="${series ? series.title : ''}">
 <label for="seriesPosition">Part number in the series</label><input id="seriesPosition" name="seriesPosition" type="number" min="1" value="${post && post.series_position ? post.series_position : ''}">
 <label for="visibility">Who can read it</label>
-${select('visibility', [['public', 'Public'], ['unlisted', 'Unlisted (link only; never listed, fed or indexed)'], ['members', 'Members only (the blog owner’s OpenVibe.VIP members)'], ['private', 'Private (this blog’s members)']], vis)}
+${select('visibility', [['public', 'Everyone'], ['unlisted', 'Anyone with the link (never listed, fed or indexed)'], ['members', 'Members only (the blog owner’s OpenVibe.VIP members)'], ['private', 'Only me']], vis)}
+<p class="meta">The Share button above opens the same four choices for this one post, and can name specific people (“look at this before I post it”).</p>
 <label for="entitlementKey">Gate label for members-only posts <span class="meta">(informational; OpenVibe.VIP decides who reads)</span></label><input id="entitlementKey" name="entitlementKey" value="${post && post.entitlement_key ? post.entitlement_key : `vip:${blog.handle}`}">
 <p class="meta">Members-only posts are readable by this blog’s members and staff, and by active OpenVibe.VIP members of the blog’s owner. If the owner defines a perk bound to <code>blog gated_post</code>, members need a plan that includes it; a rule the owner sets for the post on openvibe.vip takes precedence. Everyone else sees the title, the summary above as a teaser, and a link to join — never the text. ${blog.kind === 'official' ? 'The official blog has no VIP owner, so here nobody else is admitted.' : ''}</p>
 <label><input type="checkbox" name="allowComments" value="1"${raw(!post || post.allow_comments ? ' checked' : '')}> Comments (public posts only, hosted by OpenVibe.Community)</label>
@@ -98,6 +100,7 @@ function editPage(o) {
     return String(h`<p><a href="/write/@${blog.handle}">← ${blog.title}</a></p>
 <h1>${head.fields.title}</h1>
 <p class="meta">${STATE_LABEL[post.state] || post.state} · ${post.visibility} · revision ${head.number}${published ? h` · readers see revision ${published.number}` : ''} · <a href="/write/posts/${post.id}/revisions">History</a> · <a href="/write/posts/${post.id}/preview">Preview</a>${post.state === 'published' ? h` · <a href="${publicUrl}">View</a>` : ''}</p>
+<p class="post-share">${raw(kit.share({ title: head.fields.title, url: publicUrl, text: head.fields.summary || '', kind: 'post', id: post.id }))}</p>
 ${disclosure ? h`<p class="disclosure" role="note"><strong>${disclosure.short}.</strong> ${disclosure.long}</p>` : ''}
 ${raw(gateSummary(decision))}
 ${patchNotes ? raw(patchNotesPanel({ post, draft: patchNotes, csrf })) : ''}
