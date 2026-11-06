@@ -379,6 +379,8 @@ function createPosts({ store, blogs, publication, access, outbox, log = console,
                 if (post.state !== 'published') return { changed: false, post };
                 const before = publication.snapshot(await blogOf(post), post);
                 await db.prepare("UPDATE blog_posts SET state = 'unpublished', updated_at = ? WHERE id = ?").run(store.now(), post.id);
+                // Unpublishing takes it back to Only me: the share row must not keep a public door open.
+                if (sharing) await sharing.syncAudience(post.id, 'private');
                 return { changed: true, post: (await publication.afterChange(before, post.id, { actor, traceparent })).post };
             });
         },

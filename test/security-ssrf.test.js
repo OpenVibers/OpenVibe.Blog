@@ -66,6 +66,7 @@ const LONG = Array.from({ length: 100 }, (_, i) => `w${i}`).join(' ');
             'server/desks/desks.js': 'OpenVibe.Food\'s recipe library feed (OV_FOOD_URL, configured; the budget-recipes desk)',
             'server/clients/media.js': 'OpenVibe.Media (configured)',
             'server/clients/network.js': 'OpenVibe.Network (configured)',
+            'server/sharing.js': 'OpenVibe.Network (configured) for identity lookups and the notification push; never a URL a user chose',
         };
         const root = path.join(__dirname, '..');
         const found = [];

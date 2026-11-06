@@ -39,7 +39,7 @@ async function startNetworkStub() {
         try {
             const missing = await uncovered(d.db, {
                 tables: TABLES,
-                               exempt: {"account_data_events":"the ledger of requests itself: which export and deletion Blog applied","blog_index_revisions":"owner is the search-index document's owner (type/id), not a person; the row holds a revision and hash","changelog_entries":"subject is the git commit subject text, not a Network subject; author is the git author"},
+                               exempt: {"account_data_events":"the ledger of requests itself: which export and deletion Blog applied","blog_index_revisions":"owner is the search-index document's owner (type/id), not a person; the row holds a revision and hash","changelog_entries":"subject is the git commit subject text, not a Network subject; author is the git author","share_members":"jsonb subject: the SDK table map cannot name it; extraExport/extraErase cover the share rows","share_access_requests":"jsonb subject: the SDK table map cannot name it; extraExport/extraErase cover the share rows"},
             });
             assert.deepStrictEqual(missing, [], `a table with a person column is neither covered nor exempted: ${missing.join(', ')}`);
         } finally { await d.close(); }
