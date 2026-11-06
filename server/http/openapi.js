@@ -203,6 +203,11 @@ route('post', '/posts/{id}/revert', {
     } }),
     responses: { 201: json('The revert revision and the post', { type: 'object', properties: { revision: { type: 'integer' }, post: ref('Post') } }), ...errors() },
 });
+route('get', '/review-queue', {
+    operationId: 'getReviewQueue', summary: 'The reviewer queue: posts whose AI-written head waits for a person', tags: ['revisions'], security: PERSON,
+    description: 'Editorial staff only. Oldest first, with the gate\'s reason codes and words and the review path for each post.',
+    responses: { 200: json('The waiting posts', { type: 'object', properties: { items: arrayOf({ type: 'object' }) } }), ...errors([401, 403, 429]) },
+});
 route('post', '/posts/{id}/reviews', {
     operationId: 'reviewPostRevision', summary: 'Approve or reject an AI-authored revision', tags: ['revisions'], security: PERSON, parameters: [POST],
     description: 'People only. An approved revision may then publish.',

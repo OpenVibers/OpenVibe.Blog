@@ -24,6 +24,7 @@
  *   DELETE /posts/:id                             blog.post.delete
  *   GET    /posts/:id/revisions[/:n], /posts/:id/diff?from&to&mode    blog.post.read
  *   POST   /posts/:id/revert                      blog.post.update      { to_revision, expected_revision }
+ *   GET    /review-queue                           editorial staff       posts whose AI-written head waits for a person
  *   POST   /posts/:id/reviews                     people only           { revision, decision, note? }
  *   POST   /posts/:id/attachments                 blog.post.update      { media_id, role, alt, caption, position }
  *   DELETE /posts/:id/attachments/:aid            blog.post.update
@@ -64,6 +65,12 @@ function createApi(ctx) {
     router.use(limits.reads('blog.read', { skip: (req) => req.path === '/changelog' }));
     const B = (name) => limits.budget(name);
     router.use((req, res, next) => { privateNoStore(res); res.set('X-Robots-Tag', 'noindex'); next(); });
+
+    // The reviewer queue (editorial staff): every post whose AI-written head waits for a person.
+    router.get('/review-queue', run(async (req) => {
+        if (!req.viewer || !req.viewer.editorial) throw new ApiError(403, 'review.forbidden', 'Only OpenVibe editorial staff review the publication queue');
+        return { items: await posts.pendingReviews(req.viewer) };
+    }));
 
     const tp = (req) => ({ traceparent: req.ov && req.ov.traceparent });
 
