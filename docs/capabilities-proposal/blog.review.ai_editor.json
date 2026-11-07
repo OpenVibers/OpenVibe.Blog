@@ -1,0 +1,23 @@
+{
+  "id": "blog.review.ai_editor",
+  "version": "1.0",
+  "owner": "blog",
+  "status": "active",
+  "visibility": "first-party",
+  "description": "Record the editorial queue's AI editor decision (approved or rejected) on a post revision, as the first-party service principal acting as itself (a svc: principal with no X-OV-Subject). This is never a person's review: an approval lets an AI draft publish through the existing publish action and the post says \"Checked by OpenVibe's AI editor\" with its date, never \"Reviewed by a person\". Granted only to the orchestrator's service principal.",
+  "permissions": [
+    "blog:write"
+  ],
+  "resourceConstraints": [
+    "none"
+  ],
+  "quotaClass": "blog-write",
+  "events": [
+    "blog.post.updated",
+    "blog.index_document.upserted",
+    "blog.index_document.deleted"
+  ],
+  "implementedBy": [
+    "POST /api/v1/posts/:id/reviews"
+  ]
+}
