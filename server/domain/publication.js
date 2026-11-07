@@ -16,6 +16,7 @@ const seo = require('openvibe-publishing/seo');
 const ssr = require('openvibe-publishing/ssr');
 const hooks = require('openvibe-publishing/index-hooks');
 const authorship = require('openvibe-publishing/authorship');
+const reviewKind = require('./review-kind');
 
 // Blog's editorial policy for the gate: sources are optional on a blog; a very short post is
 // served and listed in feeds but not offered to search engines (reason "thin").
@@ -24,6 +25,44 @@ const OWNER = 'blog';
 
 /** Blog visibility → the gate's vocabulary (members = entitlement-gated). */
 const GATE_VISIBILITY = { public: 'public', unlisted: 'unlisted', members: 'gated', private: 'private' };
+
+/** The gate's authorship facts: an approving review of either kind (a person's or the AI editor's). */
+function gateFacts(rec, review) {
+    const out = { authorship: { mode: rec.mode, reviewed: reviewKind.approved(review) } };
+    if (rec.stubProvider) out.stubProvider = true;
+    return out;
+}
+
+/** May this revision be published? AI-generated text needs an approval from a person or the AI editor. */
+function canPublish(rec, review) {
+    if (authorship.needsReview(rec) && !reviewKind.approved(review)) {
+        return { ok: false, reason: rec.mode === 'ai' ? 'ai_generated_unreviewed' : 'stub_provider' };
+    }
+    return { ok: true, reason: null };
+}
+
+/** Does either kind of review approve this revision? */
+function approvedReview(kinds = { person: null, ai_editor: null }) {
+    return reviewKind.approved(kinds.person) || reviewKind.approved(kinds.ai_editor);
+}
+
+/**
+ * The disclosure at the item, with the review of each kind (a person's, the AI editor's, both):
+ * "Checked by OpenVibe's AI editor on 2026-11-06" is never "Reviewed by a person". With no review
+ * it is the library's own text ("not yet reviewed by a person"), unchanged.
+ */
+function disclosure(rec, kinds = { person: null, ai_editor: null }) {
+    const d = authorship.disclosure(rec, null);
+    if (!d) return null;
+    const person = reviewKind.isPersonReview(kinds.person);
+    const ai = reviewKind.aiEditorLabel(kinds.ai_editor);
+    if (!person && !ai) return { ...d, reviewed: false };
+    const base = d.long.replace(/,\s*(?:not yet )?reviewed by a person\.?\s*$/, '').replace(/\.\s*$/, '');
+    const tail = person && ai ? `, reviewed by a person. ${ai}.`
+        : person ? ', reviewed by a person.'
+            : `. ${ai}.`;
+    return { ...d, long: `${base}${tail}`, reviewed: true };
+}
 
 function createPublication({ store, config, outbox, indexnow }) {
     const { db } = store;
@@ -44,6 +83,11 @@ function createPublication({ store, config, outbox, indexnow }) {
         return rev ? await store.reviews.latest(post.id, rev.number) : null;
     }
 
+    /** The review of each kind for one revision: { person, ai_editor }. */
+    async function reviewsOf(post, rev) {
+        return rev ? await store.reviews.latestByKind(post.id, rev.number) : { person: null, ai_editor: null };
+    }
+
     /**
      * The gate's decision for a post at one revision (the published one by default). `review` lets a
      * caller that already fetched reviews in one batch (sitemaps, llms-full) skip the per-post lookup;
@@ -58,7 +102,8 @@ function createPublication({ store, config, outbox, indexnow }) {
             text: rev ? `${rev.fields.title || ''}\n${ssr.markdownToText(rev.content)}` : '',
             noindex: Boolean(post.noindex),
         };
-        if (rec) Object.assign(facts, authorship.gateFacts(rec, review !== undefined ? review : await reviewOf(post, rev)));
+        const rv = review !== undefined ? review : await reviewOf(post, rev);
+        if (rec) Object.assign(facts, gateFacts(rec, rv));
         return seo.evaluate(facts, { policy: POLICY, now: store.now() });
     }
 
@@ -168,7 +213,8 @@ function createPublication({ store, config, outbox, indexnow }) {
     return {
         POLICY, OWNER, GATE_VISIBILITY,
         blogPath, postPath, postUrl, abs, feedId,
-        decide, visibleRevision, documentFor, syncIndex, snapshot, afterChange, authorshipOf, reviewOf, termsOf,
+        gateFacts, canPublish, approvedReview, disclosure,
+        decide, visibleRevision, documentFor, syncIndex, snapshot, afterChange, authorshipOf, reviewOf, reviewsOf, termsOf,
     };
 }
 
@@ -185,4 +231,4 @@ function actorRef(actor) {
     return { type: 'service', id: 'blog' };
 }
 
-module.exports = { createPublication, actorRef, POLICY, GATE_VISIBILITY };
+module.exports = { createPublication, actorRef, POLICY, GATE_VISIBILITY, gateFacts, canPublish, approvedReview, disclosure };

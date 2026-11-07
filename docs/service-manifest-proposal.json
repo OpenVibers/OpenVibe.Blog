@@ -25,7 +25,8 @@
     "blog.post.schedule",
     "blog.post.unpublish",
     "blog.post.delete",
-    "blog.feed.read"
+    "blog.feed.read",
+    "blog.review.ai_editor"
   ],
   "eventsProduced": [
     "blog.post.created",

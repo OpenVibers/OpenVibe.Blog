@@ -35,7 +35,7 @@ const seo = require('openvibe-publishing/seo');
 const cache = require('openvibe-shared/cache-policy');
 const { run, jsonBody, ApiError, privateNoStore } = require('./errors');
 const { guard } = require('../auth/viewer');
-const { checkCapability } = require('../auth/capabilities');
+const { checkCapability, CAPABILITIES } = require('../auth/capabilities');
 
 function cors(origins) {
     const allowed = new Set(origins);
@@ -290,7 +290,16 @@ function createApi(ctx) {
         const out = await posts.revert(req.viewer, post, { toRevision: b.to_revision ?? b.toRevision, expectedRevision: b.expected_revision ?? b.expectedRevision });
         return { revision: out.revision.number, post: await postDto(out.post, { full: true }) };
     }, 201);
-    router.post('/posts/:id/reviews', B('blog.post.publish'), jsonBody, run(async (req) => {
+    // A review by the AI editor (a svc:… principal acting as itself) needs blog.review.ai_editor.
+    // People, and services acting for a person, are judged by posts.review as before.
+    const reviewGuard = (req, res, next) => {
+        const v = req.viewer;
+        if (!v || v.kind !== 'service' || v.subject) return next();
+        const c = checkCapability(v.claims, CAPABILITIES.REVIEW_AI_EDITOR);
+        if (c.allowed) return next();
+        return contracts.http.sendProblem(res, 403, c.code, { detail: c.reason, ctx: req.ov });
+    };
+    router.post('/posts/:id/reviews', reviewGuard, B('blog.post.publish'), jsonBody, run(async (req) => {
         const { post } = await mustPost(req);
         const b = req.body || {};
         const review = await posts.review(req.viewer, post, { revision: b.revision, decision: b.decision, note: b.note }, tp(req));

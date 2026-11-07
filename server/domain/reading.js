@@ -7,7 +7,7 @@
  */
 const seo = require('openvibe-publishing/seo');
 const ssr = require('openvibe-publishing/ssr');
-const authorship = require('openvibe-publishing/authorship');
+const reviewKind = require('./review-kind');
 const { renderBody } = require('../render/pages');
 
 function createReading({ store, blogs, posts: postsApi, publication, people, media, vip = null }) {
@@ -105,7 +105,7 @@ function createReading({ store, blogs, posts: postsApi, publication, people, med
     /** The machine-readable representation of a post (same content as the page). */
     async function postJson({ blog, post, rev, person, decision }) {
         const rec = publication.authorshipOf(rev);
-        const review = await publication.reviewOf(post, rev);
+        const kinds = await publication.reviewsOf(post, rev);
         const { tags, categories } = await termsView(post, blog);
         const series = await blogs.seriesById(post.series_id);
         return {
@@ -121,7 +121,16 @@ function createReading({ store, blogs, posts: postsApi, publication, people, med
             published_at: post.first_published_at ? new Date(post.first_published_at).toISOString() : null,
             revised_at: rev.createdAt,
             author: person ? { subject: post.author_subject, name: person.known ? person.name : null, username: person.username } : null,
-            authorship: rec ? { mode: rec.mode, workflow: rec.workflow || null, reviewed: authorship.isReviewed(rec, review), disclosure: authorship.disclosure(rec, review) } : null,
+            authorship: rec ? {
+                mode: rec.mode, workflow: rec.workflow || null,
+                reviewed: publication.approvedReview(kinds),
+                labels: reviewKind.labelsFor(kinds),
+                disclosure: publication.disclosure(rec, kinds),
+                reviews: {
+                    person: kinds.person ? { decision: kinds.person.decision, at: kinds.person.reviewedAt } : null,
+                    ai_editor: kinds.ai_editor ? { decision: kinds.ai_editor.decision, at: kinds.ai_editor.reviewedAt } : null,
+                },
+            } : null,
             tags: tags.map((t) => t.name),
             categories: categories.map((c) => c.name),
             series: series ? { title: series.title, url: publication.abs(urls.series(blog, series)), position: post.series_position } : null,

@@ -209,14 +209,14 @@ function createEditorRoutes(ctx) {
         const head = await posts.head(post);
         const published = post.published_revision ? await posts.revision(post, post.published_revision) : null;
         const rec = publication.authorshipOf(head);
-        const review = await publication.reviewOf(post, head);
+        const kinds = await publication.reviewsOf(post, head);
         const terms = await publication.termsOf(post);
         const decision = await publication.decide(blog, { ...post, state: 'published' }, head);
         const patchNotes = ctx.patchNotes ? await ctx.patchNotes.load(post.id) : null;
         const body = editor.editPage({
             blog, post, head, published, decision, patchNotes, jobs: await posts.pendingJobs(post), attachments: await posts.attachments(post), csrf: csrf(req),
-            disclosure: rec ? authorship.disclosure(rec, review) : null,
-            needsReview: rec ? !authorship.canPublish(rec, review).ok : false,
+            disclosure: rec ? publication.disclosure(rec, kinds) : null,
+            needsReview: rec ? authorship.needsReview(rec) && !publication.approvedReview(kinds) : false,
             publicUrl: publication.postPath(blog, post),
             canDelete: await access.canWrite(store, req.viewer, blog, 'delete', post),
             form: editor.postForm({ blog, post, head, terms, series: await blogs.seriesById(post.series_id), csrf: csrf(req), message: flashOf(req), action: `/write/posts/${post.id}` }),
