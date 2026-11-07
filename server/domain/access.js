@@ -116,10 +116,27 @@ function createEntitlementChecker({ provider = 'none', check = null, vip = null 
  *   status 404 hides existence (drafts, private, deleted); 403 says "members only" (the caller shows
  *   a teaser and a join link, never the body); `vip` is the entitlement answer's reason.
  */
-async function canReadPost(store, viewer, blog, post, entitlements) {
+async function canReadPost(store, viewer, blog, post, entitlements, sharing = null) {
     if (!post || post.state === 'deleted') return { allowed: false, status: 404, reason: 'not_found' };
     if (blog.status !== 'active' && !isStaff(viewer)) return { allowed: false, status: 404, reason: 'blog_suspended' };
     const member = await memberCanSee(store, viewer, blog, post) || isStaff(viewer);
+    // The share row is the authority for published and draft posts, except `members` (VIP), which keeps
+    // the entitlement gate below. A row that says private/people denies everyone not on it, published or
+    // not; the page never says whether the post exists. A row that says public/link falls through to the
+    // column's own rules, which onAudienceChange keeps in step.
+    if (sharing && post.visibility !== 'members') {
+        const row = await sharing.shareOf(post.id);
+        if (row) {
+            if (member) return { allowed: true, status: 200, reason: 'member' };
+            const allowed = await sharing.canView(viewer, post.id).catch(() => false);
+            if (allowed) return { allowed: true, status: 200, reason: row.audience === 'public' ? 'public' : 'share' };
+            if (post.state !== 'published') {
+                // An unpublished post with people on its list shows the gate; every other draft is simply absent.
+                return { allowed: false, status: 404, reason: row.audience === 'people' ? 'private' : 'not_published' };
+            }
+            if (row.audience === 'private' || row.audience === 'people') return { allowed: false, status: 404, reason: 'private' };
+        }
+    }
     if (post.state !== 'published') return member ? { allowed: true, status: 200, reason: 'member' } : { allowed: false, status: 404, reason: 'not_published' };
     if (post.visibility === 'public' || post.visibility === 'unlisted') return { allowed: true, status: 200, reason: 'public' };
     if (member) return { allowed: true, status: 200, reason: 'member' };

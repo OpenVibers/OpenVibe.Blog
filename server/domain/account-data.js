@@ -30,6 +30,23 @@ const TABLES = [
     { table: 'blog_post_reviews', subject: 'reviewer', file: 'reviews.json', columns: ['entity_id', 'revision', 'decision', 'note', 'reviewed_at'], order: 'reviewed_at', erase: { keep: 'a person\'s approval is what lets reviewed text stay published' } },
 ];
 
+
+/** The sharing system's rows (openvibe-sdk/share): jsonb subjects, so the SDK's table map cannot name them. */
+async function shareExport(db, subject) {
+    const owned = await db.many("SELECT * FROM shares WHERE service = $1 AND owner_subject->>'id' = $2", ['blog', subject]);
+    const member = await db.many("SELECT * FROM share_members WHERE service = $1 AND subject->>'id' = $2", ['blog', subject]);
+    const asked = await db.many("SELECT * FROM share_access_requests WHERE service = $1 AND subject->>'id' = $2", ['blog', subject]);
+    return owned.length || member.length || asked.length ? [{ name: 'shares.json', content: { owned, member_of: member, requests: asked } }] : [];
+}
+async function shareErase(t, subjects) {
+    for (const subject of subjects) {
+        await t.exec("DELETE FROM share_members WHERE service = $1 AND subject->>'id' = $2", ['blog', subject]);
+        await t.exec("DELETE FROM share_access_requests WHERE service = $1 AND subject->>'id' = $2", ['blog', subject]);
+        await t.exec("DELETE FROM share_transfers WHERE service = $1 AND (from_subject->>'id' = $2 OR to_subject->>'id' = $2)", ['blog', subject]);
+        await t.exec("DELETE FROM shares WHERE service = $1 AND owner_subject->>'id' = $2", ['blog', subject]);
+    }
+}
+
 async function extraExport(db, subject) {
     const files = [];
     const blogs = await db.many('SELECT id, kind, handle, title, description, theme, language, status, created_at FROM blogs WHERE owner_subject = $1', [subject]);
@@ -42,12 +59,14 @@ async function extraExport(db, subject) {
     const revisions = await db.many(`SELECT entity_id, number, kind, content, fields, message, created_at FROM blog_post_revisions
         WHERE author = $1 ORDER BY created_at DESC LIMIT 5000`, [subject]);
     if (revisions.length) files.push({ name: 'revisions.json', content: revisions });
+    files.push(...await shareExport(db, subject));
     return files;
 }
 
 /** The account-data handle over Blog's database and posts (posts.remove for the person's own blog). */
 function create({ db, posts, log = console } = {}) {
     async function extraErase(t, subjects, counts) {
+        await shareErase(t, subjects);
         // Their member blog: each post removed as its owner would remove it (a savepoint in this transaction), while
         // their membership still says they own it; then the blog is suspended and loses what names them.
         const own = await t.many("SELECT id, owner_subject FROM blogs WHERE kind = 'member' AND owner_subject = ANY($1::text[])", [subjects]);

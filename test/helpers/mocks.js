@@ -62,6 +62,17 @@ async function startNetwork() {
             }
             return json(200, { results });
         }
+        if (req.url.startsWith('/internal/identity/resolve?') && req.method === 'GET') {
+            const token = String(req.headers.authorization || '').slice(7);
+            const v = serviceAuth.verifyServiceToken(token, { publicKey: publicPem, issuer, audience: 'openvibe.network' });
+            if (!v.ok || !(v.claims.cap || []).includes('identity.subject.resolve')) return json(403, { code: 'capability.denied' });
+            const name = new URL(req.url, 'http://m').searchParams.get('username') || '';
+            for (const [subject, u] of directory) {
+                if (u.username.toLowerCase() === name.toLowerCase()) return json(200, { subject: { type: 'user', id: subject }, username: u.username, display_name: u.display_name, avatar_url: null, banned: false });
+            }
+            return json(404, { error: 'no such person' });
+        }
+        if (req.url === '/internal/notifications/push' && req.method === 'POST') return json(202, { queued: true });
         return json(404, { error: 'not found' });
     });
     issuer = srv.url;

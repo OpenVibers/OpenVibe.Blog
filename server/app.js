@@ -42,6 +42,7 @@ const { createDiscoveryRoutes } = require('./http/discovery');
 const { createActorLimits } = require('./http/actor-limits');
 const { createBlogReadiness } = require('./observability');
 const { createWorker } = require('./worker');
+const { createSharing, describeRef } = require('./sharing');
 const { assetVersion } = require('./render/layout');
 
 const PUBLIC_DIR = path.join(__dirname, '..', 'public');
@@ -73,7 +74,10 @@ async function createApp(opts = {}) {
     });
     const blogs = createBlogs({ store, config });
     const publication = createPublication({ store, config, outbox, indexnow });
-    const posts = createPosts({ store, blogs, publication, access, outbox, log });
+    // Sharing (openvibe-sdk/share): the shares row next to each post, members, transfers and the one
+    // access check every read path asks (domain/access.js canReadPost).
+    const sharing = opts.sharing || createSharing({ db: store.db, config, outbox, publication, now: store.now, fetchImpl: opts.fetchImpl, log });
+    const posts = createPosts({ store, blogs, publication, access, outbox, log, sharing });
     const people = createPeople({ store, config, fetchImpl });
     const community = createCommunity({ store, config, fetchImpl });
     const media = createMedia({ config, fetchImpl });
@@ -104,7 +108,7 @@ async function createApp(opts = {}) {
     posts.setPublishGate(patchNotes.gate);
     // The AI desks (server/desks/): digests from Sources' items and the satire desk, beside the blogs.
     const desks = opts.desks || require('./desks/desks').createDesks({ config, store, fetchImpl, log });
-    const ctx = { config, store, outbox, blogs, publication, posts, people, community, media, reading, effects, entitlements, vip, auth, viewers, access, worker, aiDrafts, changelog, patchNotes, desks, indexnow };
+    const ctx = { config, store, outbox, blogs, publication, posts, people, community, media, reading, effects, entitlements, vip, auth, viewers, access, worker, aiDrafts, changelog, patchNotes, desks, indexnow, sharing };
 
     const app = express();
     app.disable('x-powered-by');
@@ -212,6 +216,28 @@ async function createApp(opts = {}) {
             res.setHeader('Cache-Control', cache.assetHeaders(rel, { hashed: !!v && v === assetVersion(rel) }));
         },
     }));
+
+    // ── /api/v1/<kind>/<id>/share — the uniform share API (openvibe-sdk/share) ────
+    // GET/PUT /api/v1/post/:id/share, .../share/requests, .../share/transfer[/accept|decline|cancel],
+    // GET /api/v1/share/people?name=, GET /api/v1/shared-with-me. Authentication is Blog's own viewer;
+    // the router answers only its own paths, so the rest of /api/v1 keeps its own 404.
+    {
+        const shareApi = express.Router();
+        shareApi.use(viewers.middleware({ services: false }));
+        shareApi.use(sharing.shares.router({
+            service: 'blog',
+            authenticate: (req) => sharing.shareViewer(req.viewer),
+            describe: describeRef(store.db, config),
+        }));
+        const SHARE_PATH = /^\/api\/v1\/(?:shared-with-me$|share\/people$|[^/]+\/[^/]+\/share(?:\/|$))/;
+        app.use((req, res, next) => (SHARE_PATH.test(req.path) ? shareApi(req, res, next) : next()));
+    }
+    // Expire members and transfers and send queued share events/notifications.
+    if (opts.startSharingWorker !== false) {
+        const timer = setInterval(() => { sharing.work().catch(() => { /* logged inside */ }); }, 15_000);
+        if (timer.unref) timer.unref();
+        app.locals.sharingTimer = timer;
+    }
 
     // ── API ─────────────────────────────────────────────────
     // GET /openapi.json: the API document, generated from the table the /api/v1 router mounts (http/openapi.js).
