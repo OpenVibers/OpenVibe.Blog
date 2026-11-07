@@ -52,7 +52,7 @@ const { boot, check, done } = require('./helpers/boot');
         const stranger = await t.get(url, { as: sam });
         assert.strictEqual(stranger.status, 404);
         assert.ok(stranger.text.includes('shared with specific people'), 'OVShare.gate');
-        assert.ok(stranger.text.includes('ov-share.js') && stranger.text.includes('OVShare.gate'));
+        assert.ok(stranger.text.includes('ov-share.js') && stranger.text.includes('data-ov-share-gate'));
         assert.ok(!stranger.text.includes('Board pack') && !stranger.text.includes('SECRET-LOOI'), 'no title, no text');
         const anon = await t.get(url);
         assert.strictEqual(anon.status, 404);

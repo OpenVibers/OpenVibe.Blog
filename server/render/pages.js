@@ -257,18 +257,12 @@ function sharedGate({ id, signedInAs = null, signInUrl = '/auth/login' }) {
     return String(h`<section class="message">
 <h1>A post on OpenVibe.Blog</h1>
 <p>This is shared with specific people.</p>
-<div id="post-gate">
+<div id="share-gate" data-ov-share-gate data-kind="post" data-id="${String(id)}" data-signed-in-as="${signedInAs || ''}" data-sign-in-url="${signInUrl}">
 <p>This post is shared with specific people on OpenVibe.Blog.</p>
 <p><a class="button" href="${signInUrl}">Sign in</a></p>
 </div>
+<link rel="stylesheet" href="${ovServe.url('ov-share.css')}">
 <script src="${ovServe.url('ov-share.js')}" defer></script>
-<script>
-window.addEventListener('DOMContentLoaded', function () {
-  var el = document.getElementById('post-gate');
-  if (el && window.OVShare) OVShare.gate(el, { kind: 'post', id: ${JSON.stringify(id)},
-    signedInAs: ${JSON.stringify(signedInAs || '')}, signInUrl: ${JSON.stringify(signInUrl)} });
-});
-</script>
 </section>`);
 }
 

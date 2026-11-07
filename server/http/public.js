@@ -438,7 +438,7 @@ function createPublicRoutes(ctx) {
                         title: 'A post on OpenVibe.Blog',
                         description: 'A post shared with specific people on OpenVibe.Blog.',
                         decision: pageDecision(req.path, { indexable: false }),
-                        body: pages.sharedGate({ id: post.id, signedInAs: req.viewer && req.viewer.subject ? req.viewer.subject : null,
+                        body: pages.sharedGate({ id: post.id, signedInAs: req.viewer && req.viewer.user && req.viewer.user.username ? req.viewer.user.username : null,
                             signInUrl: `/auth/login?next=${encodeURIComponent(req.originalUrl)}` }),
                     });
                     return null;
