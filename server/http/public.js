@@ -22,7 +22,6 @@ const ovServe = require('openvibe-shared/serve');
 const frame = require('openvibe-shared/frame');
 const seo = require('openvibe-publishing/seo');
 const ssr = require('openvibe-publishing/ssr');
-const authorship = require('openvibe-publishing/authorship');
 const cache = require('openvibe-shared/cache-policy');
 const { renderPage, SITE_SUMMARY } = require('../render/layout');
 const pages = require('../render/pages');
@@ -347,7 +346,7 @@ function createPublicRoutes(ctx) {
         const attachments = await store.attachments.list(post.id);
         const citations = await store.citations.forRevision(post.id, rev.number);
         const rec = publication.authorshipOf(rev);
-        const review = await publication.reviewOf(post, rev);
+        const kinds = await publication.reviewsOf(post, rev);
         const path = publication.postPath(blog, post);
         const firstCategory = categories[0];
         const crumbs = [blogCrumb(blog), ...(firstCategory ? (await store.taxonomy.ancestors(firstCategory.id)).map((t) => ({ name: t.name, url: reading.urls.category(blog, t) })) : []), { name: rev.fields.title }];
@@ -373,7 +372,7 @@ function createPublicRoutes(ctx) {
                 blog, blogUrl: publication.blogPath(blog), post, rev,
                 author: { name: person.name, url: reading.urls.author(person, blog) },
                 tags, categories, series: await seriesView(blog, post), attachments, citations,
-                disclosure: rec ? authorship.disclosure(rec, review) : null,
+                disclosure: rec ? publication.disclosure(rec, kinds) : null,
                 decisionNote: preview ? `preview · ${decision.robots}` : null,
                 comments, canEdit: await access.canWrite(store, req.viewer, blog, 'edit', post),
                 urlFor: media.urlFor, shareUrl: publication.postUrl(blog, post), breadcrumbs: crumbs, jsonUrl: `${path}.json`,

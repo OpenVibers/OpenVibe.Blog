@@ -205,12 +205,12 @@ route('post', '/posts/{id}/revert', {
 });
 route('get', '/review-queue', {
     operationId: 'getReviewQueue', summary: 'The reviewer queue: posts whose AI-written head waits for a person', tags: ['revisions'], security: PERSON,
-    description: 'Editorial staff only. Oldest first, with the gate\'s reason codes and words and the review path for each post.',
+    description: 'Editorial staff only. Oldest first, with the gate\'s reason codes and words and the review path for each post. An item the AI editor rejected carries `reviewed` (kind, decision, principal, time, label); the AI editor\'s approvals publish the post and leave the queue.',
     responses: { 200: json('The waiting posts', { type: 'object', properties: { items: arrayOf({ type: 'object' }) } }), ...errors([401, 403, 429]) },
 });
 route('post', '/posts/{id}/reviews', {
     operationId: 'reviewPostRevision', summary: 'Approve or reject an AI-authored revision', tags: ['revisions'], security: PERSON, parameters: [POST],
-    description: 'People only. An approved revision may then publish.',
+    description: 'A person who may publish the post (blog.post.publish), or the AI editor — a svc:… service principal acting as itself with blog.review.ai_editor — whose review is recorded with kind `ai_editor` and labelled "Checked by OpenVibe\'s AI editor", never "Reviewed by a person". An approved revision may then publish.',
     requestBody: body({ type: 'object', required: ['revision', 'decision'], properties: {
         revision: { type: 'integer', minimum: 1 }, decision: { type: 'string', enum: ['approved', 'rejected'] }, note: nullable('string'),
     } }),

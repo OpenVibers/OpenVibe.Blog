@@ -24,12 +24,23 @@ const CAPABILITIES = Object.freeze({
     POST_SCHEDULE: 'blog.post.schedule',
     POST_UNPUBLISH: 'blog.post.unpublish',
     POST_DELETE: 'blog.post.delete',
+    REVIEW_AI_EDITOR: 'blog.review.ai_editor',
     FEED_READ: 'blog.feed.read',
 });
 
+// The ids above as a local fallback while openvibe-contracts does not define one yet (the same
+// rule the library uses: the exact id, or a `prefix.*` grant covering it). An id the library knows
+// always goes through the library, so the day a release lands nothing changes here.
+const PROPOSED = new Set(Object.values(CAPABILITIES));
+
 /** → { allowed, code, reason } like capabilities.check(). */
 function checkCapability(claims, capabilityId) {
+    if (!capabilities.get(capabilityId) && PROPOSED.has(capabilityId)) {
+        return capabilities.grants(claims && claims.cap, capabilityId)
+            ? { allowed: true, code: null, reason: null }
+            : { allowed: false, code: 'capability.denied', reason: `${capabilityId} not granted` };
+    }
     return capabilities.check(claims, capabilityId);
 }
 
-module.exports = { CAPABILITIES, checkCapability };
+module.exports = { CAPABILITIES, PROPOSED, checkCapability };

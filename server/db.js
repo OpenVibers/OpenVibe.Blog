@@ -35,6 +35,7 @@ const { createScheduler } = require('openvibe-publishing/schedule');
 const { createAttachmentStore } = require('openvibe-publishing/media');
 const { createDiscussionRefs } = require('openvibe-publishing/discussion');
 const { createReviewLog } = require('openvibe-publishing/authorship');
+const { createReviewKindLog } = require('./domain/review-kind');
 const { createRedirectStore } = require('openvibe-publishing/seo');
 const { createIndexSequencer } = require('openvibe-publishing/index-hooks');
 
@@ -78,7 +79,8 @@ function createStore(db, { now = () => Date.now(), leaseMs = 60000 } = {}) {
         scheduler: createScheduler(db, { prefix: 'blog', now, leaseMs, maxAttempts: 3, backoffMs: [30000, 120000] }),
         attachments: createAttachmentStore(db, { prefix: 'blog_post', now }),
         discussion: createDiscussionRefs(db, { prefix: 'blog_post', now }),
-        reviews: createReviewLog(db, { prefix: 'blog_post', now }),
+        // The shared log records a person's review; the product adds the ai_editor kind and keeps the kinds of both.
+        reviews: createReviewKindLog(createReviewLog(db, { prefix: 'blog_post', now }), { db, prefix: 'blog_post', now }),
         redirects: createRedirectStore(db, { prefix: 'blog', now }),
         sequencer: createIndexSequencer(db, { prefix: 'blog', now }),
         tx: async (fn) => await db.tx(() => fn()),

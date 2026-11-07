@@ -22,7 +22,9 @@ const seo = require('openvibe-publishing/seo');
 const authorship = require('openvibe-publishing/authorship');
 const { isMediaId } = require('openvibe-publishing/media');
 const { ApiError } = require('../http/errors');
-const { actorRef } = require('./publication');
+const { actorRef, canPublish } = require('./publication');
+const reviewKind = require('./review-kind');
+const { checkCapability, CAPABILITIES } = require('../auth/capabilities');
 
 const VISIBILITIES = ['public', 'unlisted', 'members', 'private'];
 const SLUG_RE = /^[a-z0-9][a-z0-9-]{0,79}$/;
@@ -34,6 +36,15 @@ const MEDIA_ROLES = ['cover', 'inline', 'gallery'];
 const newPostId = (now) => `pst_${ids.ulid(now)}`;
 
 const truthy = (v) => v === true || v === 1 || v === '1' || v === 'on' || v === 'true';
+
+/**
+ * The AI editor records a review as itself: a first-party service principal (svc:…) with no
+ * person named, holding blog.review.ai_editor. A service acting for a person is that person.
+ */
+function isAiEditor(viewer) {
+    if (!viewer || viewer.kind !== 'service' || viewer.subject || !/^svc:/.test(String(viewer.service))) return false;
+    return checkCapability(viewer.claims, CAPABILITIES.REVIEW_AI_EDITOR).allowed;
+}
 
 function listOf(v) {
     if (v == null || v === '') return [];
@@ -352,8 +363,8 @@ function createPosts({ store, blogs, publication, access, outbox, log = console,
                 const rev = revisionNumber ? await store.revisions.get(post.id, revisionNumber) : await store.revisions.head(post.id);
                 if (!rev) throw new ApiError(404, 'revision.not_found', `No revision ${revisionNumber} of this post`);
                 if (post.state === 'published' && post.published_revision === rev.number) return { changed: false, post };
-                const ok = authorship.canPublish(publication.authorshipOf(rev) || { mode: 'human' }, await publication.reviewOf(post, rev));
-                if (!ok.ok) throw new ApiError(409, 'post.review_required', `Revision ${rev.number} is AI-generated and needs a person's review before it can be published (${ok.reason})`);
+                const ok = canPublish(publication.authorshipOf(rev) || { mode: 'human' }, await publication.reviewOf(post, rev));
+                if (!ok.ok) throw new ApiError(409, 'post.review_required', `Revision ${rev.number} is AI-generated and needs a person's or the AI editor's approval before it can be published (${ok.reason})`);
                 if (publishGate) {
                     const gate = await publishGate(post, rev);
                     if (gate && gate.blocking && gate.blocking.length) {
@@ -429,8 +440,8 @@ function createPosts({ store, blogs, publication, access, outbox, log = console,
             const rev = action === 'publish' ? (revision ? await store.revisions.get(post.id, parseInt(revision, 10)) : await store.revisions.head(post.id)) : null;
             if (action === 'publish') {
                 if (!rev) throw new ApiError(404, 'revision.not_found', 'No such revision');
-                const ok = authorship.canPublish(publication.authorshipOf(rev) || { mode: 'human' }, await publication.reviewOf(post, rev));
-                if (!ok.ok) throw new ApiError(409, 'post.review_required', `Revision ${rev.number} needs a person's review before it can be scheduled (${ok.reason})`);
+                const ok = canPublish(publication.authorshipOf(rev) || { mode: 'human' }, await publication.reviewOf(post, rev));
+                if (!ok.ok) throw new ApiError(409, 'post.review_required', `Revision ${rev.number} needs a person's or the AI editor's approval before it can be scheduled (${ok.reason})`);
             }
             return await store.tx(async () => {
                 const { job, created } = await store.scheduler.schedule({ entityId: post.id, action, runAt: t, revision: rev ? rev.number : null });
@@ -516,7 +527,9 @@ function createPosts({ store, blogs, publication, access, outbox, log = console,
         /**
          * Posts whose head revision is AI-generated and nobody has approved it yet: what a person
          * still has to review before the post can be published or indexed. Only posts this viewer
-         * may review, oldest first. The gate's own reasons and words come with each item.
+         * may review, oldest first. The gate's own reasons and words come with each item, and an
+         * ai_editor decision is named in `reviewed` (an approval publishes and leaves the queue; a
+         * rejection stays until a person decides).
          */
         async pendingReviews(viewer) {
             const rows = await db.prepare(`SELECT p.* FROM blog_posts p JOIN blogs b ON b.id = p.blog_id
@@ -529,8 +542,10 @@ function createPosts({ store, blogs, publication, access, outbox, log = console,
                 const head = await store.revisions.head(post.id);
                 const rec = publication.authorshipOf(head);
                 if (!head || !rec || !authorship.needsReview(rec)) continue;
-                const review = await store.reviews.latest(post.id, head.number);
-                if (review) continue;   // a decision, approved or rejected, has been made for this revision
+                const kinds = await store.reviews.latestByKind(post.id, head.number);
+                if (kinds.person) continue;   // a person's decision, approved or rejected, has been made for this revision
+                if (kinds.ai_editor && kinds.ai_editor.decision === 'approved') continue;   // the AI editor approved it: published and indexable
+                const ai = kinds.ai_editor;
                 const decision = await publication.decide(blog, post, head);
                 items.push({
                     site: 'blog',
@@ -543,6 +558,7 @@ function createPosts({ store, blogs, publication, access, outbox, log = console,
                     editUrl: `/write/posts/${post.id}`,
                     createdAt: new Date(head.createdAt).toISOString(),
                     reasons: decision.reasons.map((r) => ({ ...r, text: (seo.REASON_BY_CODE[r.code] || {}).description || r.code })),
+                    reviewed: ai ? { kind: reviewKind.AI_EDITOR, decision: ai.decision, by: ai.reviewer, at: ai.reviewedAt, label: reviewKind.aiEditorVerdict(ai) } : null,
                     review: { method: 'POST', path: `/api/v1/posts/${encodeURIComponent(post.id)}/reviews` },
                     ...(post.state === 'draft' ? { publish: { method: 'POST', path: `/api/v1/posts/${encodeURIComponent(post.id)}/publish` } } : {}),
                 });
@@ -550,16 +566,23 @@ function createPosts({ store, blogs, publication, access, outbox, log = console,
             return items.sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt));
         },
 
-        /** A person's review of one revision (what lets an AI draft be published and indexed). */
+        /**
+         * A review of one revision: a signed-in person's (what lets an AI draft be published and
+         * indexed), or the AI editor's — a svc:… service principal acting as itself with
+         * blog.review.ai_editor — recorded with kind `ai_editor`, never as a person's review.
+         */
         async review(viewer, post, { revision, decision, note } = {}, ctx = {}) {
-            if (!viewer || viewer.kind !== 'user' || !viewer.subject) throw new ApiError(403, 'review.person_required', 'Only a signed-in person can review a revision');
+            const aiEditor = isAiEditor(viewer);
+            if (!aiEditor && (!viewer || viewer.kind !== 'user' || !viewer.subject)) throw new ApiError(403, 'review.person_required', 'Only a signed-in person (or the AI editor) can review a revision');
             const blog = await blogOf(post);
-            if (!await access.canWrite(store, viewer, blog, 'publish', post)) throw new ApiError(403, 'post.forbidden', 'You cannot review this post');
+            if (!aiEditor && !await access.canWrite(store, viewer, blog, 'publish', post)) throw new ApiError(403, 'post.forbidden', 'You cannot review this post');
             const n = parseInt(revision, 10);
             if (!await store.revisions.get(post.id, n)) throw new ApiError(404, 'revision.not_found', `No revision ${revision}`);
             return await store.tx(async () => {
                 const before = publication.snapshot(blog, post);
-                const row = await store.reviews.record({ entityId: post.id, revision: n, reviewer: viewer.subject, decision, note });
+                const row = aiEditor
+                    ? await store.reviews.recordAiEditor({ entityId: post.id, revision: n, principal: viewer.service, decision, note })
+                    : await store.reviews.record({ entityId: post.id, revision: n, reviewer: viewer.subject, decision, note });
                 await publication.afterChange(before, post.id, { actor: viewer, ...ctx });
                 return row;
             });
