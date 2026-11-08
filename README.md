@@ -314,7 +314,7 @@ acts for goes in `X-OV-Subject`, and membership still applies:
 - `blog.feed.read`
 
 Browser and app user JWTs are judged by blog membership. The ids and the service manifest are
-released in openvibe-contracts (pinned at v0.97.0; the source proposals stay in
+released in openvibe-contracts (pinned at v0.338.0; the source proposals stay in
 [docs/capabilities-proposal/](docs/capabilities-proposal/) and
 [docs/service-manifest-proposal.json](docs/service-manifest-proposal.json)); `server/auth/capabilities.js`
 decides them with the contracts grant rule.
@@ -541,7 +541,7 @@ First install (done once; kept for a rebuild):
 Part of the [OpenVibe network](https://openvibe.network). Built in the open by [OpenVibers](https://github.com/OpenVibers).
 
 <!-- versions:start -->
-- openvibe-contracts: v0.312.0
+- openvibe-contracts: v0.338.0
 - openvibe-sdk: v0.94.0
 - openvibe-shared: v4.142.0
 - openvibe-publishing: v1.4.1

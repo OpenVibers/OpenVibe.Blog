@@ -31,7 +31,9 @@ const CAPABILITIES = Object.freeze({
 // The ids above as a local fallback while openvibe-contracts does not define one yet (the same
 // rule the library uses: the exact id, or a `prefix.*` grant covering it). An id the library knows
 // always goes through the library, so the day a release lands nothing changes here.
-const PROPOSED = new Set(Object.values(CAPABILITIES));
+// openvibe-contracts v0.338.0 (2026-11-08) released the last one, blog.review.ai_editor, so the
+// local fallback is empty and every id above is decided by the library.
+const PROPOSED = new Set();
 
 /** → { allowed, code, reason } like capabilities.check(). */
 function checkCapability(claims, capabilityId) {
