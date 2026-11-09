@@ -315,7 +315,7 @@ body.post-page .page { max-width: 1160px; }
 
 /* The contents: a rail beside the text on a computer, a row of chips under the title on a phone. */
 .toc-chips { display: flex; gap: 8px; overflow-x: auto; margin: 14px 0 4px; padding-bottom: 4px; scrollbar-width: thin; }
-.toc-chip { flex: none; display: inline-flex; align-items: center; min-height: 40px; padding: 0 12px; border: 1px solid var(--border, #1f2d47); border-radius: 999px; color: var(--text-secondary, #96a7c2); font-size: .88rem; text-decoration: none; white-space: nowrap; }
+.toc-chip { flex: none; display: inline-flex; align-items: center; min-height: 44px; padding: 0 12px; border: 1px solid var(--border, #1f2d47); border-radius: 999px; color: var(--text-secondary, #96a7c2); font-size: .88rem; text-decoration: none; white-space: nowrap; }
 @media (min-width: 1100px) { .toc-chips { display: none; } }
 
 /* ── Devblog look (Opus, 11-09: "Rust-style devblogs… named updates with title art… epic") ── */

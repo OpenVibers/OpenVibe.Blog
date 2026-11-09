@@ -88,7 +88,7 @@ function contentsFold(sections) {
  * a row of links they can tap and jump by. On a computer the rail beside the text does the same job.
  */
 function contentsChips(sections) {
-    const chips = sections.map((x) => h`<a class="toc-chip" href="#${x.id}">${x.text || x.name}</a>`).join('');
+    const chips = sections.map((x) => h`<a class="toc-chip" href="#${x.id}">${x.text || x.name}</a>`);
     return String(h`<nav class="toc-chips" aria-label="Sections of this post">${chips}</nav>`);
 }
 /** The series: one line under the title; the previous and next parts, and the parts around this one, after the text. */
