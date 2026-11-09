@@ -2,6 +2,9 @@
 
 > The official OpenVibe blog and a blog for every member: drafts, revisions, series, scheduling, feeds.
 
+**Live site:** https://openvibe.blog · **API docs:** https://openvibe.services · **For AI:** https://openvibe.blog/llms.txt
+**Run it:** `npm ci && npm run dev` (Node 22 or newer) · **Tests:** `npm test`
+
 **Status:** alpha (roadmap Wave 16, Blog half). **Public at https://openvibe.blog since 2026-09-23**
 (the launch release also removed the domain from OpenVibe.Sites). Its capabilities and service
 manifest are released in openvibe-contracts v0.97.0. The network changelog files Patch notes
