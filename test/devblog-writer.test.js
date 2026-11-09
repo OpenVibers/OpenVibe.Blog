@@ -36,6 +36,8 @@ const long = 'We added search to the channel page so readers can find a channel 
     await check('noise-only weeks never call AI; dry-run weeks are Monday based', async () => {
         assert.equal(weekOf('2026-11-08'), '2026-11-02');
         for (const subject of ['test: search page', 'docs: editor guide', 'openvibe-sdk v1.0.0', 'Pin search dependency']) assert.equal(meaningful({ subject }), false);
+        assert.equal(meaningful({ subject: 'feat: Add video chapters' }), true);
+        assert.equal(meaningful({ subject: 'fix: Restore stream playback' }), true);
         assert.equal(meaningful({ subject: 'Fix search', files: '["test/search.test.js"]' }), false);
         assert.deepEqual(candidates([{ service: 'live', deployed_at: '2026-11-03', subject: 'docs: search' }], { from: '2026-11-01', to: '2026-11-09' }), []);
         await seed('docs', new Date(t.clock.now()).toISOString(), 'docs: search');

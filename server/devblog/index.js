@@ -15,7 +15,7 @@ function meaningful(e) {
     if (/^(?:test|docs?|ci|build|chore)(?:\([^)]*\))?[:\s]|^Merge\b|^openvibe-(?:shared|sdk|contracts|publishing)\s+v|^(?:pin|bump)\b|dependenc/i.test(subject)) return false;
     let files = e.files; if (typeof files === 'string') { try { files = JSON.parse(files); } catch { files = []; } }
     if (Array.isArray(files) && files.length && files.every(f => /(^|\/)(?:test|tests|docs|\.github)\/|\.(?:md|test\.js|spec\.js)$|(?:^|\/)package(?:-lock)?\.json$/.test(typeof f === 'string' ? f : f.filename || ''))) return false;
-    return ['feature', 'fix'].includes(intentOf(e).kind);
+    return /^(?:feat|fix)(?:\([^)]*\))?!?:\s/i.test(subject) || ['feature', 'fix'].includes(intentOf(e).kind);
 }
 function candidates(entries, { from, to }) {
     const groups = new Map();
@@ -67,7 +67,8 @@ function createDevblog({ config, store, blogs, posts, access, aiDrafts, media, l
         try {
             const sources = entries.map(e => ({ source_type: 'git.commit', source_id: e.sha, url: `https://github.com/${e.repo}/commit/${e.sha}`, title: e.subject, author: e.author || 'The OpenVibe team', content: JSON.stringify({ subject: e.subject, body: e.message_body || '', files: e.files || [], pull_request: e.pr_number || null }).slice(0, 10000) }));
             const map = build(useful, { maxStories: 8 });
-            const storyGroups = [...map.stories, ...map.also.map(e => ({ title: e.subject, entries: [e] }))].slice(0, 8);
+            const grouped = new Set(map.stories.flatMap(s => s.entries.map(e => e.sha)));
+            const storyGroups = [...map.stories, ...useful.filter(e => !grouped.has(e.sha)).map(e => ({ title: e.subject, entries: [e] }))].slice(0, 8);
             const stories = storyGroups.map(s => ({ title: s.title, sources: s.entries.map(e => entries.findIndex(x => x.sha === e.sha)), authors: [...new Set(s.entries.map(e => e.author || 'The OpenVibe team'))] }));
             const shots = media?.listShots ? await media.listShots().catch(() => []) : [];
             const screenshots = [];
