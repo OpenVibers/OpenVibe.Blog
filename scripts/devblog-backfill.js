@@ -37,7 +37,7 @@ async function main(args = process.argv.slice(2)) {
             if (!blog) throw new Error(`No configured blog for ${c.service}`);
             const owner = await ctx.store.db.prepare("SELECT subject FROM blog_memberships WHERE blog_id = ? AND role = 'owner' ORDER BY created_at LIMIT 1").get(blog.id);
             if (!owner) throw new Error(`No owner for ${c.service}`);
-            const out = await ctx.devblog.draft({ kind: 'user', subject: owner.subject }, blog, { service: c.service, week: c.week, backfill: true });
+            const out = await ctx.devblog.draft({ kind: 'user', subject: owner.subject }, blog, { service: c.service, week: c.week, backfill: true, retry: true });
             console.log(`Saved draft ${out.post.id}`);
         }
     } finally { ctx.worker.stop(); await ctx.outbox.stop(); await ctx.store.close(); }
