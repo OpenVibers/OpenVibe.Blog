@@ -24,7 +24,6 @@ const MED = 'med_01J8ZQ4X3M000000000000000A';
     };
 
     await check('setup: a guide, a community post, a daily update and the newest, a devblog with art', async () => {
-        await publish({ title: 'How to self-host', categories: 'Guides', body: `A guide.\n\n${LONG}` });
         await publish({ title: 'Meet the builders', categories: 'Community', body: `Who shipped what.\n\n${LONG}` });
         await publish({ title: 'A quieter morning', categories: 'Daily', body: `The day's small changes.\n\n${LONG}` });
         await publish({ title: 'Printed & Polished', categories: 'Devblog', summary: 'This month: blueprints, the Uzi, and our biggest optimisation pass.', body: `:::hero{art="${MED}" kicker="Devblog"}\n# Printed & Polished\nThe update.\n:::\n\n${LONG}` });
@@ -42,6 +41,18 @@ const MED = 'med_01J8ZQ4X3M000000000000000A';
         assert.match(feature, /Read more/);
         const cards = home.text.slice(home.text.indexOf('class="bh-cards bh-artcards"'));
         assert.ok(cards.indexOf('A quieter morning') < cards.indexOf('Meet the builders'), 'the cards are newest first');
+    });
+
+    await check('a tab whose category has no post is empty, not every post', async () => {
+        const empty = await t.get('/?tab=guides');
+        assert.strictEqual(empty.status, 200, empty.text);
+        assert.doesNotMatch(empty.text, /Meet the builders/);
+        assert.match(empty.text, /Nothing published here yet/);
+        // Now the category exists, and the same tab lists only its post.
+        await publish({ title: 'How to self-host', categories: 'Guides', body: `A guide.\n\n${LONG}` });
+        const filled = await t.get('/?tab=guides');
+        assert.match(filled.text, /How to self-host/);
+        assert.doesNotMatch(filled.text, /Meet the builders/);
     });
 
     await check('the tabs are server-rendered links, and each one lists only its category', async () => {

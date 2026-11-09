@@ -110,9 +110,15 @@ function createPublicRoutes(ctx) {
         const tab = homePage.INDEX_TABS.find((t) => t.id === wanted) || homePage.INDEX_TABS[0];
         const q = String(req.query.q || '').replace(/\s+/g, ' ').trim().slice(0, 80);
         const term = tab.slug ? await store.taxonomy.bySlug(blogs.categoryVocabulary(blog), tab.slug) : null;
+        // A tab names a category. Until that category has a post there is nothing to list: falling back to
+        // the unfiltered index would show every post under a tab that promises one kind.
+        const tabEmpty = Boolean(tab.slug && !term);
         let rows;
         let total;
-        if (q) {
+        if (tabEmpty) {
+            rows = [];
+            total = 0;
+        } else if (q) {
             // A name filter is over the titles people see: a bounded read, filtered in place. The index is
             // small by design (a blog's published posts), and the unfiltered listing keeps its SQL pager.
             const all = await posts.listPublished({ blogId: blog.id, ...scope, ...(term ? { termIds: [term.id] } : {}), limit: 500 });
