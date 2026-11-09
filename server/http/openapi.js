@@ -137,7 +137,9 @@ route('post', '/blogs/{handle}/posts', {
     operationId: 'createPost', summary: 'Create a post (a draft)', tags: ['posts'], security: PERSON, parameters: [HANDLE],
     description: 'blog.post.create. X-OV-Origin: ai marks the revision AI-authored (it then needs a review before publishing).',
     requestBody: body({ type: 'object', required: ['title'], properties: {
-        title: str({ maxLength: 200 }), body: str({ maxLength: 200000, description: 'Markdown' }), summary: str({ maxLength: 500 }),
+        title: str({ maxLength: 200 }), body: str({ maxLength: 200000, description: 'Markdown' }), markdown: str({ maxLength: 200000, description: 'Markdown (the same as body)' }),
+        blocks: { type: 'object', description: 'A block tree (see openvibe-publishing/blocks); the Markdown that parses back into it is what the post keeps', additionalProperties: true },
+        summary: str({ maxLength: 500 }),
         slug: str({ pattern: '^[a-z0-9][a-z0-9-]{0,79}$' }), visibility,
         entitlement_key: str({ pattern: '^[a-z][a-z0-9_.:-]{0,127}$', description: 'Only for visibility members' }),
         tags: arrayOf(str({ maxLength: 50 })), categories: arrayOf(str()), series: nullable('string'), series_position: nullable('integer', { minimum: 1 }),
@@ -151,15 +153,18 @@ route('get', '/blogs/{handle}/feed', {
     responses: { 200: { description: 'The feed (application/feed+json)', content: { 'application/feed+json': { schema: { type: 'object' } } } }, ...errors([404, 429]) },
 });
 route('get', '/posts/{id}', {
-    operationId: 'getPost', summary: 'One post', tags: ['posts'], security: ANONYMOUS, parameters: [POST],
-    description: 'blog.post.read. A member sees the full post; a reader of a members-only post gets 403 with a teaser.',
-    responses: { 200: json('The post', { type: 'object', properties: { post: ref('Post') } }), 403: problem, ...errors([400, 404, 429]) },
+    operationId: 'getPost', summary: 'One post', tags: ['posts'], security: ANONYMOUS,
+    parameters: [POST, query('format', { type: 'string', enum: ['blocks'] }, 'blocks: the body parsed as blocks, without the Markdown')],
+    description: 'blog.post.read. A member sees the full post; a reader of a members-only post gets 403 with a teaser. For a writer the post carries the blocks next to the Markdown; ?format=blocks answers with the blocks alone.',
+    responses: { 200: json('The post', { type: 'object', properties: { post: ref('Post'), blocks: { type: 'object' } } }), 403: problem, ...errors([400, 404, 429]) },
 });
 route('patch', '/posts/{id}', {
     operationId: 'updatePost', summary: 'Edit a post: a new revision, or the row (slug, visibility, terms, flags)', tags: ['posts'], security: PERSON, parameters: [POST],
     description: 'blog.post.update. Any content change needs expected_revision (428 without it; 412 when it is stale).',
     requestBody: body({ type: 'object', properties: {
-        expected_revision: { type: 'integer', minimum: 0 }, title: str({ maxLength: 200 }), body: str({ maxLength: 200000 }), summary: str({ maxLength: 500 }),
+        expected_revision: { type: 'integer', minimum: 0 }, title: str({ maxLength: 200 }), body: str({ maxLength: 200000 }), markdown: str({ maxLength: 200000 }),
+        blocks: { type: 'object', description: 'A block tree; the Markdown that parses back into it is what the revision keeps', additionalProperties: true },
+        summary: str({ maxLength: 500 }),
         slug: str({ pattern: '^[a-z0-9][a-z0-9-]{0,79}$' }), visibility, entitlement_key: str(),
         tags: arrayOf(str()), categories: arrayOf(str()), series: nullable('string'), series_position: nullable('integer'),
         allow_comments: { type: 'boolean' }, noindex: { type: 'boolean' }, citations: arrayOf(citation), message: str(),

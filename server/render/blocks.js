@@ -53,14 +53,33 @@ function sectionsOf(tree) {
     return out;
 }
 
-/** The heading of a block: the first "## " line of its prose. */
+/** The heading of a block: the first "# ", "## " or "### " line of its prose. */
 function firstHeading(node) {
     for (const child of node.children || []) {
         if (child.type !== 'text') continue;
-        const m = String(child.value || '').match(/^#{2,3}\s+(.+)$/m);
+        const m = String(child.value || '').match(/^#{1,3}\s+(.+)$/m);
         if (m) return m[1].trim();
     }
     return null;
+}
+
+/** The first line of a block's prose that is not a heading: the hero's teaser. */
+function firstProse(node) {
+    for (const child of node.children || []) {
+        if (child.type !== 'text') continue;
+        const line = String(child.value || '').split('\n').map((s) => s.trim()).find((s) => s && !/^#{1,3}\s/.test(s));
+        if (line) return line;
+    }
+    return null;
+}
+
+/** The patch-notes windows a body folds: every { from, to } a patchnotes block names. */
+function patchNoteWindows(tree) {
+    const out = [];
+    blocks.walk(tree, (node) => {
+        if (node.type === 'patchnotes') out.push({ from: node.attrs.from || null, to: node.attrs.to || null });
+    });
+    return out;
 }
 
 /** The hero of a tree: the first hero block, with its art. */
@@ -137,10 +156,9 @@ function renderBody(content, attachments = [], options = {}) {
             + caption + '</figure>';
     };
 
-    const html = blocks.render(tree, {
+    const common = {
         rel: options.rel,
         renderText,
-        headingShift: options.headingShift,
         urlFor,
         media,
         person: options.person,
@@ -151,9 +169,25 @@ function renderBody(content, attachments = [], options = {}) {
         signedIn: options.signedIn,
         loginUrl: options.loginUrl,
         path: options.path,
-    });
+    };
+    // A post page owns the h1: the hero's "# Name" is that h1, so the page renders the hero itself
+    // (headingShift 0) and the body without it. Elsewhere (feeds, JSON, previews) the hero stays in place.
+    const hero = heroOf(tree);
+    const separate = Boolean(options.separateHero) && hero;
+    const body = separate ? { ...tree, children: (tree.children || []).filter((c) => c !== hero) } : tree;
+    const html = blocks.render(body, { ...common, headingShift: options.headingShift });
+    // The Markdown renderer never writes an h1 (a page owns it), so the hero's first heading is raised
+    // to the page's title here: "# Printed & Polished" IS this page's h1.
+    const heroHtml = separate
+        ? blocks.render({ type: 'root', children: [hero] }, { ...common, headingShift: 0 }).replace(/<h2>([\s\S]*?)<\/h2>/, '<h1>$1</h1>')
+        : null;
 
-    return { tree, html, sections: sectionsOf(tree), hero: heroOf(tree) };
+    return {
+        tree, html, heroHtml,
+        sections: sectionsOf(tree), hero,
+        heroHeading: separate ? firstHeading(hero) : null,
+        heroProse: separate ? firstProse(hero) : null,
+    };
 }
 
 /** The plain text of a body: what a feed, a search document and an AI reader get. */
@@ -166,4 +200,4 @@ function bodyBlocks(content) {
     return blocks.parse(content);
 }
 
-module.exports = { renderBody, bodyText, bodyBlocks, sectionsOf, firstHeading, heroOf, renderProse };
+module.exports = { renderBody, bodyText, bodyBlocks, sectionsOf, firstHeading, heroOf, patchNoteWindows, renderProse };

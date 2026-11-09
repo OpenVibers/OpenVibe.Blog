@@ -354,3 +354,89 @@ body.post-page .page { max-width: 1160px; }
 .ov-stat-value { color: var(--accent, #3b82f6); font-size: clamp(2.2rem, 1.8rem + 2vw, 3rem); line-height: 1; }
 .ov-infobox-row { display: grid; grid-template-columns: minmax(84px, 32%) minmax(0, 1fr); gap: 12px; padding: 7px 0; }
 .ov-infobox-key { margin: 0; }
+
+/* ── The index (the official blog's home and /devblog): tabs as links, a name filter, the newest post as
+   a featured banner, and the rest as art cards with real page links. ── */
+body.blog-devbog .page { max-width: 1120px; }
+.bh-devbog-head h1 { font-size: clamp(2rem, 1.5rem + 2.6vw, 3rem); margin-bottom: .4rem; }
+.bh-tabs { display: flex; gap: 6px; overflow-x: auto; margin: 4px 0 12px; padding-bottom: 4px; scrollbar-width: thin; }
+.bh-tabs a { flex: none; display: inline-flex; align-items: center; min-height: 44px; padding: 0 16px; border: 1px solid var(--border, #1f2d47); border-radius: 999px; color: var(--text-secondary, #96a7c2); font-weight: 650; font-size: .95rem; text-decoration: none; }
+.bh-tabs a:hover { color: var(--text-primary); border-color: var(--accent, #3b82f6); }
+.bh-tabs a[aria-current="page"] { background: var(--accent-strong, #1d4ed8); border-color: transparent; color: var(--on-accent-strong, #fff); }
+.bh-filter { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0 0 18px; }
+.bh-filter input { flex: 1 1 220px; width: auto; min-height: 44px; }
+.bh-filter button { margin-top: 0; min-height: 44px; }
+.bh-clear { font-size: .9rem; }
+.bh-kicker { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0 0 8px; font-size: .88rem; color: var(--text-muted, #7386a3); }
+.bh-kicker .chip { min-height: 28px; }
+.bh-feature { display: grid; grid-template-columns: minmax(0, 1.08fr) minmax(0, 1fr); margin: 0 0 22px; border: 1px solid var(--border, #1f2d47); border-radius: 20px; background: var(--bg-card, #131c2e); overflow: hidden; }
+.bh-feature-art { display: block; min-height: 260px; background: var(--bg-tertiary, #172238); }
+.bh-feature-art img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.bh-feature-body { display: flex; flex-direction: column; justify-content: center; padding: clamp(18px, 3vw, 34px); }
+.bh-feature-body:only-child { grid-column: 1 / -1; }
+.bh-feature-title { margin: 0 0 8px; font-size: clamp(1.5rem, 1.1rem + 1.8vw, 2.4rem); line-height: 1.13; letter-spacing: -.02em; }
+.bh-feature-title a { color: var(--text-primary, #e6edf7); text-decoration: none; }
+.bh-feature-title a:hover { text-decoration: underline; }
+.bh-feature-sum { margin: 0 0 14px; max-width: 60ch; color: var(--text-secondary, #96a7c2); }
+.bh-feature-go { margin: auto 0 0; padding-top: 8px; }
+.bh-artcard { padding: 0; overflow: hidden; }
+.bh-artcard > :not(.bh-card-art) { margin-left: 16px; margin-right: 16px; }
+.bh-card-art { display: block; background: var(--bg-tertiary, #172238); }
+.bh-card-art img { display: block; width: 100%; aspect-ratio: 16 / 9; object-fit: cover; }
+.bh-artcard .bh-kicker { margin-top: 12px; }
+.bh-artcard h3 { margin: 0 0 6px; }
+.bh-artcard .bh-sum { margin-bottom: 14px; }
+@media (max-width: 720px) {
+  .bh-feature { grid-template-columns: minmax(0, 1fr); }
+  .bh-feature-art { min-height: 0; aspect-ratio: 16 / 9; }
+  .bh-feature-title { font-size: 1.55rem; }
+  .bh-artcards { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* ── The block inserter (public/js/blog-editor.js): a "/" menu, a form per block with a live preview, an
+   outline dragged to reorder, picture search and Make an image. Progressive only: the textarea saves. ── */
+.ov-editor { margin: 6px 0 4px; }
+.ov-editor-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 8px; }
+.ov-editor button { margin-top: 0; }
+.ov-editor-btn { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 14px; font: inherit; font-size: .92rem; font-weight: 650; background: var(--bg-card, #131c2e); color: var(--text-primary, #e6edf7); border: 1px solid var(--border-light, #2c3d5c); border-radius: 10px; cursor: pointer; }
+.ov-editor-btn:hover, .ov-editor-btn[aria-expanded="true"], .ov-editor-btn[aria-pressed="true"] { border-color: var(--accent, #3b82f6); }
+.ov-editor-btn kbd { padding: 0 5px; border: 1px solid var(--border, #1f2d47); border-radius: 5px; font-size: .8em; color: var(--text-secondary, #96a7c2); }
+.ov-editor-hint { font-size: .84rem; color: var(--text-muted, #7386a3); }
+.ov-editor-panel, .ov-editor-outline { margin: 0 0 10px; }
+.ov-editor-card { padding: 14px 16px; border: 1px solid var(--border, #1f2d47); border-radius: 14px; background: var(--bg-card, #131c2e); }
+.ov-editor-cardhead { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.ov-editor-cardhead h3 { margin: 0; font-size: 1.05rem; }
+.ov-editor-x { flex: none; width: 44px; height: 44px; padding: 0; font-size: 1.3rem; line-height: 1; background: transparent; color: var(--text-secondary, #96a7c2); border: 1px solid transparent; border-radius: 10px; cursor: pointer; }
+.ov-editor-x:hover { color: var(--text-primary); border-color: var(--border-light, #2c3d5c); }
+.ov-editor-menu { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 4px; }
+.ov-editor-menu button { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; min-height: 44px; padding: 7px 10px; font: inherit; text-align: left; background: var(--bg-primary, #0a0f1c); color: var(--text-primary); border: 1px solid var(--border, #1f2d47); border-radius: 10px; cursor: pointer; }
+.ov-editor-menu button:hover, .ov-editor-menu button[aria-selected="true"] { border-color: var(--accent, #3b82f6); }
+.ov-editor-menu b { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .78rem; color: var(--text-muted, #7386a3); font-weight: 500; }
+.ov-editor-menu span { font-weight: 650; font-size: .92rem; }
+.ov-editor-form label { margin-top: 8px; }
+.ov-editor-form input, .ov-editor-form select, .ov-editor-form textarea { font-family: inherit; font-size: .95rem; }
+.ov-editor-form textarea { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.ov-chk { display: flex; align-items: center; gap: 8px; font-weight: 500 !important; }
+.ov-editor-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.ov-editor-actions button { min-height: 44px; }
+.ov-editor-alt { background: var(--bg-primary, #0a0f1c); color: var(--text-primary); border: 1px solid var(--border-light, #2c3d5c); }
+.ov-editor-ph { margin: 16px 0 6px; font-size: .78rem; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: var(--text-muted, #7386a3); }
+.ov-editor-preview { padding: 12px 14px; border: 1px dashed var(--border-light, #2c3d5c); border-radius: 12px; background: var(--bg-primary, #0a0f1c); }
+.ov-editor-preview:empty { display: none; }
+.ov-editor-preview img { max-width: 100%; height: auto; border-radius: 8px; }
+.ov-editor-results { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 8px; }
+.ov-editor-results li { display: grid; grid-template-columns: 84px minmax(0, 1fr) auto; align-items: center; gap: 12px; padding: 8px; border: 1px solid var(--border, #1f2d47); border-radius: 10px; background: var(--bg-primary, #0a0f1c); }
+.ov-editor-results img { width: 84px; height: 62px; object-fit: cover; border-radius: 8px; display: block; }
+.ov-editor-results b { display: block; font-size: .95rem; }
+.ov-editor-results .meta { display: block; font-size: .8rem; }
+.ov-editor-results button { min-height: 44px; }
+.ov-editor-outline-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.ov-editor-outline-list li { display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 4px 10px; border: 1px solid var(--border, #1f2d47); border-radius: 10px; background: var(--bg-card, #131c2e); cursor: grab; }
+.ov-editor-outline-list li.is-dragging { opacity: .5; }
+.ov-editor-outline-list b { font-size: .92rem; }
+.ov-editor-grip { color: var(--text-muted, #7386a3); }
+@media (pointer: coarse) {
+  .ov-editor-results li { grid-template-columns: 64px minmax(0, 1fr); }
+  .ov-editor-results li button { grid-column: 1 / -1; }
+  .bh-kicker .chip { min-height: 44px; }
+}

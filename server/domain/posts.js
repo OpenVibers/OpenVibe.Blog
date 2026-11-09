@@ -93,7 +93,11 @@ function createPosts({ store, blogs, publication, access, outbox, log = console,
      */
     function bodyOf(input) {
         if (input.blocks !== undefined && input.blocks !== null) {
-            const md = blocks.serialize(input.blocks);
+            // A malformed tree is refused here, not stored as a body its own renderer cannot read.
+            const tree = Array.isArray(input.blocks) ? { type: 'root', children: input.blocks } : input.blocks;
+            const check = blocks.validate(tree);
+            if (!check.ok) throw new ApiError(422, 'post.blocks_invalid', `The blocks are not valid: ${check.errors.slice(0, 5).map((e) => e.message).join('; ')}`);
+            const md = blocks.serialize(tree);
             if (md.length > MAX_BODY) throw new ApiError(413, 'post.too_long', `A post is at most ${MAX_BODY} characters`);
             return md;
         }
@@ -298,10 +302,19 @@ function createPosts({ store, blogs, publication, access, outbox, log = console,
                 if (sharing) await sharing.register(viewer, id, 'private');
                 const post = await q.byId.get(id);
                 await setTerms(blog, post, input);
+                // The draft names its subject for the Dock: the blog and the post's own title, the run
+                // that wrote it (when an agent did) and the skill it ran. A person's draft carries no run.
                 await outbox.emit({
                     event_type: 'blog.post.created', actor: actorRef(viewer), visibility: 'internal', priority: 'low',
                     subject: { type: 'post', id, revision: revision.number },
-                    payload: { blog: { id: blog.id, handle: blog.handle }, state: 'draft', visibility: post.visibility, authorship: rec.mode, ...(rec.workflow ? { workflow: rec.workflow } : {}) },
+                    payload: {
+                        blog: { id: blog.id, handle: blog.handle, title: blog.title, url: publication.blogPath(blog) },
+                        post: { id, title: t, url: publication.postPath(blog, post) },
+                        state: 'draft', visibility: post.visibility, authorship: rec.mode,
+                        skill: (rec.workflow && rec.workflow.id) || 'blog.post.create',
+                        run_id: (rec.workflow && rec.workflow.runId) || null,
+                        ...(rec.workflow ? { workflow: rec.workflow } : {}),
+                    },
                 }, { traceparent });
                 return { post: await q.byId.get(id), revision };
             });

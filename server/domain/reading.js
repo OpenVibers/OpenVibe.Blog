@@ -7,6 +7,7 @@
  */
 const seo = require('openvibe-publishing/seo');
 const ssr = require('openvibe-publishing/ssr');
+const blocks = require('openvibe-publishing/blocks');
 const reviewKind = require('./review-kind');
 const { renderBody } = require('../render/pages');
 
@@ -56,12 +57,17 @@ function createReading({ store, blogs, posts: postsApi, publication, people, med
             if (!rev) return null;
             const blog = blogById.get(post.blog_id);
             const person = who.get(post.author_subject);
-            const { tags } = await termsView(post, blog, { networkTags: !perBlogLinks });
+            const { tags, categories } = await termsView(post, blog, { networkTags: !perBlogLinks });
+            // The hero art of a devblog is its card in a list: the block names a Media id, and the card
+            // shows the picture when Media can deliver it.
+            const hero = (blocks.parse(rev.content).children || []).find((c) => c.type === 'hero');
+            const artId = hero && hero.attrs && typeof hero.attrs.art === 'string' ? hero.attrs.art : null;
             return {
                 post, rev, blog,
                 url: publication.postPath(blog, post),
                 author: person ? { name: person.name, url: urls.author(person, blog) } : null,
-                tags,
+                tags, categories,
+                art: artId && media ? { mediaId: artId, url: media.urlFor(artId) } : null,
                 badge: { members: 'Members only', private: 'Private' }[post.visibility] || null,
             };
         }));

@@ -21,6 +21,7 @@ const authorship = require('openvibe-publishing/authorship');
 const { escapeHtml: esc } = require('openvibe-publishing/ssr');
 const { renderPage } = require('../render/layout');
 const editor = require('../render/editor');
+const blockRender = require('../render/blocks');
 const { csrfToken, checkCsrf } = require('../auth/forms');
 const { asApiError } = require('./errors');
 const cache = require('openvibe-shared/cache-policy');
@@ -277,6 +278,41 @@ function createEditorRoutes(ctx) {
         await posts.detach(req.viewer, found.post, req.params.aid);
         res.redirect(303, `/write/posts/${found.post.id}?saved=${encodeURIComponent('Media removed.')}`);
     }));
+
+    // ── The block inserter ──────────────────────────────────
+    // The form's live preview: the same renderer the post page uses, never a second implementation.
+    router.post('/preview', B('blog.post.preview'), async (req, res, next) => {
+        try {
+            const b = formInput(req.body);
+            const markdown = String(b.markdown || '').slice(0, 600 * 1024);
+            // A post's own attachments resolve, so a figure in the preview looks as it will on the page.
+            let attachments = [];
+            let urlFor = () => null;
+            const postId = String(b.post_id || '');
+            if (postId) {
+                const post = await posts.get(postId);
+                if (post && post.state !== 'deleted') {
+                    const blog = await posts.blogOf(post);
+                    if (await access.canWrite(store, req.viewer, blog, 'edit', post) || access.isStaff(req.viewer)) {
+                        attachments = await store.attachments.list(post.id);
+                        urlFor = ctx.media.urlFor;
+                    }
+                }
+            }
+            const rendered = blockRender.renderBody(markdown, attachments, { urlFor, rel: 'noopener', headingShift: 1 });
+            res.json({ ok: true, html: rendered.html, sections: rendered.sections });
+        } catch (err) { next(err); }
+    });
+
+    // "Make an image" in the inserter: the image task through OpenVibe.AI, the same service the AI draft uses.
+    router.post('/make-image', B('blog.post.ai_draft'), async (req, res, next) => {
+        try {
+            if (!ctx.aiDrafts || !ctx.aiDrafts.imageEnabled) return res.status(503).json({ code: 'ai.not_configured', detail: 'OpenVibe.AI has no image task on this server yet.' });
+            const found = await postFor(req);
+            const out = await ctx.aiDrafts.image(req.viewer, found ? found.blog : await blogs.official(), formInput(req.body), { traceparent: req.ov && req.ov.traceparent });
+            res.json(out);
+        } catch (err) { next(err); }
+    });
 
     // Settings → How I write: the voice card the AI prompt uses.
     router.get('/voice', wrap(async (req, res) => {
