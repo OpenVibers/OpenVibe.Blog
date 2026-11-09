@@ -38,7 +38,13 @@ const H = (n) => n.toString(16).padStart(40, 'a');
     // Patch notes v2: the changelog files a DRAFT through the patch-notes module and never publishes.
     const drafts = [];
     const patchNotes = { draftPending: async ({ entries, reason }) => { drafts.push({ entries, reason }); return { created: true, post: { id: `pst_draft${drafts.length}`, blog_id: 'blg_test' }, checks: { blocking: [], warnings: [] } }; } };
-    const cl = createChangelog({ config, store: t.ctx.store, blogs: t.ctx.blogs, posts: t.ctx.posts, aiDrafts: null, patchNotes, fetchImpl, log: { log() {}, warn() {} } });
+    // The model half is faked: housekeeping must never reach it, and every other entry gets an answer.
+    const tagCalls = [];
+    const tagger = { enabled: true, tag: async (entries) => {
+        tagCalls.push(entries);
+        return new Map(entries.map((e) => [String(e.id), { kind: /^Fix/.test(e.subject) ? 'fixed' : 'better', areas: ['chat'], plain: `plain: ${e.plain}` }]));
+    } };
+    const cl = createChangelog({ config, store: t.ctx.store, blogs: t.ctx.blogs, posts: t.ctx.posts, reading: t.ctx.reading, tagger, aiDrafts: null, patchNotes, fetchImpl, log: { log() {}, warn() {} } });
     const commit = (i, msg) => ({ sha: H(i), commit: { message: msg, author: { date: new Date(t.clock.now()).toISOString() } } });
 
     await check('a service seen for the first time only records its release', async () => {
@@ -53,9 +59,16 @@ const H = (n) => n.toString(16).padStart(40, 'a');
         const r = await cl.tick();
         assert.strictEqual(r, null, 'not due yet');
         const e = await cl.entries({ service: 'live' });
-        assert.deepStrictEqual(e.map((x) => x.subject), ['Fix the chat scroll'], 'first lines only; merges skipped');
-        assert.strictEqual(e[0].url, `https://github.com/OpenVibers/OpenVibe.Live/commit/${H(1)}`);
-        assert.strictEqual(e[0].major, false);
+        const bySubject = new Map(e.map((x) => [x.subject, x]));
+        assert.strictEqual(bySubject.size, 2, 'first lines only');
+        assert.strictEqual(bySubject.get('Fix the chat scroll').kind, 'fixed');
+        assert.deepStrictEqual(bySubject.get('Fix the chat scroll').areas, ['chat']);
+        assert.strictEqual(bySubject.get('Fix the chat scroll').plain, 'plain: Fix the chat scroll');
+        assert.strictEqual(bySubject.get('Merge branch main').kind, 'internal', 'merges are housekeeping');
+        assert.deepStrictEqual(bySubject.get('Merge branch main').areas, []);
+        assert.ok(!tagCalls.flat().some((x) => /^Merge/.test(x.subject)), 'the model is never asked about housekeeping');
+        assert.strictEqual(bySubject.get('Fix the chat scroll').url, `https://github.com/OpenVibers/OpenVibe.Live/commit/${H(1)}`);
+        assert.strictEqual(bySubject.get('Fix the chat scroll').major, false);
     });
 
     await check('a major release after a quiet spell files a Patch notes draft, never a published post', async () => {
@@ -67,7 +80,7 @@ const H = (n) => n.toString(16).padStart(40, 'a');
         assert.ok(r && r.post, 'drafted');
         assert.strictEqual(drafts.length, 1);
         assert.strictEqual(drafts[0].reason, 'major');
-        assert.deepStrictEqual(drafts[0].entries.map((e) => e.subject).sort(), ['Fix the chat scroll', 'Recent tools in the launcher: anonymous and account history', 'Tidy the docs']);
+        assert.deepStrictEqual(drafts[0].entries.map((e) => e.subject).sort(), ['Fix the chat scroll', 'Recent tools in the launcher: anonymous and account history'], 'housekeeping (the merge and docs-only) stays out of the draft');
         assert.strictEqual(r.post.state, undefined, 'a draft object from the fake; the real module creates a draft post');
         assert.strictEqual((await cl.entries()).filter((x) => x.post_id).length, 0, 'nothing is published, so the feed has no post link');
     });
@@ -80,6 +93,50 @@ const H = (n) => n.toString(16).padStart(40, 'a');
         assert.deepStrictEqual(j.entries.map((x) => x.subject).sort(), ['Recent tools in the launcher: anonymous and account history', 'Tidy the docs']);
         assert.ok(j.entries.every((x) => x.service === 'tools' && x.post_id === null), 'a draft does not link its commits');
         assert.strictEqual(j.latest_post, null, 'nothing is published from the pipeline');
+    });
+
+    await check('the feed filters by kind, area and q, counts the facets and names the vocabulary', async () => {
+        const one = async (q) => (await t.get(`/api/v1/changelog?service=live&${q}`)).json();
+        assert.deepStrictEqual((await one('kind=fixed')).entries.map((x) => x.subject), ['Fix the chat scroll']);
+        assert.deepStrictEqual((await one('area=chat')).entries.map((x) => x.subject), ['Fix the chat scroll'], 'the merge has no area');
+        assert.deepStrictEqual((await one('kind=internal')).entries.map((x) => x.subject), ['Merge branch main']);
+        assert.deepStrictEqual((await one('q=scroll')).entries.map((x) => x.subject), ['Fix the chat scroll']);
+        const all = await one('limit=20');
+        assert.strictEqual(all.facets.kinds.fixed, 1);
+        assert.strictEqual(all.facets.kinds.internal, 1);
+        assert.strictEqual(all.facets.areas.chat, 1);
+        assert.strictEqual(all.vocabulary.areas.length, 30);
+        assert.ok(all.vocabulary.areas.some((a) => a.id === 'go-live' && a.label === 'Go live'));
+        const badKind = await t.get('/api/v1/changelog?service=live&kind=improvement');
+        assert.strictEqual(badKind.status, 400, badKind.text);
+        assert.strictEqual(badKind.json().code, 'changelog.kind_invalid');
+        const badArea = await t.get('/api/v1/changelog?service=live&area=podcast');
+        assert.strictEqual(badArea.status, 400, badArea.text);
+        assert.strictEqual(badArea.json().code, 'changelog.area_invalid');
+    });
+
+    await check('the newest devblog post of a site is an API call: title, teaser, date, hero image, url', async () => {
+        const MED = 'med_01J8ZQ4X3M000000000000000A';
+        t.media.objects.set(MED, 'ready');
+        const made = await t.get('/api/v1/blogs/openvibe/posts', { as: t.official, json: {
+            title: 'Live this week', summary: 'One encoder, a calmer chat and the new recent-changes card.', categories: ['Devblog'], tags: ['devblog', 'live'],
+            body: `:::hero{art="${MED}" kicker="Devblog"}\n# Live this week\nWhat shipped.\n:::\n\n` + 'The details. '.repeat(30),
+        } });
+        assert.strictEqual(made.status, 201, made.text);
+        assert.strictEqual((await t.get(`/api/v1/posts/${made.json().post.id}/publish`, { as: t.official, json: {} })).status, 200);
+        const r = await t.get('/api/v1/changelog/devblog?service=live');
+        assert.strictEqual(r.status, 200, r.text);
+        assert.strictEqual(r.headers.get('access-control-allow-origin'), '*');
+        const d = r.json().devblog;
+        assert.strictEqual(d.title, 'Live this week');
+        assert.match(d.teaser, /calmer chat/);
+        assert.match(d.hero_image_url, new RegExp(MED));
+        assert.match(d.url, /\/@openvibe\/live-this-week$/);
+        assert.ok(!Number.isNaN(Date.parse(d.date)));
+        const all = (await t.get('/api/v1/changelog/devblog')).json();
+        assert.ok(all.devblogs.some((x) => x.service === 'live' && x.title === 'Live this week'));
+        assert.strictEqual((await t.get('/api/v1/changelog/devblog?service=nope')).json().devblog, null);
+        assert.strictEqual((await t.get('/api/v1/changelog/devblog?service=NOT OK')).status, 400);
     });
 
     await check('a batch publishes without a major, but never sooner than the gap after the last post', async () => {

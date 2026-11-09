@@ -118,10 +118,15 @@ route('get', '/blogs/{handle}/posts', {
 route('get', '/changelog', {
     operationId: 'getChangelog', summary: 'What shipped on every OpenVibe site, newest first', tags: ['changelog'], security: ANONYMOUS, parameters: [
         query('service', str({ pattern: '^[a-z][a-z0-9-]{1,39}$' }), 'Only this service\'s entries (default: every site)'),
+        query('kind', { type: 'string', enum: ['new', 'better', 'fixed', 'internal'] }, 'Only this kind of change'),
+        query('area', str({ pattern: '^[a-z][a-z0-9-]{0,39}$' }), 'Only changes touching this area (the response vocabulary lists them)'),
+        query('q', str({ maxLength: 200 }), 'The plain words or the commit subject'),
         query('limit', { type: 'integer', minimum: 1 }), query('before', str(), 'The cursor from the previous page')],
-    description: 'Public and CORS *, cached 60 seconds: each site\'s "recently shipped" reads it.',
-    responses: { 200: json('Entries, the cursor for the next page and the latest patch notes post', { type: 'object', properties: {
+    description: 'Public and CORS *, cached 60 seconds: each site\'s "recently shipped" reads it. Entries are blog.changelog-entry@2: plain words, kind, areas, time, commit and pull request. facets counts the kinds and areas in the same service and q scope; internal housekeeping is filterable with kind=internal.',
+    responses: { 200: json('Entries, the cursor for the next page, the facets, the vocabulary and the latest patch notes post', { type: 'object', properties: {
         service: nullable('string'), entries: arrayOf({ type: 'object' }), next: nullable('string'),
+        facets: { type: 'object', properties: { kinds: { type: 'object' }, areas: { type: 'object' } } },
+        vocabulary: { type: 'object', properties: { kinds: arrayOf(str()), areas: arrayOf({ type: 'object', properties: { id: str(), label: str() } }) } },
         latest_post: nullable('object'), posts: arrayOf({ type: 'object' }), sites: arrayOf({ type: 'object' }),
     } }), ...errors([400, 429]) },
 });
@@ -135,6 +140,15 @@ route('post', '/blogs/{handle}/posts/devblog', {
     description: 'Only the owner of the site’s configured blog. At most one draft per site per week and seven-day cadence; meaningful changes only. Runs content.devblog using AI task blog.devblog.write. Never publishes. An existing weekly draft is returned unchanged.',
     requestBody: body({ type: 'object', required: ['service'], properties: { service: str({ pattern: '^[a-z][a-z0-9-]{0,63}$' }) } }),
     responses: { 201: json('The draft', { type: 'object', properties: { post: ref('Post'), created: { type: 'boolean' } } }), 409: problem, 422: problem, 503: problem, ...errors() },
+});
+
+route('get', '/changelog/devblog', {
+    operationId: 'getChangelogDevblog', summary: 'The newest devblog post of a site (or of each site)', tags: ['changelog'], security: ANONYMOUS, parameters: [
+        query('service', str({ pattern: '^[a-z][a-z0-9-]{1,39}$' }), 'That site\'s newest devblog post; without it, the newest of each site')],
+    description: 'Public and CORS *: the Rich Content §9 home card and /updates day section. A devblog post is on the official blog, tagged with the service and categorized Devblog; the hero block\'s art is hero_image_url.',
+    responses: { 200: json('{ devblog } for one service, { devblogs } for all', { type: 'object', properties: {
+        service: nullable('string'), devblog: nullable('object'), devblogs: arrayOf({ type: 'object' }),
+    } }), ...errors([400, 429]) },
 });
 route('post', '/blogs/{handle}/posts/ai-draft', {
     operationId: 'draftPostWithAi', summary: 'Have OpenVibe.AI write a draft', tags: ['posts'], security: PERSON, parameters: [HANDLE],
