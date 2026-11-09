@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Weekly devblogs use the content.devblog AI agent and blog.devblog.write task: meaningful merged changes, stored screenshots, rich blocks, and a person-only review gate. Owner requests and the opt-in scheduler share durable weekly reservations. Per-site and network indexes use the first figure and summary; the back-catalogue script defaults to a read-only dry run.
+
 - The screenshot pass, from the Blog's side (plan L9, devblog §3.3): when the patch notes are drafted, Blog reads the shots
   OpenVibe.Host captured (the newest one taken before the release and the first one taken after it, per page and viewport).
   When the two differ by more than 0.5 % of the pixels, both are attached to the draft (before, after) with the alt text and the

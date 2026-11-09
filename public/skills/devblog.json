@@ -1,0 +1,30 @@
+{
+  "skill": "actor.skill@1",
+  "slug": "blog-devblog",
+  "name": "Draft my project’s devblog",
+  "description": "Use when a site owner wants a weekly devblog from merged changes, with evidence, screenshots and human publication review.",
+  "version": "1.0.0",
+  "instructions": "Ask for the site service id and its configured blog handle. Use POST https://openvibe.blog/api/v1/blogs/{handle}/posts/devblog with {service}. The authenticated owner is the actor; never impersonate another person. Blog gathers changelog stories and stored screenshots, then runs the content.devblog workflow using the blog.devblog.write AI choices task. It returns a draft post. Show the owner its editor URL /write/posts/{id} and the run provenance. Never publish, approve, schedule, buy artwork, or change a saved model choice. A 409 means a weekly reservation, cadence limit or pending attempt; show that result rather than circumventing it. A failed run is not a draft. The same action serves every configured site, including the network’s own sites.",
+  "resources": [
+    {
+      "path": "input.json",
+      "media_type": "application/json",
+      "text": "{\"type\":\"object\",\"required\":[\"handle\",\"service\"],\"properties\":{\"handle\":{\"type\":\"string\",\"title\":\"Blog handle\"},\"service\":{\"type\":\"string\",\"title\":\"Site service id\"}}}"
+    }
+  ],
+  "requires": {
+    "kinds": [
+      "post"
+    ],
+    "hosts": [
+      "openvibe.blog",
+      "ai.openvibe.services"
+    ]
+  },
+  "runs": "prompt",
+  "license": "AGPL-3.0-only",
+  "integrity": {
+    "alg": "sha256",
+    "hash": "8cf9086570242b1a577fceea14553f74d767683d8d1f82be544fca22fb94594d"
+  }
+}
