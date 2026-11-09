@@ -9,6 +9,8 @@
  */
 const ssr = require('openvibe-publishing/ssr');
 const { figureHtml } = require('openvibe-publishing/media');
+const blockRender = require('./blocks');
+const { asset } = require('./layout');
 const kit = require('openvibe-shared/kit');
 const ovServe = require('openvibe-shared/serve');
 
@@ -75,12 +77,20 @@ function sectionsOf(bodyHtml) {
 }
 /** The contents list: a fold under the title on phones, a rail beside the text on wide screens (CSS picks one). */
 function contentsHtml(sections) {
-    const list = h`<ol>${sections.map((x) => h`<li><a href="#${x.id}">${x.text}</a></li>`)}</ol>`;
+    const list = h`<ol>${sections.map((x) => h`<li><a href="#${x.id}">${x.text || x.name}</a></li>`)}</ol>`;
     return String(h`<nav class="toc-rail" aria-labelledby="toc-rail-h"><h2 id="toc-rail-h">On this page</h2>${list}</nav>`);
 }
 function contentsFold(sections) {
-    const list = h`<ol>${sections.map((x) => h`<li><a href="#${x.id}">${x.text}</a></li>`)}</ol>`;
+    const list = h`<ol>${sections.map((x) => h`<li><a href="#${x.id}">${x.text || x.name}</a></li>`)}</ol>`;
     return String(h`<details class="toc-fold"><summary>On this page <span>${sections.length} sections</span></summary>${list}</details>`);
+}
+/**
+ * The sections as chips: on a phone there is no room for a rail, so the reader gets the sections as
+ * a row of links they can tap and jump by. On a computer the rail beside the text does the same job.
+ */
+function contentsChips(sections) {
+    const chips = sections.map((x) => h`<a class="toc-chip" href="#${x.id}">${x.text || x.name}</a>`);
+    return String(h`<nav class="toc-chips" aria-label="Sections of this post">${chips}</nav>`);
 }
 /** The series: one line under the title; the previous and next parts, and the parts around this one, after the text. */
 function seriesLine(series) {
@@ -101,20 +111,8 @@ const time = (v) => raw(ssr.timeTag(v == null ? null : new Date(v).toISOString()
  * Inline attachments that the body does not place follow the text; covers and galleries are
  * rendered by the caller. A referenced id that is not attached renders an explicit notice.
  */
-function renderBody(content, attachments, { urlFor, rel }) {
-    const byId = new Map(attachments.map((a) => [a.mediaId, a]));
-    const used = new Set();
-    const parts = String(content || '').split(new RegExp(MEDIA_LINE.source, 'm'));
-    let out = '';
-    parts.forEach((part, i) => {
-        if (i % 2 === 0) { out += renderMarkdownWithDetails(part, { rel }); return; }
-        const att = byId.get(part);
-        if (att) { used.add(att.id); out += figureHtml(att, { urlFor }); } else {
-            out += `<figure class="ov-media ov-media-broken" data-media-id="${esc(part)}" data-state="not_attached"><div class="ov-media-missing" role="img" aria-label="Media not attached">This media is not attached to the post.</div></figure>`;
-        }
-    });
-    for (const a of attachments) if (a.role === 'inline' && !used.has(a.id)) out += figureHtml(a, { urlFor });
-    return out;
+function renderBody(content, attachments, options = {}) {
+    return blockRender.renderBody(content, attachments, options);
 }
 
 function postListItem(item) {
@@ -192,32 +190,60 @@ ${m.replies && m.replies.length ? h`<ol class="replies">${m.replies.map(one)}</o
 ${list}${more}${form}</section>`);
 }
 
+/** The sections of a body: the blocks that carry an id first, then the Markdown headings that are sections too. */
+function mergeSections(blockSections, markdownSections) {
+    const seen = new Set();
+    const out = [];
+    for (const x of [...(blockSections || []), ...(markdownSections || [])]) {
+        if (!x || !x.id || seen.has(x.id)) continue;
+        seen.add(x.id);
+        out.push(x);
+    }
+    return out;
+}
+
 /** One post. */
 function postPage(o) {
     const { blog, blogUrl, post, rev, author, tags, categories, series, attachments, citations, disclosure, decisionNote, comments, canEdit, urlFor, shareUrl } = o;
     const rel = blog.kind === 'official' ? 'noopener' : 'nofollow ugc noopener';
     const cover = attachments.filter((a) => a.role === 'cover');
     const gallery = attachments.filter((a) => a.role === 'gallery');
-    const shareImage = cover.length && cover[0].mediaId ? urlFor(cover[0].mediaId) : null;
+    const rendered = renderBody(rev.content, attachments, { ...(o.bodyOptions || { urlFor, rel }), separateHero: true });
+    const heroArt = rendered.hero && rendered.hero.attrs && typeof rendered.hero.attrs.art === 'string' ? rendered.hero.attrs.art : null;
+    const shareImage = heroArt ? urlFor(heroArt) : (cover.length && cover[0].mediaId ? urlFor(cover[0].mediaId) : null);
     const share = shareUrl ? h`<p class="post-share">${raw(kit.share({ title: rev.fields.title, url: shareUrl, text: rev.fields.summary || '', image: shareImage || null, kind: 'post', id: post.id }))}</p>` : '';
     const badge = { members: 'Members only', private: 'Private', unlisted: 'Unlisted' }[post.visibility];
     const updated = rev.number > 1 && post.first_published_at && Date.parse(rev.createdAt) > post.first_published_at + 60000;
-    const body = sectionsOf(renderBody(rev.content, attachments, { urlFor, rel }));
+    // The contents: the sections of the body. A block's section keeps its own id and heading; a Markdown
+    // heading gets one, as it always did. The ids on the Markdown headings are added to the rendered
+    // HTML, so a link into a section lands on it.
+    const marked = sectionsOf(rendered.html);
+    const body = { html: marked.html, sections: mergeSections(rendered.sections, marked.sections) };
     const toc = body.sections.length >= 3 ? body.sections : null;
     const minutes = readMinutes(rev.content);
-    return String(h`${raw(ssr.breadcrumbsHtml(o.breadcrumbs))}
+    const teaser = rev.fields.summary || '';
+    // The hero is the page's banner: its "# Name" is the h1, its prose is the teaser, and the author's
+    // summary only shows when the hero has no prose of its own.
+    const heroHtml = rendered.heroHtml || null;
+    const heroTitle = rendered.heroHeading || null;
+    return String(h`<link rel="stylesheet" href="${asset('css/blocks.css')}">
+${raw(ssr.breadcrumbsHtml(o.breadcrumbs))}
 <div class="post-wrap${toc ? ' has-toc' : ''}">
 ${raw(toc ? contentsHtml(toc) : '')}
+${raw(toc ? contentsChips(toc) : '')}
 <div class="post-main">
 <article class="post" data-post-id="${post.id}" data-revision="${rev.number}">
-<header>
-<h1>${rev.fields.title}</h1>
-<p class="byline">${author ? h`By <a href="${author.url}" rel="author">${author.name}</a> · ` : ''}${post.published_at ? h`${time(post.first_published_at || post.published_at)} · ` : ''}${updated ? h`updated ${time(Date.parse(rev.createdAt))} · ` : ''}<span class="read-time" title="At ${WORDS_PER_MINUTE} words a minute: a guide, not a promise">≈ ${minutes} min read</span>${badge ? h` <span class="badge">${badge}</span>` : ''}${post.state !== 'published' ? h` <span class="badge">${post.state}</span>` : ''}</p>
+<header class="post-header">
+${raw(heroHtml || '')}
+${heroHtml && heroTitle ? '' : h`<h1 class="post-title">${rev.fields.title}</h1>`}
+${teaser && !(heroHtml && rendered.heroProse) ? h`<p class="post-teaser">${teaser}</p>` : ''}
+<p class="byline">${author ? h`By <a href="${author.url}" rel="author">${author.name}</a> · ` : ''}${post.published_at ? h`<time datetime="${dateLabel(post.first_published_at || post.published_at)}">${time(post.first_published_at || post.published_at)}</time> · ` : ''}${updated ? h`updated ${time(Date.parse(rev.createdAt))} · ` : ''}<span class="read-time" title="At ${WORDS_PER_MINUTE} words a minute: a guide, not a promise">≈ ${minutes} min read</span>${badge ? h` <span class="badge">${badge}</span>` : ''}${post.state !== 'published' ? h` <span class="badge">${post.state}</span>` : ''}</p>
+${categories.length || tags.length ? h`<p class="chips">${categories.map((c) => h`<a class="chip chip-cat" href="${c.url}">${c.name}</a>`)}${tags.map((t) => h`<a class="chip chip-tag" href="${t.url}" rel="tag">#${t.name}</a>`)}</p>` : ''}
 ${series ? raw(seriesLine(series)) : ''}
 ${share ? raw(String(share)) : ''}
 ${disclosure ? h`<p class="disclosure" role="note"><strong>${disclosure.short}.</strong> ${disclosure.long}</p>` : ''}
 ${raw(toc ? contentsFold(toc) : '')}
-${raw(cover.map((a) => figureHtml(a, { urlFor })).join(''))}
+${raw(heroHtml ? '' : (heroArt ? `<figure class="post-hero-art" data-media-id="${esc(heroArt)}"><img src="${esc(urlFor(heroArt))}" alt="" loading="eager" decoding="async"></figure>` : cover.map((a) => figureHtml(a, { urlFor })).join('')))}
 </header>
 <div class="post-body">${raw(body.html)}</div>
 ${raw(gallery.length ? `<div class="gallery">${gallery.map((a) => figureHtml(a, { urlFor })).join('')}</div>` : '')}

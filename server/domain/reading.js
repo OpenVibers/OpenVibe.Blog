@@ -7,6 +7,7 @@
  */
 const seo = require('openvibe-publishing/seo');
 const ssr = require('openvibe-publishing/ssr');
+const blocks = require('openvibe-publishing/blocks');
 const reviewKind = require('./review-kind');
 const { renderBody } = require('../render/pages');
 
@@ -56,12 +57,17 @@ function createReading({ store, blogs, posts: postsApi, publication, people, med
             if (!rev) return null;
             const blog = blogById.get(post.blog_id);
             const person = who.get(post.author_subject);
-            const { tags } = await termsView(post, blog, { networkTags: !perBlogLinks });
+            const { tags, categories } = await termsView(post, blog, { networkTags: !perBlogLinks });
+            // The hero art of a devblog is its card in a list: the block names a Media id, and the card
+            // shows the picture when Media can deliver it.
+            const hero = (blocks.parse(rev.content).children || []).find((c) => c.type === 'hero');
+            const artId = hero && hero.attrs && typeof hero.attrs.art === 'string' ? hero.attrs.art : null;
             return {
                 post, rev, blog,
                 url: publication.postPath(blog, post),
                 author: person ? { name: person.name, url: urls.author(person, blog) } : null,
-                tags,
+                tags, categories,
+                art: artId && media ? { mediaId: artId, url: media.urlFor(artId) } : null,
                 badge: { members: 'Members only', private: 'Private' }[post.visibility] || null,
             };
         }));
@@ -90,7 +96,7 @@ function createReading({ store, blogs, posts: postsApi, publication, people, med
                 url: publication.postUrl(blog, post),
                 title: rev.fields.title,
                 summary: rev.fields.summary || ssr.markdownToText(rev.content, 300),
-                contentHtml: fullContent ? renderBody(rev.content, atts, { urlFor: media.urlFor, rel }) : null,
+                contentHtml: fullContent ? renderBody(rev.content, atts, { urlFor: media.urlFor, rel }).html : null,
                 published: post.first_published_at,
                 updated: rev.createdAt,
                 decision,
@@ -141,9 +147,10 @@ function createReading({ store, blogs, posts: postsApi, publication, people, med
     }
 
     /** BlogPosting JSON-LD from real fields only (missing → omitted). */
-    function postJsonLd({ blog, post, rev, person, tags, citations, attachments }) {
+    function postJsonLd({ blog, post, rev, person, tags, citations, attachments, sections = [], heroArt = null }) {
         const url = publication.postUrl(blog, post);
         const cover = attachments.find((a) => a.role === 'cover' && !a.broken);
+        const art = heroArt || (cover ? cover.mediaId : null);
         return seo.structuredData.article({
             type: 'BlogPosting',
             headline: rev.fields.title,
@@ -153,11 +160,12 @@ function createReading({ store, blogs, posts: postsApi, publication, people, med
             dateModified: post.published_revision ? rev.createdAt : null,
             authors: person && person.known ? [{ name: person.name, url: publication.abs(urls.author(person, blog)) }] : [],
             publisher: blog.kind === 'official' ? { name: 'OpenVibe', url: 'https://openvibe.network' } : null,
-            image: cover ? media.urlFor(cover.mediaId) : null,
+            image: art ? media.urlFor(art) : null,
             keywords: tags.map((t) => t.name),
             inLanguage: blog.language,
             citations: citations.filter((c) => c.url).map((c) => ({ url: c.url, title: c.title })),
             wordCount: ssr.wordCount(ssr.markdownToText(rev.content)),
+            hasPart: sections.map((s) => ({ name: s.name || s.text || s.id, url: `${publication.postUrl(blog, post)}#${s.id}` })),
         });
     }
 

@@ -42,6 +42,8 @@ const base = {
     assert.ok(html.includes('<div class="post-wrap has-toc">'), 'three sections: a contents list');
     assert.ok(html.includes('<nav class="toc-rail" aria-labelledby="toc-rail-h">') && html.includes('<details class="toc-fold">'), 'the rail for wide screens, the fold for phones');
     assert.ok(/<a href="#three-x">Three &lt;x&gt;<\/a>|<a href="#three">Three<\/a>/.test(html), `section text is escaped in the list: ${(html.match(/toc-fold[\s\S]*?<\/details>/) || [''])[0].slice(0, 400)}`);
+    assert.ok(html.includes('<nav class="toc-chips"') && /<a class="toc-chip" href="#three-x">Three &lt;x&gt;<\/a>/.test(html), 'the phone chips are real links, not escaped markup');
+    assert.ok(!html.includes('&lt;a class="toc-chip"'), 'no escaped chip markup');
     assert.ok(html.includes('≈ 3 min read'));
     assert.ok(html.includes('Part 36 of 118 in the series <a href="/@openvibe/series/patch-notes">Patch notes</a>'), 'the series is one line, not 50 links');
     assert.ok(html.includes('<a rel="prev" href="/p35"><small>Previous</small><span>Part 35 &lt;b&gt;</span></a>') && html.includes('<a rel="next" href="/p37">'));

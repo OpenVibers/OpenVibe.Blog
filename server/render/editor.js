@@ -7,6 +7,7 @@
 const ssr = require('openvibe-publishing/ssr');
 const { time } = require('./pages');
 const kit = require('openvibe-shared/kit');
+const { asset } = require('./layout');
 
 const { html: h, raw } = ssr;
 
@@ -64,13 +65,24 @@ function aiDraftForm({ blog, csrf }) {
 function postForm({ blog, post, head, terms, series, csrf, message, action }) {
     const f = head ? head.fields : {};
     const vis = post ? post.visibility : 'public';
-    return String(h`${flash(message)}
+    return String(h`<link rel="stylesheet" href="${asset('css/blocks.css')}">
+${flash(message)}
 <form method="post" action="${action}" class="post-form">${csrfField(csrf)}
 ${head ? h`<input type="hidden" name="expectedRevision" value="${head.number}">` : ''}
 <label for="title">Title</label><input id="title" name="title" maxlength="200" required value="${f.title || ''}">
 <label for="summary">Summary <span class="meta">(optional, shown in lists and feeds)</span></label><input id="summary" name="summary" maxlength="500" value="${f.summary || ''}">
-<label for="body">Text <span class="meta">(Markdown; a line <code>[[media:med_…]]</code> places an attached Media object)</span></label>
+<label for="body">Text <span class="meta">(Markdown and blocks; a line <code>[[media:med_…]]</code> places an attached Media object)</span></label>
+<div class="ov-editor" data-ov-editor data-post="${post ? post.id : ''}" data-csrf="${csrf}" data-preview="/write/preview" data-image="/write/make-image">
+<div class="ov-editor-bar">
+<button type="button" class="ov-editor-btn" data-ov-insert aria-expanded="false">Insert a block <kbd>/</kbd></button>
+<button type="button" class="ov-editor-btn" data-ov-outline aria-pressed="false">Outline</button>
+<span class="ov-editor-hint">Type “/” at the start of a line for the block menu; drag the outline to reorder.</span>
+</div>
+<div class="ov-editor-panel" data-ov-panel hidden></div>
+<div class="ov-editor-outline" data-ov-outline-panel hidden></div>
 <textarea id="body" name="body" rows="22">${head ? head.content : ''}</textarea>
+</div>
+<script src="/js/blog-editor.js" defer></script>
 ${post ? h`<label for="slug">URL slug</label><input id="slug" name="slug" value="${post.slug}" pattern="[a-z0-9][a-z0-9-]{0,79}"><p class="meta">Changing it keeps the old address working (301).</p>` : ''}
 <label for="tags">Tags <span class="meta">(comma-separated)</span></label><input id="tags" name="tags" value="${(terms.tags || []).join(', ')}">
 <label for="categories">Categories <span class="meta">(comma-separated; "Parent > Child" nests)</span></label><input id="categories" name="categories" value="${(terms.categories || []).join(', ')}">

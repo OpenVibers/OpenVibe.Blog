@@ -51,6 +51,12 @@ const WORKFLOW = { id: 'blog.draft_post', version: 1, runId: 'run_01J8Z3K4M5N6P7
         const created = (await t.events('blog.post.created'))[0];
         assert.deepStrictEqual(created.actor, { type: 'service', id: 'ai' });
         assert.strictEqual(created.payload.authorship, 'ai');
+        // The Dock's row names its subject and the run that wrote it.
+        assert.strictEqual(created.payload.skill, 'blog.draft_post');
+        assert.strictEqual(created.payload.run_id, WORKFLOW.runId);
+        assert.strictEqual(created.payload.blog.handle, 'fay');
+        assert.strictEqual(created.payload.post.title, 'An AI draft');
+        assert.strictEqual(created.payload.post.url, '/@fay/an-ai-draft');
         const noWorkflow = await t.get('/api/v1/blogs/fay/posts', { as: ai, headers: { 'X-OV-Origin': 'ai', 'X-OV-Subject': fay.subject }, json: { title: 'No run', body: LONG } });
         assert.strictEqual(noWorkflow.status, 400);
         assert.strictEqual(noWorkflow.json().code, 'authorship.workflow_required');

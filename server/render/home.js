@@ -42,6 +42,71 @@ function statsPanel(stats) {
     return String(h`<div class="bh-panel"><h2 class="bh-panel-h">On the blog</h2><dl class="bh-stats">${tiles.map(([k, v]) => h`<div><dt>${k}</dt><dd>${num(v)}</dd></div>`)}</dl></div>`);
 }
 
+// The index (the official blog's home and /devblog, plan §4): the newest post as a featured hero, the
+// tabs as server-rendered links, a filter by name, and the archive as art cards with real page links.
+const INDEX_TABS = [
+    { id: 'latest', label: 'Latest', slug: null },
+    { id: 'devblog', label: 'Devblog', slug: 'devblog' },
+    { id: 'daily', label: 'Daily', slug: 'daily' },
+    { id: 'community', label: 'Community', slug: 'community' },
+    { id: 'guides', label: 'Guides', slug: 'guides' },
+];
+const indexHref = (base, tab, q) => {
+    const p = new URLSearchParams();
+    if (tab && tab !== 'latest') p.set('tab', tab);
+    if (q) p.set('q', q);
+    const s = p.toString();
+    return s ? `${base}?${s}` : base;
+};
+function indexTabs({ base, tab = 'latest', q = '' }) {
+    return h`<nav class="bh-tabs" aria-label="What to read">${INDEX_TABS.map((t) => h`<a href="${indexHref(base, t.id, q)}"${t.id === tab ? raw(' aria-current="page"') : ''}>${t.label}</a>`)}</nav>`;
+}
+function nameFilter({ base, tab = 'latest', q = '' }) {
+    return h`<form class="bh-filter" method="get" action="${base}" role="search">
+${tab !== 'latest' ? h`<input type="hidden" name="tab" value="${tab}">` : ''}
+<label class="skip" for="bh-q">Filter posts by name</label>
+<input id="bh-q" name="q" type="search" value="${q}" placeholder="Filter posts by name" maxlength="80">
+<button type="submit">Filter</button>${q ? h`<a class="bh-clear" href="${indexHref(base, tab, '')}">Clear</a>` : ''}</form>`;
+}
+const categoryOf = (item) => (item.categories && item.categories[0]) || null;
+function featureCard(item) {
+    const { post, rev, url, author, art } = item;
+    const cat = categoryOf(item);
+    const summary = rev.fields.summary || ssr.markdownToText(rev.content, 240);
+    return h`<article class="bh-feature">
+${art ? h`<a class="bh-feature-art" href="${url}" tabindex="-1" aria-hidden="true"><img src="${art.url}" alt="" loading="eager" decoding="async"></a>` : ''}
+<div class="bh-feature-body">
+<p class="bh-kicker">${cat ? h`<a class="chip chip-cat" href="${cat.url}">${cat.name}</a>` : h`<span class="badge">Newest</span>`} ${time(post.published_at)}${author ? h` · ${author.name}` : ''}</p>
+<h2 class="bh-feature-title"><a href="${url}">${rev.fields.title}</a></h2>
+${summary ? h`<p class="bh-feature-sum">${summary}</p>` : ''}
+<p class="bh-feature-go"><a class="sc-btn sc-primary" href="${url}">Read more<span aria-hidden="true"> →</span></a></p>
+</div></article>`;
+}
+function artCard(item) {
+    const { post, rev, url, author, art } = item;
+    const cat = categoryOf(item);
+    const summary = rev.fields.summary || ssr.markdownToText(rev.content, 160);
+    return h`<li class="bh-card bh-artcard">
+${art ? h`<a class="bh-card-art" href="${url}" tabindex="-1" aria-hidden="true"><img src="${art.url}" alt="" loading="lazy" decoding="async"></a>` : ''}
+<p class="bh-kicker">${cat ? h`<a class="chip chip-cat" href="${cat.url}">${cat.name}</a>` : ''}${time(post.published_at)}${author ? h` · ${author.name}` : ''}</p>
+<h3><a href="${url}">${rev.fields.title}</a></h3>
+${summary ? h`<p class="bh-sum">${summary}</p>` : ''}
+</li>`;
+}
+/** The index's newest post, tabs, filter and cards. The pager keeps real page links; a script adds the next page. */
+function indexList({ base = '/', tab = 'latest', q = '', items, pager, empty = 'Nothing published here yet.' }) {
+    // The first page's newest post is the featured banner; every other page is cards alone, so a
+    // reader who loads the next page in place never misses that page's first post.
+    const first = !pager || pager.page === 1;
+    const feature = first ? items[0] : null;
+    const rest = first ? items.slice(1) : items;
+    return String(h`${indexTabs({ base, tab, q })}${nameFilter({ base, tab, q })}
+${feature ? featureCard(feature) : (first ? h`<p class="empty">${q ? `No post matches “${q}”.` : empty}</p>` : '')}
+${rest.length ? h`<ol class="bh-cards bh-artcards">${rest.map(artCard)}</ol>` : ''}
+${raw(ssr.paginationHtml(pager))}
+${pager && pager.next ? h`<p class="bh-more"><a class="bh-next" href="${pager.next.href}">Next page</a></p><script src="/js/blog-index.js" defer></script>` : ''}`);
+}
+
 function postCard(item) {
     const { post, rev, url, author, tags, badge } = item;
     const summary = rev.fields.summary || ssr.markdownToText(rev.content, 220);
@@ -55,7 +120,7 @@ ${tags && tags.length ? h`<p class="tags">${tags.slice(0, 4).map((t) => h`<a hre
  * (Map desk → post), tags ([{ slug, name, posts }]), series ([{ title, url, posts }]), memberItems, signedIn
  */
 function homeBody(o) {
-    const { blog, items, pager, feeds, stats, week = [], latestDesks = new Map(), tags = [], series = [], memberItems = [], signedIn = false } = o;
+    const { blog, items, pager, feeds, stats, week = [], latestDesks = new Map(), tags = [], series = [], memberItems = [], signedIn = false, index = {} } = o;
     const start = { label: signedIn ? 'Start writing' : 'Sign in and start writing', href: '/write', primary: true };
     const top = week.length ? week[0].changes : 0;
     const desks = catalog.ALL.map((d) => ({ desk: d, post: latestDesks.get(d.key) })).filter((x) => x.post);
@@ -70,7 +135,8 @@ function homeBody(o) {
 <section class="sc-sec bh-sec" id="posts" aria-labelledby="bh-posts-h"><h2 id="bh-posts-h">Latest from ${blog.title.replace(/^The /, 'the ')}</h2>
 ${blog.description ? h`<p class="sc-lede">${blog.description}</p>` : ''}
 ${feeds.length ? h`<p class="feeds">Follow: ${feeds.map((f) => h`<a href="${f.href}" type="${f.mime}">${f.label}</a> `)}</p>` : ''}
-${items.length ? h`<ol class="bh-cards">${items.map(postCard)}</ol>${raw(ssr.paginationHtml(pager))}<p class="bh-more bh-all"><a href="/@${blog.handle}">Every post, newest first</a></p>` : h`<p class="empty">Nothing published here yet.</p>`}</section>
+${raw(indexList({ base: index.base || '/', tab: index.tab || 'latest', q: index.q || '', items, pager }))}
+<p class="bh-more bh-all"><a href="/@${blog.handle}">Every post, newest first</a></p></section>
 ${week.length ? raw(foldBlock({
     id: 'week',
     head: '<h2 id="bh-week-h">This week across OpenVibe</h2>',
@@ -132,4 +198,4 @@ function homeJsonLd({ base, items }) {
     return out;
 }
 
-module.exports = { homeBody, homeJsonLd, siteName, FAQ };
+module.exports = { homeBody, homeJsonLd, indexList, indexTabs, nameFilter, INDEX_TABS, siteName, FAQ };

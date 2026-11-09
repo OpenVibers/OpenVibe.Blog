@@ -21,6 +21,7 @@ const { slugify } = require('openvibe-publishing/taxonomy');
 const seo = require('openvibe-publishing/seo');
 const authorship = require('openvibe-publishing/authorship');
 const { isMediaId } = require('openvibe-publishing/media');
+const blocks = require('openvibe-publishing/blocks');
 const { ApiError } = require('../http/errors');
 const { actorRef, canPublish } = require('./publication');
 const reviewKind = require('./review-kind');
@@ -84,6 +85,23 @@ function createPosts({ store, blogs, publication, access, outbox, log = console,
         const b = String(v == null ? '' : v).replace(/\r\n/g, '\n');
         if (b.length > MAX_BODY) throw new ApiError(413, 'post.too_long', `A post is at most ${MAX_BODY} characters`);
         return b;
+    }
+    /**
+     * The body of a post: Markdown, or the blocks of a body. A caller may send either (SDK:
+     * posts.create({ markdown | blocks })); the Markdown is what the post keeps, so blocks are
+     * written back as the Markdown they parse from. The Markdown stays the source of truth.
+     */
+    function bodyOf(input) {
+        if (input.blocks !== undefined && input.blocks !== null) {
+            // A malformed tree is refused here, not stored as a body its own renderer cannot read.
+            const tree = Array.isArray(input.blocks) ? { type: 'root', children: input.blocks } : input.blocks;
+            const check = blocks.validate(tree);
+            if (!check.ok) throw new ApiError(422, 'post.blocks_invalid', `The blocks are not valid: ${check.errors.slice(0, 5).map((e) => e.message).join('; ')}`);
+            const md = blocks.serialize(tree);
+            if (md.length > MAX_BODY) throw new ApiError(413, 'post.too_long', `A post is at most ${MAX_BODY} characters`);
+            return md;
+        }
+        return body(input.body !== undefined ? input.body : input.markdown);
     }
     function summary(v) {
         if (v == null) return null;
@@ -261,7 +279,7 @@ function createPosts({ store, blogs, publication, access, outbox, log = console,
             const subject = actingSubject(viewer);
             if (!await access.canWrite(store, viewer, blog, 'create')) throw new ApiError(403, 'blog.forbidden', 'You cannot write on this blog');
             const t = title(input.title);
-            const content = body(input.body);
+            const content = bodyOf(input);
             const vis = visibilityOf(blog, input.visibility, input.entitlementKey ?? input.entitlement_key);
             const rec = authorshipFor(viewer, input, null);
             return await store.tx(async () => {
@@ -284,10 +302,19 @@ function createPosts({ store, blogs, publication, access, outbox, log = console,
                 if (sharing) await sharing.register(viewer, id, 'private');
                 const post = await q.byId.get(id);
                 await setTerms(blog, post, input);
+                // The draft names its subject for the Dock: the blog and the post's own title, the run
+                // that wrote it (when an agent did) and the skill it ran. A person's draft carries no run.
                 await outbox.emit({
                     event_type: 'blog.post.created', actor: actorRef(viewer), visibility: 'internal', priority: 'low',
                     subject: { type: 'post', id, revision: revision.number },
-                    payload: { blog: { id: blog.id, handle: blog.handle }, state: 'draft', visibility: post.visibility, authorship: rec.mode, ...(rec.workflow ? { workflow: rec.workflow } : {}) },
+                    payload: {
+                        blog: { id: blog.id, handle: blog.handle, title: blog.title, url: publication.blogPath(blog) },
+                        post: { id, title: t, url: publication.postPath(blog, post) },
+                        state: 'draft', visibility: post.visibility, authorship: rec.mode,
+                        skill: (rec.workflow && rec.workflow.id) || 'blog.post.create',
+                        run_id: (rec.workflow && rec.workflow.runId) || null,
+                        ...(rec.workflow ? { workflow: rec.workflow } : {}),
+                    },
                 }, { traceparent });
                 return { post: await q.byId.get(id), revision };
             });
@@ -308,7 +335,7 @@ function createPosts({ store, blogs, publication, access, outbox, log = console,
                 const head = await store.revisions.head(post.id);
                 let revision = head;
                 let created = false;
-                const contentChange = input.title !== undefined || input.body !== undefined || input.summary !== undefined;
+                const contentChange = input.title !== undefined || input.body !== undefined || input.markdown !== undefined || input.blocks !== undefined || input.summary !== undefined;
                 if (contentChange) {
                     const expected = input.expectedRevision ?? input.expected_revision;
                     if (expected == null || expected === '') throw new ApiError(428, 'revision.expected_required', 'Send expectedRevision (the revision you edited) so concurrent edits are not lost');
@@ -318,7 +345,7 @@ function createPosts({ store, blogs, publication, access, outbox, log = console,
                     };
                     const rec = authorshipFor(viewer, input, publication.authorshipOf(head));
                     const out = await store.revisions.create({
-                        entityId: post.id, expectedRevision: parseInt(expected, 10), content: input.body !== undefined ? body(input.body) : head.content,
+                        entityId: post.id, expectedRevision: parseInt(expected, 10), content: (input.body !== undefined || input.markdown !== undefined || input.blocks !== undefined) ? bodyOf(input) : head.content,
                         fields, meta: { authorship: rec }, author: authorLabel(viewer), message: input.message || null,
                     });
                     revision = out.revision;

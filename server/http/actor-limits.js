@@ -78,6 +78,8 @@ const BUDGETS = {
     'blog.post.media': { minute: 20, hour: 200 },
     // A word diff of two long revisions costs CPU: a writer's pace, not a crawler's.
     'blog.post.diff': { minute: 30, hour: 600 },
+    // The editor's live preview: the same renderer the page uses, once per pause in the typing.
+    'blog.post.preview': { minute: 120, hour: 1200 },
     // A comment goes to OpenVibe.Community in the person's name (Community allows 20 a minute).
     'blog.comment.create': { minute: 20, hour: 300 },
 };

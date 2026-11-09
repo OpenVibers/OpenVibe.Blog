@@ -97,7 +97,31 @@ function createAiDrafts({ config, store, posts, access, fetchImpl = globalThis.f
         }, { traceparent });
     }
 
-    return { enabled: ai.enabled, draft, rawDraft };
+    /**
+     * "Make an image" in the editor: the image task (`image.generate`) through OpenVibe.AI, with the same
+     * target and on-behalf-of a draft uses. The answer's Media id is what a figure block names; a plain
+     * URL is returned as well so the editor can show what was made. Nothing is stored here.
+     */
+    async function image(viewer, blog, input = {}, { traceparent } = {}) {
+        if (!viewer || !viewer.subject) throw new ApiError(401, 'subject.required', 'Sign in to make an image');
+        const prompt = clean(input.prompt, 1000);
+        if (!prompt) throw new ApiError(422, 'ai_image.prompt_required', 'Say what the image should show');
+        try {
+            const r = await ai.run('image.generate', { prompt, ...(input.alt ? { alt: clean(input.alt, 300) } : {}) }, {
+                onBehalfOf: { type: 'user', id: viewer.subject }, target: { service: 'blog', type: 'blog', id: String(blog.id) }, traceparent,
+            });
+            const out = r.output || {};
+            return {
+                runId: r.runId, mediaId: out.media_id || out.mediaId || null, url: out.url || null,
+                alt: out.alt || clean(input.alt, 300) || null, model: (r.workflow && r.workflow.model) || null, synthetic: Boolean(r.synthetic),
+            };
+        } catch (err) {
+            if (err instanceof AiRunError) throw new ApiError(err.status || 502, err.code, err.message);
+            throw err;
+        }
+    }
+
+    return { enabled: ai.enabled, imageEnabled: ai.enabled, draft, rawDraft, image };
 }
 
 module.exports = { createAiDrafts };
