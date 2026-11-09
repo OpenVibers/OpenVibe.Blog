@@ -201,6 +201,15 @@ function createApi(ctx) {
         return { total, posts: await Promise.all(rows.map(async (p) => await postDto(p))) };
     }));
 
+    router.get('/devblogs', run(async (req, res) => {
+        const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 20, 1), 100);
+        const offset = Math.min(Math.max(parseInt(req.query.offset, 10) || 0, 0), 100000);
+        const result = await posts.listPublished({ categorySlug: 'devblog', service: req.query.service ? String(req.query.service) : null, limit, offset });
+        const items = await reading.listItems(result.posts);
+        res.set('Access-Control-Allow-Origin', '*');
+        return { total: result.total, posts: items.map(i => ({ id: i.post.id, title: i.rev.fields.title, summary: i.rev.fields.summary, figure: i.art, url: publication.abs(i.url), blog: i.blog.handle })), next: offset + limit < result.total ? offset + limit : null };
+    }));
+
     // The network changelog (server/changelog.js): what shipped on every OpenVibe site, newest first, and
     // the latest patch notes post. Public: every site's "recently shipped" reads it. Filters: kind, area
     // (from the fixed vocabulary) and q (plain words or subject). /changelog/devblog answers the site's
@@ -228,6 +237,13 @@ function createApi(ctx) {
             ...(service ? {} : { sites: await ctx.changelog.sites() }),
         };
     }));
+
+    router.post('/blogs/:handle/posts/devblog', guard('blog.post.create'), B('blog.post.ai_draft'), jsonBody, run(async (req) => {
+        const blog = await mustBlog(req);
+        const result = await ctx.devblog.draft(req.viewer, blog, { service: String(req.body.service || ''), retry: true }, tp(req));
+        await after(null, result.post.id, req);
+        return { post: await postDto(result.post, { full: true }), created: result.created };
+    }, 201));
 
     // The site's newest devblog post (Rich Content §9): title, teaser, date, hero image and URL.
     // With service it is that site's card; without one it lists the newest devblog of each site with

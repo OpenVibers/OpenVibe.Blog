@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Weekly devblogs use the content.devblog AI agent and blog.devblog.write task: meaningful merged changes, stored screenshots, rich blocks, and a person-only review gate. Owner requests and the opt-in scheduler share durable weekly reservations. Per-site and network indexes use the first figure and summary; the back-catalogue script defaults to a read-only dry run.
 - The network changelog's entries carry `kind` (new, better, fixed or internal), one to three fixed `areas` and the
   subject in `plain` words. Library pins, merges and test/docs/CI-only work become internal without a model; the rest
   is tagged by OpenVibe.AI's `blog.changelog.tag` task. `GET /api/v1/changelog` filters by `kind`, `area` and `q` and
