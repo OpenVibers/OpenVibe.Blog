@@ -58,6 +58,7 @@ function createEditorRoutes(ctx) {
     // form shares its budget with the API route that does the same thing.
     const B = (name) => limits.budget(name);
     router.post('/start', B('blog.blog.create'));
+    router.post('/@:handle/devblog', B('blog.post.ai_draft'));
     router.post('/@:handle/ai-draft', B('blog.post.ai_draft'));
     router.post('/@:handle/new', B('blog.post.create'));
     router.post('/@:handle/settings', B('blog.blog.configure'));
@@ -146,6 +147,13 @@ function createEditorRoutes(ctx) {
     }));
 
     // Draft with AI: the draft is AI-authored and stays a noindex draft until someone reviews it.
+    router.post('/@:handle/devblog', wrap(async (req, res) => {
+        const blog = await blogFor(req); if (!blog) return notFound(req, res);
+        const { post } = await ctx.devblog.draft(req.viewer, blog, { service: String(req.body.service || ''), retry: true }, { traceparent: req.ov && req.ov.traceparent });
+        await effects.after(null, post, req.ov);
+        res.redirect(303, `/write/posts/${post.id}?saved=Devblog%20draft%20ready%20for%20review`);
+    }));
+
     router.post('/@:handle/ai-draft', wrap(async (req, res) => {
         const blog = await blogFor(req);
         if (!blog || !ctx.aiDrafts || !ctx.aiDrafts.enabled) return notFound(req, res);
