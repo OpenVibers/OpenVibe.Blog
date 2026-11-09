@@ -27,7 +27,6 @@ const { renderPage, SITE_SUMMARY } = require('../render/layout');
 const pages = require('../render/pages');
 const blockRender = require('../render/blocks');
 const homePage = require('../render/home');
-const deskCatalog = require('../desks/catalog');
 // The short home (the owner's rule, 2026-10-30): pick blocks and folds.
 const { foldBlock } = require('../render/short');
 const { createHome } = require('../domain/home');
@@ -99,8 +98,79 @@ function createPublicRoutes(ctx) {
 
     // ── Blog front pages ────────────────────────────────────
 
+    /**
+     * The index's rows: the official blog's posts as the tabs and the name filter narrow them. The tabs
+     * are categories (Devblog, Daily, Community, Guides); a tab whose category does not exist yet is
+     * empty, not hidden — every tab is a real, crawlable link.
+     */
+    async function indexData(req, blog, base) {
+        const page = pageNumber(req);
+        const scope = await access.listingScope(store, req.viewer, blog);
+        const wanted = String(req.query.tab || 'latest').toLowerCase();
+        const tab = homePage.INDEX_TABS.find((t) => t.id === wanted) || homePage.INDEX_TABS[0];
+        const q = String(req.query.q || '').replace(/\s+/g, ' ').trim().slice(0, 80);
+        const term = tab.slug ? await store.taxonomy.bySlug(blogs.categoryVocabulary(blog), tab.slug) : null;
+        let rows;
+        let total;
+        if (q) {
+            // A name filter is over the titles people see: a bounded read, filtered in place. The index is
+            // small by design (a blog's published posts), and the unfiltered listing keeps its SQL pager.
+            const all = await posts.listPublished({ blogId: blog.id, ...scope, ...(term ? { termIds: [term.id] } : {}), limit: 500 });
+            const revs = await store.revisions.getMany(all.posts.map((p) => ({ entityId: p.id, revision: p.published_revision })));
+            const needle = q.toLowerCase();
+            const matched = all.posts.filter((p, i) => revs[i] && String((revs[i].fields || {}).title || '').toLowerCase().includes(needle));
+            total = matched.length;
+            rows = matched.slice((page - 1) * PER_PAGE, page * PER_PAGE);
+        } else {
+            ({ total, posts: rows } = await posts.listPublished({ blogId: blog.id, ...scope, ...(term ? { termIds: [term.id] } : {}), limit: PER_PAGE, offset: (page - 1) * PER_PAGE }));
+        }
+        const pager = ssr.paginate({
+            page, perPage: PER_PAGE, total,
+            href: (p) => {
+                const params = new URLSearchParams();
+                if (p > 1) params.set('page', String(p));
+                if (tab.id !== 'latest') params.set('tab', tab.id);
+                if (q) params.set('q', q);
+                const s = params.toString();
+                return s ? `${base}?${s}` : base;
+            },
+        });
+        return { page, tab, q, term, items: await reading.listItems(rows), pager, feeds: await reading.feedsOf(blog), scope };
+    }
+
+    // The network's home (the official blog's first page and /devblog): the newest post as a featured
+    // hero, the tabs, the name filter and the archive as art cards, then everything else the home shows.
+    async function homeIndex(req, res, blog) {
+        const { tab, q, items, pager, feeds, scope } = await indexData(req, blog, '/');
+        if (pager.outOfRange && pager.total) return notFound(req, res);
+        const path = publication.blogPath(blog);
+        const blogLd = { '@context': 'https://schema.org', '@type': 'Blog', '@id': `${publication.abs(path)}#blog`, name: blog.title, url: publication.abs(path), description: blog.description || undefined, publisher: { '@type': 'Organization', name: 'OpenVibe', url: 'https://openvibe.network' } };
+        // Series are named only when they hold a post this viewer may see.
+        const shows = async (filter) => (await posts.listPublished({ ...filter, blogId: blog.id, ...scope, limit: 1 })).total > 0;
+        const seriesShown = [];
+        for (const sr of await blogs.series(blog)) if (await shows({ seriesId: sr.id })) seriesShown.push(sr);
+        const [stats, week, latestDesks, tags, memberRows, seriesCounts] = await Promise.all([
+            homeData.stats(), homeData.weekChanges(10), desks ? desks.latest() : new Map(), homeData.topTags(24), homeData.memberPosts(6),
+            Promise.all(seriesShown.map(async (sr) => ({ title: sr.title, url: `/@${blog.handle}/series/${encodeURIComponent(sr.slug)}`, posts: (await posts.listPublished({ blogId: blog.id, seriesId: sr.id, ...scope, limit: 1 })).total }))),
+        ]);
+        const memberItems = memberRows.length ? await reading.listItems(memberRows) : [];
+        const canonical = seo.canonicalUrl(config.baseUrl, '/', { query: ['page', 'tab', 'q'] });
+        return send(req, res, 200, {
+            title: blog.title, fullTitle: HOME_TITLE, description: HOME_DESCRIPTION, summary: SITE_SUMMARY,
+            decision: pageDecision(canonical, { empty: false, query: ['page', 'tab', 'q'] }),
+            canonical, feeds, theme: { slug: blog.theme, vars: blogs.themeVars(blog) }, lang: blog.language,
+            next: pager.next ? pager.next.href : null,
+            jsonLd: [blogLd, ...homePage.homeJsonLd({ base: config.baseUrl.replace(/\/+$/, ''), items })],
+            styles: [showcase.STYLESHEET], bodyClass: 'blog-home',
+            body: homePage.homeBody({ blog, items, pager, feeds, stats, week, latestDesks, tags, series: seriesCounts, memberItems, signedIn: req.viewer.kind === 'user', index: { tab: tab.id, q, base: '/' } })
+                // The shipped list is a part a reader rarely needs: a fold on a phone, the section it was where there is room.
+                + foldBlock({ id: 'shipped', head: '<h2 id="bh-shipped-h">Recently shipped on OpenVibe.Blog</h2>', html: frame.shipped({ service: 'blog', title: 'Recently shipped on OpenVibe.Blog' }) }),
+        }, { cacheable: !scope.restricted && !scope.restrictedAuthor });
+    }
+
     async function blogFront(req, res, blog, { home = false } = {}) {
         const page = pageNumber(req);
+        if (home && page === 1) return await homeIndex(req, res, blog);
         const scope = await access.listingScope(store, req.viewer, blog);
         const path = publication.blogPath(blog);
         const { total, posts: rows } = await posts.listPublished({ blogId: blog.id, ...scope, limit: PER_PAGE, offset: (page - 1) * PER_PAGE });
@@ -125,28 +195,6 @@ function createPublicRoutes(ctx) {
         const blogLd = blog.kind === 'official'
             ? { '@context': 'https://schema.org', '@type': 'Blog', '@id': `${publication.abs(path)}#blog`, name: blog.title, url: publication.abs(path), description: blog.description || undefined, publisher: { '@type': 'Organization', name: 'OpenVibe', url: 'https://openvibe.network' } }
             : { '@context': 'https://schema.org', '@type': 'Blog', '@id': `${publication.abs(path)}#blog`, name: blog.title, url: publication.abs(path), description: blog.description || undefined };
-        // The network's home (the official blog's first page): what OpenVibe.Blog is for, then everything it has to read.
-        if (home && pager.page === 1) {
-            const [stats, week, latestDesks, tags, memberRows, seriesCounts] = await Promise.all([
-                homeData.stats(), homeData.weekChanges(10), desks ? desks.latest() : new Map(), homeData.topTags(24), homeData.memberPosts(6),
-                Promise.all(seriesShown.map(async (sr) => ({ title: sr.title, url: `/@${blog.handle}/series/${encodeURIComponent(sr.slug)}`, posts: (await posts.listPublished({ blogId: blog.id, seriesId: sr.id, ...scope, limit: 1 })).total }))),
-            ]);
-            const memberItems = memberRows.length ? await reading.listItems(memberRows) : [];
-            // The desks with a newest post: how many chips the AI desks' pick list carries.
-            const deskCount = deskCatalog.ALL.filter((d) => latestDesks.get(d.key)).length;
-            return send(req, res, 200, {
-                title: blog.title, fullTitle: HOME_TITLE, description: HOME_DESCRIPTION, summary: SITE_SUMMARY,
-                decision: pageDecision(canonical, { empty: false, query: ['page'] }),
-                canonical, feeds, theme: { slug: blog.theme, vars: blogs.themeVars(blog) }, lang: blog.language,
-                next: pager.next ? pager.next.href : null,
-                jsonLd: [blogLd, ...homePage.homeJsonLd({ base: config.baseUrl.replace(/\/+$/, ''), items })],
-                styles: [showcase.STYLESHEET], bodyClass: 'blog-home',
-                // The rule that shows the picked item of each pick list: one per item, written for this page.
-                body: homePage.homeBody({ blog, items, pager, feeds, stats, week, latestDesks, tags, series: seriesCounts, memberItems, signedIn: req.viewer.kind === 'user' })
-                    // The shipped list is a part a reader rarely needs: a fold on a phone, the section it was where there is room.
-                    + foldBlock({ id: 'shipped', head: '<h2 id="bh-shipped-h">Recently shipped on OpenVibe.Blog</h2>', html: frame.shipped({ service: 'blog', title: 'Recently shipped on OpenVibe.Blog' }) }),
-            }, { cacheable: !scope.restricted && !scope.restrictedAuthor });
-        }
         send(req, res, 200, {
             title: blog.title,
             description: blog.description,
@@ -169,6 +217,26 @@ function createPublicRoutes(ctx) {
     }
 
     router.get('/', wrap(async (req, res) => await blogFront(req, res, await blogs.official(), { home: true })));
+
+    // The devblog index on its own address: the same newest-first featured post, tabs, filter and art
+    // cards the official blog's home shows, with nothing else. Every tab and every page is a real link.
+    router.get('/devblog', wrap(async (req, res) => {
+        const blog = await blogs.official();
+        const { tab, q, items, pager } = await indexData(req, blog, '/devblog');
+        if (pager.outOfRange && pager.total) return notFound(req, res);
+        const canonical = seo.canonicalUrl(config.baseUrl, '/devblog', { query: ['page', 'tab', 'q'] });
+        const blogLd = { '@context': 'https://schema.org', '@type': 'Blog', '@id': `${publication.abs('/devblog')}#blog`, name: 'OpenVibe Devblog', url: publication.abs('/devblog'), publisher: { '@type': 'Organization', name: 'OpenVibe', url: 'https://openvibe.network' } };
+        return send(req, res, 200, {
+            title: 'Devblog',
+            description: 'Named updates from the OpenVibe team: what changed, why we did it, and what it means for you.',
+            decision: pageDecision(canonical, { empty: items.length === 0, query: ['page', 'tab', 'q'] }),
+            canonical, feeds: await reading.feedsOf(blog), theme: { slug: blog.theme, vars: blogs.themeVars(blog) }, lang: blog.language,
+            prev: pager.prev ? pager.prev.href : null, next: pager.next ? pager.next.href : null,
+            jsonLd: [blogLd, ...homePage.homeJsonLd({ base: config.baseUrl.replace(/\/+$/, ''), items })],
+            styles: [showcase.STYLESHEET], bodyClass: 'blog-devbog',
+            body: `<div class="bh-devbog"><header class="bh-devbog-head"><h1>OpenVibe Devblog</h1><p class="lede">Named updates from the team: what changed, why we did it, and what it means for you.</p></header>${homePage.indexList({ base: '/devblog', tab: tab.id, q, items, pager })}</div>`,
+        }, { cacheable: true });
+    }));
 
     // What shipped on OpenVibe.Blog: the shared update log (openvibe-shared shipped.js, fed by the
     // network changelog this service keeps), like every OpenVibe site's /updates.
@@ -377,9 +445,22 @@ function createPublicRoutes(ctx) {
         const cacheable = !preview && post.state === 'published' && post.visibility === 'public';
         // The sections and the hero art of the body: the contents rail, the JSON-LD parts and the
         // picture a reader sees when the post is shared.
-        const bodySections = blockRender.sectionsOf(blockRender.bodyBlocks(rev.content));
-        const bodyHero = blockRender.heroOf(blockRender.bodyBlocks(rev.content));
+        const bodyTree = blockRender.bodyBlocks(rev.content);
+        const bodySections = blockRender.sectionsOf(bodyTree);
+        const bodyHero = blockRender.heroOf(bodyTree);
         const bodyHeroArt = bodyHero && bodyHero.attrs && typeof bodyHero.attrs.art === 'string' ? bodyHero.attrs.art : null;
+        // Section bylines and folded patch notes resolve before the renderer runs (it renders
+        // synchronously): one person lookup per subject, one change lookup per window, never a
+        // promise left to be printed as "The OpenVibe team".
+        const byPeople = new Map();
+        for (const s of bodySections) {
+            if (s.by && !byPeople.has(s.by)) byPeople.set(s.by, await people.one(s.by));
+        }
+        const windows = new Map();
+        for (const w of blockRender.patchNoteWindows(bodyTree)) {
+            const key = `${w.from || ''}..${w.to || ''}`;
+            if (!windows.has(key)) windows.set(key, await patchNotesFor(blog, post, w.from, w.to));
+        }
         const csrf = req.viewer.kind === 'user' ? csrfToken(config, req.viewer) : '';
         send(req, res, status, {
             title: rev.fields.title,
@@ -413,11 +494,11 @@ function createPublicRoutes(ctx) {
                     csrf, signedIn: req.viewer.kind === 'user' && Boolean(req.viewer.subject),
                     loginUrl: `/auth/login?next=${encodeURIComponent(path)}`,
                     path,
-                    person: async (subject) => {
-                        const p = await people.one(subject);
-                        return p.known ? { name: p.name, url: reading.urls.author(p, blog) } : null;
+                    person: (subject) => {
+                        const p = byPeople.get(subject);
+                        return p && p.known ? { name: p.name, url: reading.urls.author(p, blog) } : null;
                     },
-                    patchNotes: async (from, to) => await patchNotesFor(blog, post, from, to),
+                    patchNotes: (from, to) => windows.get(`${from || ''}..${to || ''}`) || [],
                 },
             }),
             styles: ['kit.css'],

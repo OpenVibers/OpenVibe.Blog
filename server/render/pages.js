@@ -207,11 +207,12 @@ function postPage(o) {
     const rel = blog.kind === 'official' ? 'noopener' : 'nofollow ugc noopener';
     const cover = attachments.filter((a) => a.role === 'cover');
     const gallery = attachments.filter((a) => a.role === 'gallery');
-    const shareImage = cover.length && cover[0].mediaId ? urlFor(cover[0].mediaId) : null;
+    const rendered = renderBody(rev.content, attachments, { ...(o.bodyOptions || { urlFor, rel }), separateHero: true });
+    const heroArt = rendered.hero && rendered.hero.attrs && typeof rendered.hero.attrs.art === 'string' ? rendered.hero.attrs.art : null;
+    const shareImage = heroArt ? urlFor(heroArt) : (cover.length && cover[0].mediaId ? urlFor(cover[0].mediaId) : null);
     const share = shareUrl ? h`<p class="post-share">${raw(kit.share({ title: rev.fields.title, url: shareUrl, text: rev.fields.summary || '', image: shareImage || null, kind: 'post', id: post.id }))}</p>` : '';
     const badge = { members: 'Members only', private: 'Private', unlisted: 'Unlisted' }[post.visibility];
     const updated = rev.number > 1 && post.first_published_at && Date.parse(rev.createdAt) > post.first_published_at + 60000;
-    const rendered = renderBody(rev.content, attachments, o.bodyOptions || { urlFor, rel });
     // The contents: the sections of the body. A block's section keeps its own id and heading; a Markdown
     // heading gets one, as it always did. The ids on the Markdown headings are added to the rendered
     // HTML, so a link into a section lands on it.
@@ -219,8 +220,11 @@ function postPage(o) {
     const body = { html: marked.html, sections: mergeSections(rendered.sections, marked.sections) };
     const toc = body.sections.length >= 3 ? body.sections : null;
     const minutes = readMinutes(rev.content);
-    const heroArt = rendered.hero && rendered.hero.attrs && typeof rendered.hero.attrs.art === 'string' ? rendered.hero.attrs.art : null;
     const teaser = rev.fields.summary || '';
+    // The hero is the page's banner: its "# Name" is the h1, its prose is the teaser, and the author's
+    // summary only shows when the hero has no prose of its own.
+    const heroHtml = rendered.heroHtml || null;
+    const heroTitle = rendered.heroHeading || null;
     return String(h`${raw(ssr.breadcrumbsHtml(o.breadcrumbs))}
 <div class="post-wrap${toc ? ' has-toc' : ''}">
 ${raw(toc ? contentsHtml(toc) : '')}
@@ -228,15 +232,16 @@ ${raw(toc ? contentsChips(toc) : '')}
 <div class="post-main">
 <article class="post" data-post-id="${post.id}" data-revision="${rev.number}">
 <header class="post-header">
-<h1 class="post-title">${rev.fields.title}</h1>
-${teaser ? h`<p class="post-teaser">${teaser}</p>` : ''}
+${raw(heroHtml || '')}
+${heroHtml && heroTitle ? '' : h`<h1 class="post-title">${rev.fields.title}</h1>`}
+${teaser && !(heroHtml && rendered.heroProse) ? h`<p class="post-teaser">${teaser}</p>` : ''}
 <p class="byline">${author ? h`By <a href="${author.url}" rel="author">${author.name}</a> · ` : ''}${post.published_at ? h`<time datetime="${dateLabel(post.first_published_at || post.published_at)}">${time(post.first_published_at || post.published_at)}</time> · ` : ''}${updated ? h`updated ${time(Date.parse(rev.createdAt))} · ` : ''}<span class="read-time" title="At ${WORDS_PER_MINUTE} words a minute: a guide, not a promise">≈ ${minutes} min read</span>${badge ? h` <span class="badge">${badge}</span>` : ''}${post.state !== 'published' ? h` <span class="badge">${post.state}</span>` : ''}</p>
 ${categories.length || tags.length ? h`<p class="chips">${categories.map((c) => h`<a class="chip chip-cat" href="${c.url}">${c.name}</a>`)}${tags.map((t) => h`<a class="chip chip-tag" href="${t.url}" rel="tag">#${t.name}</a>`)}</p>` : ''}
 ${series ? raw(seriesLine(series)) : ''}
 ${share ? raw(String(share)) : ''}
 ${disclosure ? h`<p class="disclosure" role="note"><strong>${disclosure.short}.</strong> ${disclosure.long}</p>` : ''}
 ${raw(toc ? contentsFold(toc) : '')}
-${raw(heroArt ? `<figure class="post-hero-art" data-media-id="${esc(heroArt)}"><img src="${esc(urlFor(heroArt))}" alt="" loading="eager" decoding="async"></figure>` : cover.map((a) => figureHtml(a, { urlFor })).join(''))}
+${raw(heroHtml ? '' : (heroArt ? `<figure class="post-hero-art" data-media-id="${esc(heroArt)}"><img src="${esc(urlFor(heroArt))}" alt="" loading="eager" decoding="async"></figure>` : cover.map((a) => figureHtml(a, { urlFor })).join('')))}
 </header>
 <div class="post-body">${raw(body.html)}</div>
 ${raw(gallery.length ? `<div class="gallery">${gallery.map((a) => figureHtml(a, { urlFor })).join('')}</div>` : '')}
