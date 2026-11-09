@@ -10,6 +10,7 @@
 const ssr = require('openvibe-publishing/ssr');
 const { figureHtml } = require('openvibe-publishing/media');
 const blockRender = require('./blocks');
+const { asset } = require('./layout');
 const kit = require('openvibe-shared/kit');
 const ovServe = require('openvibe-shared/serve');
 
@@ -225,7 +226,8 @@ function postPage(o) {
     // summary only shows when the hero has no prose of its own.
     const heroHtml = rendered.heroHtml || null;
     const heroTitle = rendered.heroHeading || null;
-    return String(h`${raw(ssr.breadcrumbsHtml(o.breadcrumbs))}
+    return String(h`<link rel="stylesheet" href="${asset('css/blocks.css')}">
+${raw(ssr.breadcrumbsHtml(o.breadcrumbs))}
 <div class="post-wrap${toc ? ' has-toc' : ''}">
 ${raw(toc ? contentsHtml(toc) : '')}
 ${raw(toc ? contentsChips(toc) : '')}

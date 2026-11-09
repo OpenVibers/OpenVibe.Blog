@@ -104,6 +104,12 @@ const MED_B = 'med_01J8Z3K4M5N6P7Q8R9S0T1V2W4';
         assert.strictEqual(m.broken_reason, 'deleted');
         assert.strictEqual(m.url, null);
         assert.match((await t.get('/@dan/feed.json')).text, /no longer available/);
+        const item = (await t.get('/@dan/feed.json')).json().items.find((entry) => entry.id === feedIdBefore);
+        assert.strictEqual(typeof item.content_html, 'string', 'feeds receive the rendered HTML, not the block result object');
+        assert.match(item.content_html, /data-state="broken"/);
+        for (const path of ['/@dan/feed.xml', '/@dan/atom.xml']) {
+            assert.match((await t.get(path)).text, /no longer available/);
+        }
         const editor = await t.get(`/write/posts/${post.id}`, { as: dan });
         assert.match(editor.text, /unavailable \(deleted\)/);
     });

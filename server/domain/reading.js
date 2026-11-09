@@ -96,7 +96,7 @@ function createReading({ store, blogs, posts: postsApi, publication, people, med
                 url: publication.postUrl(blog, post),
                 title: rev.fields.title,
                 summary: rev.fields.summary || ssr.markdownToText(rev.content, 300),
-                contentHtml: fullContent ? renderBody(rev.content, atts, { urlFor: media.urlFor, rel }) : null,
+                contentHtml: fullContent ? renderBody(rev.content, atts, { urlFor: media.urlFor, rel }).html : null,
                 published: post.first_published_at,
                 updated: rev.createdAt,
                 decision,
