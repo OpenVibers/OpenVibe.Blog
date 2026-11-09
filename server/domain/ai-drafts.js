@@ -121,18 +121,7 @@ function createAiDrafts({ config, store, posts, access, fetchImpl = globalThis.f
         }
     }
 
-    // Publishing 1.6's client handles polling/provenance; add the choices task to this workflow's request.
-    const devblogClient = createAiClient({ baseUrl: config.aiUrl, tokenClient, fetch: (url, options) => {
-        if (options.method === 'POST' && options.body) {
-            const body = JSON.parse(options.body);
-            if (body.workflow === 'content.devblog') options = { ...options, body: JSON.stringify({ ...body, task: 'blog.devblog.write' }) };
-        }
-        return fetchImpl(url, options);
-    } });
-    async function devblog(viewer, blog, input, options = {}) {
-        return devblogClient.run('content.devblog', input, { ...options, onBehalfOf: { type: 'user', id: viewer.subject }, target: { service: 'blog', type: 'blog', id: String(blog.id) } });
-    }
-    return { devblog, enabled: ai.enabled, imageEnabled: ai.enabled, draft, rawDraft, image };
+    return { enabled: ai.enabled, imageEnabled: ai.enabled, draft, rawDraft, image };
 }
 
 module.exports = { createAiDrafts };

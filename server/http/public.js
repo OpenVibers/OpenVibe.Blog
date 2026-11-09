@@ -103,17 +103,16 @@ function createPublicRoutes(ctx) {
      * are categories (Devblog, Daily, Community, Guides); a tab whose category does not exist yet is
      * empty, not hidden — every tab is a real, crawlable link.
      */
-    async function indexData(req, blog, base, { network = false, service = null } = {}) {
+    async function indexData(req, blog, base) {
         const page = pageNumber(req);
-        const scope = network ? { restricted: false } : await access.listingScope(store, req.viewer, blog);
+        const scope = await access.listingScope(store, req.viewer, blog);
         const wanted = String(req.query.tab || 'latest').toLowerCase();
         const tab = homePage.INDEX_TABS.find((t) => t.id === wanted) || homePage.INDEX_TABS[0];
         const q = String(req.query.q || '').replace(/\s+/g, ' ').trim().slice(0, 80);
         const term = tab.slug ? await store.taxonomy.bySlug(blogs.categoryVocabulary(blog), tab.slug) : null;
         // A tab names a category. Until that category has a post there is nothing to list: falling back to
         // the unfiltered index would show every post under a tab that promises one kind.
-        const tabEmpty = !network && Boolean(tab.slug && !term);
-        const filters = network ? { blogId: null, categorySlug: tab.slug || 'devblog', service } : { blogId: blog.id, ...(term ? { termIds: [term.id] } : {}) };
+        const tabEmpty = Boolean(tab.slug && !term);
         let rows;
         let total;
         if (tabEmpty) {
@@ -122,14 +121,14 @@ function createPublicRoutes(ctx) {
         } else if (q) {
             // A name filter is over the titles people see: a bounded read, filtered in place. The index is
             // small by design (a blog's published posts), and the unfiltered listing keeps its SQL pager.
-            const all = await posts.listPublished({ ...filters, ...scope, limit: 500 });
+            const all = await posts.listPublished({ blogId: blog.id, ...scope, ...(term ? { termIds: [term.id] } : {}), limit: 500 });
             const revs = await store.revisions.getMany(all.posts.map((p) => ({ entityId: p.id, revision: p.published_revision })));
             const needle = q.toLowerCase();
             const matched = all.posts.filter((p, i) => revs[i] && String((revs[i].fields || {}).title || '').toLowerCase().includes(needle));
             total = matched.length;
             rows = matched.slice((page - 1) * PER_PAGE, page * PER_PAGE);
         } else {
-            ({ total, posts: rows } = await posts.listPublished({ ...filters, ...scope, limit: PER_PAGE, offset: (page - 1) * PER_PAGE }));
+            ({ total, posts: rows } = await posts.listPublished({ blogId: blog.id, ...scope, ...(term ? { termIds: [term.id] } : {}), limit: PER_PAGE, offset: (page - 1) * PER_PAGE }));
         }
         const pager = ssr.paginate({
             page, perPage: PER_PAGE, total,
@@ -227,12 +226,11 @@ function createPublicRoutes(ctx) {
 
     // The devblog index on its own address: the same newest-first featured post, tabs, filter and art
     // cards the official blog's home shows, with nothing else. Every tab and every page is a real link.
-    router.get(['/devblog', '/devblog/:service'], wrap(async (req, res) => {
+    router.get('/devblog', wrap(async (req, res) => {
         const blog = await blogs.official();
-        const base = req.params.service ? `/devblog/${encodeURIComponent(req.params.service)}` : '/devblog';
-        const { tab, q, items, pager } = await indexData(req, blog, base, { network: true, service: req.params.service || null });
+        const { tab, q, items, pager } = await indexData(req, blog, '/devblog');
         if (pager.outOfRange && pager.total) return notFound(req, res);
-        const canonical = seo.canonicalUrl(config.baseUrl, base, { query: ['page', 'tab', 'q'] });
+        const canonical = seo.canonicalUrl(config.baseUrl, '/devblog', { query: ['page', 'tab', 'q'] });
         const blogLd = { '@context': 'https://schema.org', '@type': 'Blog', '@id': `${publication.abs('/devblog')}#blog`, name: 'OpenVibe Devblog', url: publication.abs('/devblog'), publisher: { '@type': 'Organization', name: 'OpenVibe', url: 'https://openvibe.network' } };
         return send(req, res, 200, {
             title: 'Devblog',
@@ -242,7 +240,7 @@ function createPublicRoutes(ctx) {
             prev: pager.prev ? pager.prev.href : null, next: pager.next ? pager.next.href : null,
             jsonLd: [blogLd, ...homePage.homeJsonLd({ base: config.baseUrl.replace(/\/+$/, ''), items })],
             styles: [showcase.STYLESHEET], bodyClass: 'blog-devbog',
-            body: `<div class="bh-devbog"><header class="bh-devbog-head"><h1>OpenVibe Devblog</h1><p class="lede">Named updates from the team: what changed, why we did it, and what it means for you.</p></header>${homePage.indexList({ base, tab: tab.id, q, items, pager })}</div>`,
+            body: `<div class="bh-devbog"><header class="bh-devbog-head"><h1>OpenVibe Devblog</h1><p class="lede">Named updates from the team: what changed, why we did it, and what it means for you.</p></header>${homePage.indexList({ base: '/devblog', tab: tab.id, q, items, pager })}</div>`,
         }, { cacheable: true });
     }));
 
@@ -422,8 +420,7 @@ function createPublicRoutes(ctx) {
      */
     async function patchNotesFor(blog, post, from, to) {
         if (!changelog || !changelog.entries) return [];
-        const slot = await store.db.prepare('SELECT service FROM blog_devblog_slots WHERE post_id = ?').get(post.id);
-        const rows = await store.db.prepare(`SELECT * FROM changelog_entries WHERE deployed_at >= ? AND deployed_at < ? ${slot ? 'AND service = ?' : ''} ORDER BY deployed_at, id`).all(from || '1970-01-01', to ? new Date(Date.parse(to) + 86400000).toISOString().slice(0, 10) : '9999-01-01', ...(slot ? [slot.service] : []));
+        const rows = await changelog.entries({ limit: 200 }).catch(() => []);
         const lo = from ? Date.parse(String(from) + 'T00:00:00Z') : null;
         const hi = to ? Date.parse(String(to) + 'T23:59:59Z') : null;
         const groups = new Map();
@@ -433,7 +430,7 @@ function createPublicRoutes(ctx) {
             if (lo !== null && at < lo) continue;
             if (hi !== null && at > hi) continue;
             if (!groups.has(e.service)) groups.set(e.service, []);
-            groups.get(e.service).push({ sha: e.sha.slice(0, 7), url: `https://github.com/${e.repo}/commit/${e.sha}`, title: e.subject });
+            groups.get(e.service).push({ sha: e.short, url: e.url, title: e.subject });
         }
         return [...groups.entries()].map(([site, commits]) => ({ site, commits }));
     }

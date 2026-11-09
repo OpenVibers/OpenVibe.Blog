@@ -107,13 +107,11 @@ async function createApp(opts = {}) {
     // blog.changelog.tag task (server/changelog/tagger.js), whose owner-chosen model answers.
     const changelogTagger = opts.changelogTagger || (opts.changelog ? null : require('./changelog/tagger').createChangelogTagger({ config, fetchImpl, log }));
     const changelog = opts.changelog || require('./changelog').createChangelog({ config, store, blogs, posts, reading, tagger: changelogTagger, patchNotes, fetchImpl, log });
-    const devblog = require('./devblog').createDevblog({ config, store, blogs, posts, access, aiDrafts, media, log });
-    if (changelog.attachDevblog) changelog.attachDevblog(devblog);
     if (patchNotes.attach) patchNotes.attach({ changelog });
     posts.setPublishGate(patchNotes.gate);
     // The AI desks (server/desks/): digests from Sources' items and the satire desk, beside the blogs.
     const desks = opts.desks || require('./desks/desks').createDesks({ config, store, fetchImpl, log });
-    const ctx = { config, store, outbox, blogs, publication, posts, people, community, media, reading, effects, entitlements, vip, auth, viewers, access, worker, aiDrafts, changelog, patchNotes, devblog, desks, indexnow, sharing };
+    const ctx = { config, store, outbox, blogs, publication, posts, people, community, media, reading, effects, entitlements, vip, auth, viewers, access, worker, aiDrafts, changelog, patchNotes, desks, indexnow, sharing };
 
     const app = express();
     app.disable('x-powered-by');
@@ -263,10 +261,6 @@ async function createApp(opts = {}) {
     // page its own route renders; the twins are rendered signed out through the same public router.
     {
         const agentRouter = express.Router();
-        agentRouter.get('/.well-known/agent.json', (_req, res) => res.json({
-            ...require('openvibe-shared/agent-layer').agentManifest(require('./agent-descriptor')),
-            skills: [{ name: 'Draft my project’s devblog', url: `${config.baseUrl}/skills/devblog.json`, task: 'blog.devblog.write', workflow: 'content.devblog', result: 'draft' }],
-        }));
         require('openvibe-shared/agent-layer').mount(agentRouter, {
             descriptor: require('./agent-descriptor'),
             render: require('./agent-pages').createAgentPages({ router: publicRoutes.router, host: new URL(config.baseUrl).hostname }).renderPublicPage,

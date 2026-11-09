@@ -65,7 +65,6 @@ const LONG = Array.from({ length: 100 }, (_, i) => `w${i}`).join(' ');
             'server/changelog/tagger.js': 'OpenVibe.AI\'s run endpoint (OV_AI_INTERNAL_URL, configured) for the blog.changelog.tag task',
             'server/clients/community.js': 'OpenVibe.Community (configured)',
             'server/desks/desks.js': 'OpenVibe.Food\'s recipe library feed (OV_FOOD_URL, configured; the budget-recipes desk)',
-            'server/domain/ai-drafts.js': 'Publishing AI client calls only configured OV_AI_INTERNAL_URL; the devblog adapter adds a task field, never a caller URL',
             'server/clients/media.js': 'OpenVibe.Media (configured)',
             'server/clients/network.js': 'OpenVibe.Network (configured)',
             'server/sharing.js': 'OpenVibe.Network (configured) for identity lookups and the notification push; never a URL a user chose',

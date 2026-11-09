@@ -72,7 +72,6 @@ function load(env = process.env) {
             ai: env.CHANGELOG_AI_DRAFT !== 'off',
         },
         // OpenVibe.AI for "Draft with AI" (server/domain/ai-drafts.js); empty = the button is not offered.
-        devblog: { enabled: env.BLOG_DEVBLOG_ENABLED === 'on', sites: JSON.parse(env.BLOG_DEVBLOG_SITES || '{}') },
         aiUrl: trim(env.OV_AI_INTERNAL_URL || ''),
         // OpenVibe.Sources (sources.item.read): the items the AI desks write their digests from (server/desks/).
         sources: { internalUrl: trim(env.OV_SOURCES_INTERNAL_URL || ''), timeoutMs: int(env.BLOG_SOURCES_TIMEOUT_MS, 10000) },

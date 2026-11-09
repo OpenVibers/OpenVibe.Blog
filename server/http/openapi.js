@@ -138,17 +138,6 @@ route('get', '/changelog/devblog', {
         service: nullable('string'), devblog: nullable('object'), devblogs: arrayOf({ type: 'object' }),
     } }), ...errors([400, 429]) },
 });
-route('get', '/devblogs', {
-    operationId: 'listDevblogs', summary: 'Published devblogs across the network or for one site', tags: ['posts'],
-    parameters: [{ name: 'service', in: 'query', schema: str() }, { name: 'limit', in: 'query', schema: { type: 'integer', minimum: 1, maximum: 100 } }, { name: 'offset', in: 'query', schema: { type: 'integer', minimum: 0, maximum: 100000 } }],
-    responses: { 200: json('Public summaries and the blocks’ first figure', { type: 'object' }), ...errors() },
-});
-route('post', '/blogs/{handle}/posts/devblog', {
-    operationId: 'draftDevblog', summary: 'Draft a devblog from a site’s merged changes', tags: ['posts'], security: PERSON, parameters: [HANDLE],
-    description: 'Only the owner of the site’s configured blog. At most one draft per site per week and seven-day cadence; meaningful changes only. Runs content.devblog using AI task blog.devblog.write. Never publishes. An existing weekly draft is returned unchanged.',
-    requestBody: body({ type: 'object', required: ['service'], properties: { service: str({ pattern: '^[a-z][a-z0-9-]{0,63}$' }) } }),
-    responses: { 201: json('The draft', { type: 'object', properties: { post: ref('Post'), created: { type: 'boolean' } } }), 409: problem, 422: problem, 503: problem, ...errors() },
-});
 route('post', '/blogs/{handle}/posts/ai-draft', {
     operationId: 'draftPostWithAi', summary: 'Have OpenVibe.AI write a draft', tags: ['posts'], security: PERSON, parameters: [HANDLE],
     description: 'blog.post.create. The draft is AI-authored and cannot publish until a person reviews it; 503 when AI drafting is not configured here.',

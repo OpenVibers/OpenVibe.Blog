@@ -101,7 +101,7 @@ const MED = 'med_01J8ZQ4X3M000000000000000A';
         // Page 2 is cards alone: the first post of the page is not featured away, so loading the next
         // page in place never misses a post.
         assert.doesNotMatch(second.text, /class="bh-feature"/);
-        assert.strictEqual((second.text.match(/<li class="bh-card bh-artcard">/g) || []).length, 2);
+        assert.strictEqual((second.text.match(/<li class="bh-card bh-artcard">/g) || []).length, 5);
     });
 
     await check('the index keeps WebSite and ItemList structured data', async () => {

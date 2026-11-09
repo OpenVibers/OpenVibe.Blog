@@ -60,13 +60,10 @@ function createReading({ store, blogs, posts: postsApi, publication, people, med
             const { tags, categories } = await termsView(post, blog, { networkTags: !perBlogLinks });
             // The hero art of a devblog is its card in a list: the block names a Media id, and the card
             // shows the picture when Media can deliver it.
-            const tree = blocks.parse(rev.content);
-            const hero = (tree.children || []).find((c) => c.type === 'hero');
-            let figure = null;
-            blocks.walk(tree, node => { if (!figure && node.type === 'figure') figure = node; });
-            const artId = figure?.attrs?.src || (hero && hero.attrs && typeof hero.attrs.art === 'string' ? hero.attrs.art : null);
+            const hero = (blocks.parse(rev.content).children || []).find((c) => c.type === 'hero');
+            const artId = hero && hero.attrs && typeof hero.attrs.art === 'string' ? hero.attrs.art : null;
             return {
-                post, rev: { ...rev, fields: { ...rev.fields, summary: rev.fields.summary || (hero ? blocks.toText(hero).replace(/^.*?\n/, '').trim().slice(0, 500) : null) } }, blog,
+                post, rev, blog,
                 url: publication.postPath(blog, post),
                 author: person ? { name: person.name, url: urls.author(person, blog) } : null,
                 tags, categories,

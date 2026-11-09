@@ -58,11 +58,6 @@ function aiDraftForm({ blog, csrf }) {
 <label>Tone <input name="tone" maxlength="200" placeholder="e.g. friendly, plain (optional)"></label>
 <label>Audience <input name="audience" maxlength="300" placeholder="Who is it for? (optional)"></label>
 <button type="submit">Write a draft</button>
-</form>
-<form method="post" action="/write/@${blog.handle}/devblog">${csrfField(csrf)}
-<label>Site <input name="service" required maxlength="64" placeholder="e.g. live"></label>
-<p class="muted">Site owners can draft a weekly devblog from meaningful merged changes. A person reviews and publishes it.</p>
-<button type="submit">Draft a devblog</button>
 </form></details>`;
 }
 

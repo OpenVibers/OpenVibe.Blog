@@ -9,7 +9,7 @@ const { execFileSync } = require('child_process');
 const path = require('path');
 const { check, done } = require('./helpers/boot');
 const tags = require('../server/changelog/tags');
-const { tagsFrom, parseLoose } = require('../server/changelog/tagger');
+const { tagsFrom, parseLoose, createChangelogTagger } = require('../server/changelog/tagger');
 
 (async () => {
     await check('the vocabulary is 30 fixed areas and four kinds, with no duplicates', async () => {
@@ -82,6 +82,32 @@ const { tagsFrom, parseLoose } = require('../server/changelog/tagger');
         const config = require('../server/config');
         assert.strictEqual(config.load({}).changelog.tag, true);
         assert.strictEqual(config.load({ CHANGELOG_AI_TAG: 'off' }).changelog.tag, false);
+    });
+
+    await check('the tagger asks AI for the blog.changelog.tag task, as a service, and reads its answer', async () => {
+        const seen = { token: null, run: null };
+        const json = (body, status = 200) => ({ ok: status < 300, status, json: async () => body });
+        const fetchImpl = async (url, opts = {}) => {
+            if (String(url).includes('/oauth/token')) { seen.token = String(opts.body); return await json({ access_token: 'svc', token_type: 'Bearer', expires_in: 300 }); }
+            if (String(url).includes('/api/v1/runs')) { seen.run = { url: String(url), body: JSON.parse(opts.body), auth: opts.headers.Authorization }; return await json({ run: { id: 'run_1', status: 'succeeded', workflow: { key: 'blog.changelog.tag' }, output: { tags: [
+                { id: '7', kind: 'new', areas: ['chat', 'video'], plain: 'A calmer chat' },
+                { id: '8', kind: 'improvement', areas: ['chat'], plain: 'dropped: unknown kind' },
+            ] } } }, 201); }
+            return await json({}, 404);
+        };
+        const tagger = createChangelogTagger({ config: {
+            aiUrl: 'http://ai.test', networkInternalUrl: 'http://network.test', oauth: { clientId: 'blog', clientSecret: 'shh' }, changelog: { tag: true },
+        }, fetchImpl });
+        assert.strictEqual(tagger.enabled, true);
+        const answer = await tagger.tag([{ id: 7, service: 'live', subject: 'Add a calmer chat (#9)', repo: 'OpenVibers/OpenVibe.Live' }]);
+        assert.strictEqual(seen.run.body.task, 'blog.changelog.tag');
+        assert.strictEqual(seen.run.body.target.service, 'blog');
+        assert.deepStrictEqual(seen.run.body.input.entries, [{ id: '7', service: 'live', subject: 'Add a calmer chat (#9)', repo: 'OpenVibers/OpenVibe.Live' }]);
+        assert.match(seen.token, /audience=openvibe\.ai/);
+        assert.strictEqual(seen.run.auth, 'Bearer svc');
+        assert.deepStrictEqual(answer.get('7'), { kind: 'new', areas: ['chat', 'video'], plain: 'A calmer chat' });
+        assert.strictEqual(answer.has('8'), false, 'an unknown kind is not written');
+        assert.strictEqual((await createChangelogTagger({ config: { aiUrl: '', networkInternalUrl: '', oauth: {}, changelog: { tag: true } }, fetchImpl }).tag([{ id: 1 }])).size, 0, 'unconfigured is off');
     });
 
     await check('the backfill script is safe by default: it prints what it would do and writes nothing', async () => {
