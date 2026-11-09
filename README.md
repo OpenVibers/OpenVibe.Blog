@@ -226,15 +226,30 @@ draft is the only artifact, and publishing it needs a person's approval of the r
 `node scripts/patch-notes.js` files a draft from the pending commits (`--dry-run` prints it,
 `--no-ai` uses the deterministic post).
 
-`GET /api/v1/changelog?service=&limit=&before=` is public (CORS `*`, cached for 60 s). It returns:
+`GET /api/v1/changelog?service=&kind=&area=&q=&limit=&before=` is public (CORS `*`, cached for 60 s). It returns:
 
 | Field | Contents |
 |---|---|
-| `entries` | Each entry has its site, sha, subject, author, time and commit link |
+| `entries` | Each entry has its site, sha, plain words, kind, areas, author, time, commit link and pull request |
 | `next` | The cursor for the next page |
+| `facets` | The kind and area counts in the same service and `q` scope (the filter chips) |
+| `vocabulary` | The four kinds and the 30 fixed areas with their display labels |
 | `latest_post` | The newest patch notes post |
 | `posts` | The recent patch notes posts |
 | `sites` | Only without `service`: each site with its count and latest time |
+
+Every entry carries `kind` (`new`, `better`, `fixed` or `internal`), one to three `areas` from the
+fixed list (`server/changelog/tags.js`), and `plain` — the subject without its PR number or stage tag.
+Library pins, merges and test-only, docs-only or CI-only commits are `internal` at collection without
+a model; everything else is tagged by OpenVibe.AI's `blog.changelog.tag` task
+(`server/changelog/tagger.js`), whose owner-chosen model answers (the cheapest good one by default;
+the owner changes it on Exchange). `CHANGELOG_AI_TAG=off` leaves new entries for the backfill.
+`node scripts/backfill-changelog-tags.js` tags existing entries: a dry run prints what it would do,
+and `--apply` writes (a production database also needs `--production`).
+
+`GET /api/v1/changelog/devblog?service=live` is public too (CORS `*`, cached 5 minutes): the site's
+newest devblog post as `{ service, title, teaser, date, url, hero_image_url }`, and without `service`
+the newest devblog of each site under `devblogs` — the card and /updates data of plan §9.
 
 OpenVibe.Network proxies this feed at `openvibe.network/api/v1/changelog`. Every site shows it through
 `openvibe-shared/shipped.js`:

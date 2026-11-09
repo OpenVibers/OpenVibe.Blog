@@ -20,11 +20,17 @@
  * template, with OpenVibe.AI's prose when it is configured, and a person reviews the draft before it
  * can be published. The draft owns its entries; the public feed links them only once the post is live.
  *
- * Read: GET /api/v1/changelog?service=&limit= (public, CORS *) is what every site's "recently
- * shipped" shows, with the latest patch notes post to link to.
+ * Read: GET /api/v1/changelog?service=&kind=&area=&q=&limit= (public, CORS *) is what every site's
+ * "recently shipped" shows, with the latest patch notes post to link to. Each entry carries its kind
+ * (new, better, fixed or internal), one to three areas and plain words; internal housekeeping is
+ * filterable and counted but the sites hide it behind "Show housekeeping". GET
+ * /api/v1/changelog/devblog?service= answers the site's newest devblog post (title, teaser, date,
+ * hero image and URL) for the home card. The fixed vocabulary is server/changelog/tags.js; the
+ * blog.changelog.tag task writes the tags (server/changelog/tagger.js), housekeeping without a model.
  */
 const crypto = require('crypto');
 const { serviceAuth } = require('openvibe-contracts');
+const tags = require('./changelog/tags');
 
 const GITHUB = 'https://api.github.com';
 const clean = (s, n) => String(s == null ? '' : s).replace(/\s+/g, ' ').trim().slice(0, n);
@@ -49,26 +55,27 @@ function subjectOf(message, n = 240) {
     return `${cut.slice(0, Math.max(cut.lastIndexOf(' '), n - 40)).replace(/[,;:(\s]+$/, '')}…`;
 }
 const isVersionBump = (subject) => /^\d+\.\d+\.\d+\b/.test(subject);
-const isNoise = (subject) => /^Merge (branch|pull request|remote)/i.test(subject);
+const TAG_BATCH = 20;
 
-function createChangelog({ config, store, blogs, posts, patchNotes = null, fetchImpl = globalThis.fetch, log = console }) {
+function createChangelog({ config, store, blogs, posts, reading = null, tagger = null, patchNotes = null, fetchImpl = globalThis.fetch, log = console }) {
     const c = config.changelog;
     const db = store.db;
     const nowMs = () => store.now();
-    const stats = { runs: 0, entries: 0, posts: 0, drafts: 0, lastError: null, lastRunAt: null };
+    const stats = { runs: 0, entries: 0, posts: 0, drafts: 0, tagged: 0, lastError: null, lastRunAt: null };
 
     const q = {
         state: db.prepare('SELECT * FROM changelog_state WHERE service = ?'),
         putState: db.prepare(`INSERT INTO changelog_state (service, release, head, checked_at) VALUES (@service, @release, @head, @at)
             ON CONFLICT(service) DO UPDATE SET release = excluded.release, head = excluded.head, checked_at = excluded.checked_at`),
-        insert: db.prepare(`INSERT INTO changelog_entries (service, repo, sha, subject, author, committed_at, deployed_at, release, release_lines, major, post_id)
-            VALUES (@service, @repo, @sha, @subject, @author, @committed_at, @deployed_at, @release, @release_lines, @major, @post_id) ON CONFLICT (service, sha) DO NOTHING`),
+        insert: db.prepare(`INSERT INTO changelog_entries (service, repo, sha, subject, author, committed_at, deployed_at, release, release_lines, major, post_id, kind, areas, plain, tagged_at, tagged_by)
+            VALUES (@service, @repo, @sha, @subject, @author, @committed_at, @deployed_at, @release, @release_lines, @major, @post_id, @kind, @areas, @plain, @tagged_at, @tagged_by) ON CONFLICT (service, sha) DO NOTHING RETURNING id`),
+        tag: db.prepare('UPDATE changelog_entries SET kind = ?, areas = ?, plain = ?, tagged_at = ?, tagged_by = ? WHERE id = ? AND kind IS NULL'),
         fillAuthor: db.prepare('UPDATE changelog_entries SET author = ? WHERE service = ? AND sha = ? AND author IS NULL'),
         history: db.prepare('SELECT * FROM changelog_history WHERE service = ?'),
         putHistory: db.prepare('INSERT INTO changelog_history (service, imported, imported_at) VALUES (?, ?, ?) ON CONFLICT (service) DO UPDATE SET imported = excluded.imported, imported_at = excluded.imported_at'),
         recentPosts: db.prepare('SELECT * FROM changelog_posts ORDER BY created_at DESC LIMIT ?'),
         sites: db.prepare(`SELECT service, COUNT(*) AS entries, MAX(deployed_at) AS latest_at FROM changelog_entries GROUP BY service ORDER BY latest_at DESC`),
-        pending: db.prepare('SELECT * FROM changelog_entries WHERE post_id IS NULL ORDER BY deployed_at, committed_at, id'),
+        pending: db.prepare("SELECT * FROM changelog_entries WHERE post_id IS NULL AND (kind IS NULL OR kind <> 'internal') ORDER BY deployed_at, committed_at, id"),
         mark: db.prepare('UPDATE changelog_entries SET post_id = ? WHERE id = ? AND post_id IS NULL'),
         ownedBy: db.prepare('SELECT * FROM changelog_entries WHERE post_id = ? ORDER BY deployed_at, committed_at, id'),
         move: db.prepare('UPDATE changelog_entries SET post_id = ? WHERE post_id = ?'),
@@ -140,27 +147,60 @@ function createChangelog({ config, store, blogs, posts, patchNotes = null, fetch
 
     const authorOf = (cm) => clean((cm.commit && cm.commit.author && cm.commit.author.name) || (cm.author && cm.author.login) || '', 80) || null;
 
+    /**
+     * Tag the entries just collected: housekeeping already carries kind internal (plain words and
+     * no model call); the rest go to the blog.changelog.tag task in one run. A failed run leaves
+     * them untagged for the backfill and never fails collection. History is never sent (it can be
+     * hundreds of commits per site): the backfill tags it.
+     */
+    async function tagPending(list) {
+        if (!list.length || !tagger || !tagger.enabled) return 0;
+        let n = 0;
+        for (let i = 0; i < list.length; i += TAG_BATCH) {
+            const chunk = list.slice(i, i + TAG_BATCH);
+            try {
+                const answer = await tagger.tag(chunk);
+                for (const e of chunk) {
+                    const t = answer.get(String(e.id));
+                    if (!t) continue;
+                    n += (await q.tag.run(t.kind, t.areas, t.plain, nowMs(), 'ai', e.id)).changes;
+                }
+            } catch (err) {
+                stats.lastError = `tag: ${err.message}`;
+                log.warn && log.warn(`[changelog] ${list.length} entries left untagged: ${err.message}`);
+            }
+        }
+        stats.tagged += n;
+        return n;
+    }
+
     // history: the commits a site shipped before the changelog watched it, so its updates page is not
     // empty on day one. They carry post_id 'history' (never pending, never in a patch notes post) and
     // their commit time stands in for the deploy time nobody recorded.
     async function addEntries(svc, commits, { releaseLines = 0, major = false, history = false } = {}) {
         const deployedAt = svc.releasedAt || new Date(nowMs()).toISOString();
         let n = 0;
+        const untagged = [];
         for (const cm of commits) {
             const subject = subjectOf(cm.commit && cm.commit.message);
-            if (!subject || isNoise(subject)) continue;
+            if (!subject) continue;
+            const meta = tags.initial(subject);
             const flagged = major || isVersionBump(subject) || /\[major\]/i.test((cm.commit && cm.commit.message) || '');
             const committedAt = (cm.commit && cm.commit.author && cm.commit.author.date) || null;
             if (history && !committedAt) continue;
             const author = authorOf(cm);
-            const added = (await q.insert.run({
+            const row = await q.insert.get({
                 service: svc.id, repo: svc.repo, sha: cm.sha, subject, author, committed_at: committedAt,
                 deployed_at: history ? new Date(committedAt).toISOString() : deployedAt, release: svc.release, release_lines: releaseLines, major: flagged ? 1 : 0,
-                post_id: history ? 'history' : null,
-            })).changes;
-            if (!added && author) await q.fillAuthor.run(author, svc.id, cm.sha);
-            n += added;
+                post_id: history ? 'history' : null, kind: meta.kind, areas: meta.areas, plain: meta.plain,
+                tagged_at: meta.kind ? nowMs() : null, tagged_by: meta.kind ? 'housekeeping' : null,
+            });
+            if (!row) { if (author) await q.fillAuthor.run(author, svc.id, cm.sha); continue; }
+            n += 1;
+            // History is tagged by the backfill, not inside a collection run.
+            if (!history && !meta.kind) untagged.push({ id: row.id, service: svc.id, repo: svc.repo, subject, plain: meta.plain });
         }
+        await tagPending(untagged);
         return n;
     }
 
@@ -338,25 +378,56 @@ function createChangelog({ config, store, blogs, posts, patchNotes = null, fetch
     }
     function stop() { if (timer) clearInterval(timer); timer = null; }
 
-    /** The public feed, newest first: { entries, next } (next = the cursor for the page after, or null). */
-    async function page({ service = null, limit = 20, before = null } = {}) {
+    /**
+     * The public feed, newest first: { entries, next, facets, vocabulary } (next = the cursor for the
+     * page after, or null). Filters: service, kind, area and q (the plain words or the subject);
+     * facets count the kinds and areas in the same scope (service and q) so the chips can show them.
+     */
+    async function page({ service = null, limit = 20, before = null, kind = null, area = null, q: search = null } = {}) {
         const n = Math.min(Math.max(parseInt(limit, 10) || 20, 1), 100);
         const cur = decodeCursor(before);
-        const where = [];
-        const args = [];
-        if (service) { where.push('service = ?'); args.push(String(service)); }
-        if (cur) { where.push('(deployed_at < ? OR (deployed_at = ? AND id < ?))'); args.push(cur.at, cur.at, cur.id); }
+        const escapeLike = (s) => String(s).replace(/[\\%_]/g, '\\$&');
+        const scope = [];
+        const scopeArgs = [];
+        if (service) { scope.push('e.service = ?'); scopeArgs.push(String(service)); }
+        if (search) {
+            const pattern = `%${escapeLike(search).slice(0, 200)}%`;
+            scope.push("(e.plain ILIKE ? ESCAPE '\\' OR e.subject ILIKE ? ESCAPE '\\')");
+            scopeArgs.push(pattern, pattern);
+        }
+        const where = [...scope];
+        const args = [...scopeArgs];
+        if (kind) { where.push('e.kind = ?'); args.push(String(kind)); }
+        if (area) { where.push('e.areas @> ARRAY[?]::text[]'); args.push(String(area)); }
+        if (cur) { where.push('(e.deployed_at < ? OR (e.deployed_at = ? AND e.id < ?))'); args.push(cur.at, cur.at, cur.id); }
         const rows = await db.prepare(`SELECT e.*, (SELECT p.state FROM blog_posts p WHERE p.id = e.post_id) AS post_state
             FROM changelog_entries e ${where.length ? `WHERE ${where.join(' AND ')}` : ''} ORDER BY e.deployed_at DESC, e.id DESC LIMIT ?`).all(...args, n + 1);
         const more = rows.length > n;
         const shown = rows.slice(0, n);
+        const scoped = scope.length ? `WHERE ${scope.join(' AND ')}` : '';
+        const kindCounts = Object.fromEntries(tags.KINDS.map((k) => [k, 0]));
+        for (const row of await db.prepare(`SELECT e.kind, COUNT(*) AS n FROM changelog_entries e ${scoped} GROUP BY e.kind`).all(...scopeArgs)) {
+            kindCounts[row.kind && tags.isKind(row.kind) ? row.kind : 'better'] += Number(row.n) || 0;
+        }
+        const areaCounts = {};
+        for (const row of await db.prepare(`SELECT a AS area, COUNT(*) AS n FROM changelog_entries e CROSS JOIN LATERAL unnest(e.areas) AS a ${scoped} GROUP BY a`).all(...scopeArgs)) {
+            if (tags.isArea(row.area)) areaCounts[row.area] = Number(row.n) || 0;
+        }
         return {
-            entries: shown.map((e) => ({
-                service: e.service, sha: e.sha, short: e.sha.slice(0, 7), subject: e.subject, author: e.author || null, committed_at: e.committed_at, deployed_at: e.deployed_at,
-                major: Boolean(e.major), url: `https://github.com/${e.repo}/commit/${e.sha}`,
-                post_id: e.post_id && e.post_id !== 'history' && e.post_state === 'published' ? e.post_id : null,
-            })),
+            entries: shown.map((e) => {
+                const pr = Number(e.pr_number) || tags.prOf(e.subject);
+                return {
+                    service: e.service, repo: e.repo, sha: e.sha, short: e.sha.slice(0, 7), subject: e.subject, plain: e.plain || tags.plainOf(e.subject),
+                    kind: e.kind && tags.isKind(e.kind) ? e.kind : 'better', areas: Array.isArray(e.areas) ? e.areas.filter(tags.isArea).slice(0, 3) : [],
+                    author: e.author || null, committed_at: e.committed_at, deployed_at: e.deployed_at,
+                    major: Boolean(e.major), url: `https://github.com/${e.repo}/commit/${e.sha}`,
+                    post_id: e.post_id && e.post_id !== 'history' && e.post_state === 'published' ? e.post_id : null,
+                    pr: pr || null, pr_url: pr ? `https://github.com/${e.repo}/pull/${pr}` : null,
+                };
+            }),
             next: more && shown.length ? encodeCursor(shown[shown.length - 1]) : null,
+            facets: { kinds: kindCounts, areas: areaCounts },
+            vocabulary: tags.vocabulary(),
         };
     }
     async function entries(opts = {}) { return (await page(opts)).entries; }
@@ -365,7 +436,45 @@ function createChangelog({ config, store, blogs, posts, patchNotes = null, fetch
     /** Every site with entries: [{ service, entries, latest_at }], most recently shipped first. */
     async function sites() { return await q.sites.all(); }
 
-    return { tick, collect, due, fileDraft, enrich, pendingEntries, markEntries, entriesOf, moveEntries, openPulls, start, stop, entries, page, latestPost, recentPosts, sites, importHistory, stats: async () => ({ enabled: c.enabled, ...stats, github_token: cachedToken.source, pending: (await q.pending.all()).length }) };
+    /**
+     * One site's newest devblog post, for the Rich Content §9 home card and the day's row in
+     * /updates: { service, title, teaser, date, url, hero_image_url } or null. Devblog posts live
+     * on the official blog, tagged with the service and categorized Devblog; the hero block's art
+     * is the card image. `reading` extracts the art and the URL from the revision.
+     */
+    async function newestDevblog(service) {
+        if (!service || !reading || !posts || !blogs) return null;
+        const blog = await blogs.byHandle(c.blogHandle) || (c.blogHandle === config.official.handle ? await blogs.ensureOfficial() : null);
+        if (!blog) return null;
+        const tag = await store.taxonomy.bySlug('tag', String(service));
+        if (!tag) return null;
+        const { posts: rows } = await posts.listPublished({ blogId: blog.id, termIds: [tag.id], limit: 10 });
+        const items = await reading.listItems(rows);
+        const item = items.find((i) => (i.categories || []).some((x) => /^devblog$/i.test(x.name || x.slug || ''))
+            || (i.tags || []).some((x) => /^devblog$/i.test(x.slug || x.name || '')));
+        if (!item || !item.rev) return null;
+        const when = item.post.published_at || item.post.first_published_at || null;
+        return {
+            service: String(service),
+            title: item.rev.fields.title || null,
+            teaser: item.rev.fields.summary || null,
+            date: when ? new Date(when).toISOString() : null,
+            url: `${String(config.baseUrl || '').replace(/\/+$/, '')}${item.url}`,
+            hero_image_url: item.art ? item.art.url : null,
+        };
+    }
+
+    /** The newest devblog of each given site (the /updates page's day sections), newest first. */
+    async function newestDevblogs(services = []) {
+        const out = [];
+        for (const service of services.slice(0, 20)) {
+            const devblog = await newestDevblog(service).catch(() => null);
+            if (devblog) out.push(devblog);
+        }
+        return out.sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
+    }
+
+    return { tick, collect, due, fileDraft, enrich, pendingEntries, markEntries, entriesOf, moveEntries, openPulls, start, stop, entries, page, latestPost, recentPosts, sites, newestDevblog, newestDevblogs, importHistory, stats: async () => ({ enabled: c.enabled, ...stats, github_token: cachedToken.source, pending: (await q.pending.all()).length }) };
 }
 
 /** A stable id for a batch (tests). */

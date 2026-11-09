@@ -59,6 +59,9 @@ function load(env = process.env) {
             history: Math.max(0, Math.min(100, parseInt(env.CHANGELOG_HISTORY ?? '60', 10) || 0)),
             firstDelayMs: 60 * 1000,
             since: env.CHANGELOG_SINCE && !Number.isNaN(Date.parse(env.CHANGELOG_SINCE)) ? new Date(env.CHANGELOG_SINCE).toISOString() : null,
+            // blog.changelog.tag: on when OV_AI_INTERNAL_URL and the service secret are set; off leaves
+            // entries untagged for the backfill (the deterministic plain words are still stored).
+            tag: env.CHANGELOG_AI_TAG !== 'off',
         },
         // Patch notes v2 (server/patch-notes/): how many workstreams get an H2, and how many published posts the AI
         // prompt gets as voice samples. The draft is always a draft; CHANGELOG_AI_DRAFT=off skips the AI prose and

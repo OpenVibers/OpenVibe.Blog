@@ -37,6 +37,7 @@ const { run, jsonBody, ApiError, privateNoStore } = require('./errors');
 const { guard } = require('../auth/viewer');
 const { checkCapability, CAPABILITIES } = require('../auth/capabilities');
 const blockRender = require('../render/blocks');
+const tags = require('../changelog/tags');
 
 function cors(origins) {
     const allowed = new Set(origins);
@@ -201,23 +202,44 @@ function createApi(ctx) {
     }));
 
     // The network changelog (server/changelog.js): what shipped on every OpenVibe site, newest first, and
-    // the latest patch notes post. Public: every site's "recently shipped" reads it.
+    // the latest patch notes post. Public: every site's "recently shipped" reads it. Filters: kind, area
+    // (from the fixed vocabulary) and q (plain words or subject). /changelog/devblog answers the site's
+    // newest devblog post for the home card and /updates.
     router.get('/changelog', run(async (req, res) => {
         res.set('Access-Control-Allow-Origin', '*');
         res.set('Cache-Control', 'public, max-age=60');
         const service = /^[a-z][a-z0-9-]{1,39}$/.test(String(req.query.service || '')) ? String(req.query.service) : null;
+        const kind = req.query.kind == null || req.query.kind === '' ? null : String(req.query.kind);
+        const area = req.query.area == null || req.query.area === '' ? null : String(req.query.area);
+        if (kind && !tags.isKind(kind)) throw new ApiError(400, 'changelog.kind_invalid', `kind is one of ${tags.KINDS.join(', ')}`);
+        if (area && !tags.isArea(area)) throw new ApiError(400, 'changelog.area_invalid', `area is one of ${tags.AREA_IDS.join(', ')}`);
+        const q = req.query.q == null ? null : String(req.query.q).trim().slice(0, 200) || null;
         const postOf = async (row) => {
             const p = row && await posts.get(row.post_id);
             const blog = p ? await blogs.get(p.blog_id) : null;
             if (!p || !blog || p.state !== 'published') return null;
             return { id: p.id, title: (await posts.head(p) || { fields: {} }).fields.title || null, url: publication.abs(publication.postPath(blog, p)), published_at: p.published_at || null, entries: row.entries };
         };
-        const page = await ctx.changelog.page({ service, limit: req.query.limit, before: req.query.before });
+        const page = await ctx.changelog.page({ service, limit: req.query.limit, before: req.query.before, kind, area, q });
         const recent = (await Promise.all((await ctx.changelog.recentPosts(5)).map(postOf))).filter(Boolean);
         return {
-            service, entries: page.entries, next: page.next, latest_post: recent[0] || null, posts: recent,
+            service, entries: page.entries, next: page.next, facets: page.facets, vocabulary: page.vocabulary,
+            latest_post: recent[0] || null, posts: recent,
             ...(service ? {} : { sites: await ctx.changelog.sites() }),
         };
+    }));
+
+    // The site's newest devblog post (Rich Content §9): title, teaser, date, hero image and URL.
+    // With service it is that site's card; without one it lists the newest devblog of each site with
+    // a devblog, for /updates' day sections. Public and cached like the changelog.
+    router.get('/changelog/devblog', run(async (req, res) => {
+        res.set('Access-Control-Allow-Origin', '*');
+        res.set('Cache-Control', 'public, max-age=300');
+        const service = req.query.service == null || req.query.service === '' ? null : String(req.query.service);
+        if (service && !/^[a-z][a-z0-9-]{1,39}$/.test(service)) throw new ApiError(400, 'changelog.service_invalid', 'service is a site id (live, chat, blog, …)');
+        if (service) return { service, devblog: await ctx.changelog.newestDevblog(service) };
+        const services = (await ctx.changelog.sites()).slice(0, 20).map((s) => s.service);
+        return { devblogs: await ctx.changelog.newestDevblogs(services) };
     }));
 
     // Draft with AI: OpenVibe.AI's blog.draft_post writes a draft (AI-authored, noindex until reviewed).

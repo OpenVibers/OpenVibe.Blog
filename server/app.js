@@ -103,7 +103,10 @@ async function createApp(opts = {}) {
     // Patch notes v2: the story map, the template, the voice cards and the review gate. The changelog files drafts
     // through it; posts.publish refuses a draft with a blocking check or no person's approval.
     const patchNotes = opts.patchNotes || require('./patch-notes').createPatchNotes({ config, store, blogs, posts, publication, aiDrafts, media, fetchImpl, log });
-    const changelog = opts.changelog || require('./changelog').createChangelog({ config, store, blogs, posts, patchNotes, fetchImpl, log });
+    // The changelog's tags: housekeeping is internal without a model; the rest ask OpenVibe.AI's
+    // blog.changelog.tag task (server/changelog/tagger.js), whose owner-chosen model answers.
+    const changelogTagger = opts.changelogTagger || (opts.changelog ? null : require('./changelog/tagger').createChangelogTagger({ config, fetchImpl, log }));
+    const changelog = opts.changelog || require('./changelog').createChangelog({ config, store, blogs, posts, reading, tagger: changelogTagger, patchNotes, fetchImpl, log });
     if (patchNotes.attach) patchNotes.attach({ changelog });
     posts.setPublishGate(patchNotes.gate);
     // The AI desks (server/desks/): digests from Sources' items and the satire desk, beside the blogs.

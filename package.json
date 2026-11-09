@@ -9,6 +9,7 @@
     "dev": "NODE_ENV=development node server/index.js",
     "test": "node test/run.js",
     "seed": "node scripts/seed.js",
+    "backfill:changelog-tags": "node scripts/backfill-changelog-tags.js",
     "test:pg": "BLOG_TEST_STORE=pg node test/run.js"
   },
   "keywords": [
