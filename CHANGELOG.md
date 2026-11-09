@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- The network changelog's entries carry `kind` (new, better, fixed or internal), one to three fixed `areas` and the
+  subject in `plain` words. Library pins, merges and test/docs/CI-only work become internal without a model; the rest
+  is tagged by OpenVibe.AI's `blog.changelog.tag` task. `GET /api/v1/changelog` filters by `kind`, `area` and `q` and
+  returns facets and the vocabulary; `GET /api/v1/changelog/devblog?service=` answers a site's newest devblog post
+  (title, teaser, date, hero image, URL) for the home card and /updates. `scripts/backfill-changelog-tags.js` tags
+  existing entries, dry run first.
+
 - The screenshot pass, from the Blog's side (plan L9, devblog §3.3): when the patch notes are drafted, Blog reads the shots
   OpenVibe.Host captured (the newest one taken before the release and the first one taken after it, per page and viewport).
   When the two differ by more than 0.5 % of the pixels, both are attached to the draft (before, after) with the alt text and the
