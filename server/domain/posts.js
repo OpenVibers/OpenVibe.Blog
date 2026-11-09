@@ -208,6 +208,12 @@ function createPosts({ store, blogs, publication, access, outbox, log = console,
     let publishGate = null;
     function setPublishGate(fn) { publishGate = typeof fn === 'function' ? fn : null; }
 
+    async function devblogReview(post, rev) {
+        if (!await db.prepare('SELECT 1 AS x FROM blog_devblog_slots WHERE post_id = ?').get(post.id)) return;
+        const review = await publication.reviewOf(post, rev);
+        if (!require('./review-kind').isPersonReview(review)) throw new ApiError(409, 'devblog.person_review_required', 'A person must approve this devblog revision before publication');
+    }
+
     const api = {
         VISIBILITIES, MEDIA_ROLES,
 
@@ -231,7 +237,7 @@ function createPosts({ store, blogs, publication, access, outbox, log = console,
          * same viewer's post page would refuse.
          * filters: blogId, termIds (any), seriesId, authorSubject, restricted, restrictedAuthor, limit, offset
          */
-        async listPublished({ blogId = null, termIds = null, seriesId = null, authorSubject = null, restricted = false, restrictedAuthor = null, limit = 20, offset = 0, order = 'recent' } = {}) {
+        async listPublished({ service = null, categorySlug = null, blogId = null, termIds = null, seriesId = null, authorSubject = null, restricted = false, restrictedAuthor = null, limit = 20, offset = 0, order = 'recent' } = {}) {
             const where = ["p.state = 'published'"];
             const args = [];
             if (restricted) where.push("p.visibility IN ('public','members','private')");
@@ -239,6 +245,8 @@ function createPosts({ store, blogs, publication, access, outbox, log = console,
                 where.push("(p.visibility = 'public' OR (p.visibility IN ('members','private') AND p.author_subject = ?))");
                 args.push(restrictedAuthor);
             } else where.push("p.visibility = 'public'");
+            if (service) { where.push('EXISTS (SELECT 1 FROM blog_devblog_slots ds WHERE ds.post_id = p.id AND ds.service = ?)'); args.push(service); }
+            if (categorySlug) { where.push("EXISTS (SELECT 1 FROM blog_term_links l JOIN blog_terms t ON t.id = l.term_id WHERE l.entity_id = p.id AND t.slug = ? AND t.vocabulary <> 'tag')"); args.push(categorySlug); }
             if (blogId) { where.push('p.blog_id = ?'); args.push(blogId); }
             if (seriesId) { where.push('p.series_id = ?'); args.push(seriesId); }
             if (authorSubject) { where.push('p.author_subject = ?'); args.push(authorSubject); }
@@ -390,6 +398,7 @@ function createPosts({ store, blogs, publication, access, outbox, log = console,
                 const rev = revisionNumber ? await store.revisions.get(post.id, revisionNumber) : await store.revisions.head(post.id);
                 if (!rev) throw new ApiError(404, 'revision.not_found', `No revision ${revisionNumber} of this post`);
                 if (post.state === 'published' && post.published_revision === rev.number) return { changed: false, post };
+                await devblogReview(post, rev);
                 const ok = canPublish(publication.authorshipOf(rev) || { mode: 'human' }, await publication.reviewOf(post, rev));
                 if (!ok.ok) throw new ApiError(409, 'post.review_required', `Revision ${rev.number} is AI-generated and needs a person's or the AI editor's approval before it can be published (${ok.reason})`);
                 if (publishGate) {
@@ -467,6 +476,7 @@ function createPosts({ store, blogs, publication, access, outbox, log = console,
             const rev = action === 'publish' ? (revision ? await store.revisions.get(post.id, parseInt(revision, 10)) : await store.revisions.head(post.id)) : null;
             if (action === 'publish') {
                 if (!rev) throw new ApiError(404, 'revision.not_found', 'No such revision');
+                await devblogReview(post, rev);
                 const ok = canPublish(publication.authorshipOf(rev) || { mode: 'human' }, await publication.reviewOf(post, rev));
                 if (!ok.ok) throw new ApiError(409, 'post.review_required', `Revision ${rev.number} needs a person's or the AI editor's approval before it can be scheduled (${ok.reason})`);
             }

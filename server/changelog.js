@@ -354,6 +354,7 @@ function createChangelog({ config, store, blogs, posts, reading = null, tagger =
         }
     }
 
+    let devblog = null;
     async function tick() {
         stats.runs++; stats.lastRunAt = new Date(nowMs()).toISOString();
         try {
@@ -361,6 +362,7 @@ function createChangelog({ config, store, blogs, posts, reading = null, tagger =
             if (patchNotes && patchNotes.compact) {
                 try { await patchNotes.compact(); } catch (err) { log.warn && log.warn(`[changelog] fold skipped: ${err.message}`); }
             }
+            if (devblog) await devblog.tick();
             const list = await q.pending.all();
             const d = await due(list);
             if (d.due) return await fileDraft(list.slice(0, c.batchSize * 3), d.reason);
@@ -474,7 +476,7 @@ function createChangelog({ config, store, blogs, posts, reading = null, tagger =
         return out.sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
     }
 
-    return { tick, collect, due, fileDraft, enrich, pendingEntries, markEntries, entriesOf, moveEntries, openPulls, start, stop, entries, page, latestPost, recentPosts, sites, newestDevblog, newestDevblogs, importHistory, stats: async () => ({ enabled: c.enabled, ...stats, github_token: cachedToken.source, pending: (await q.pending.all()).length }) };
+    return { attachDevblog: value => { devblog = value; }, tick, collect, due, fileDraft, enrich, pendingEntries, markEntries, entriesOf, moveEntries, openPulls, start, stop, entries, page, latestPost, recentPosts, sites, newestDevblog, newestDevblogs, importHistory, stats: async () => ({ enabled: c.enabled, ...stats, github_token: cachedToken.source, pending: (await q.pending.all()).length }) };
 }
 
 /** A stable id for a batch (tests). */
