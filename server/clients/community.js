@@ -76,6 +76,38 @@ function createCommunity({ store, config, fetchImpl = globalThis.fetch }) {
         },
 
         /**
+         * The section reactions of a post: the counts of every section of its thread, keyed by the
+         * section id. A post that has no thread yet, or a Community that cannot be reached, has no
+         * counts: the reader sees the sections without a reaction, never a fake one.
+         */
+        async sectionReactions(post, ctx) {
+            if (!post || post.visibility !== 'public') return {};
+            const known = await store.discussion.get(post.id);
+            if (!known) return {};
+            try {
+                const data = await call('GET', `/api/v1/comments/threads/${encodeURIComponent(known.threadId)}/section-reactions`, { ctx });
+                const out = {};
+                for (const [id, c] of Object.entries((data && data.sections) || {})) {
+                    out[id] = { up: Number(c.up) || 0, down: Number(c.down) || 0 };
+                }
+                return out;
+            } catch (err) {
+                console.warn(`[Blog] section reactions for ${post.id} unavailable: ${err.message}`);
+                return {};
+            }
+        },
+
+        /** A reader's reaction to one section of a post (👍 or 👎). */
+        async reactToSection(post, threadId, subject, sectionId, value, ctx) {
+            if (!writeTokens) { const e = new Error('comments are not configured'); e.status = 503; throw e; }
+            const id = threadId || (await store.discussion.get(post.id) || {}).threadId;
+            if (!id) { const e = new Error('this post has no comment thread'); e.status = 409; throw e; }
+            return await call('POST', `/api/v1/comments/threads/${encodeURIComponent(id)}/section-reactions`, {
+                tokens: writeTokens, subject, body: { section_id: sectionId, value }, ctx,
+            });
+        },
+
+        /**
          * Best effort: hide a post's thread when the post is deleted or stops being public, show it
          * again when it is public again. Needs community.comment.moderate.
          */

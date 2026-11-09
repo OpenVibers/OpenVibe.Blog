@@ -25,6 +25,7 @@ const ssr = require('openvibe-publishing/ssr');
 const cache = require('openvibe-shared/cache-policy');
 const { renderPage, SITE_SUMMARY } = require('../render/layout');
 const pages = require('../render/pages');
+const blockRender = require('../render/blocks');
 const homePage = require('../render/home');
 const deskCatalog = require('../desks/catalog');
 // The short home (the owner's rule, 2026-10-30): pick blocks and folds.
@@ -40,6 +41,7 @@ const PER_PAGE = 15;
 
 function createPublicRoutes(ctx) {
     const { config, store, blogs, posts, publication, reading, people, community, media, access, entitlements, viewers, limits, desks, sharing } = ctx;
+    const changelog = ctx.changelog || null;
     const homeData = ctx.home || createHome({ store });
     const router = express.Router();
     router.use(viewers.middleware({ services: false }));
@@ -338,6 +340,27 @@ function createPublicRoutes(ctx) {
         };
     }
 
+    /**
+     * The patch notes of a window: the commits that shipped between two dates, grouped by site, each
+     * commit linked. This is what a ":::patchnotes{from=… to=…}" block shows.
+     */
+    async function patchNotesFor(blog, post, from, to) {
+        if (!changelog || !changelog.entries) return [];
+        const rows = await changelog.entries({ limit: 200 }).catch(() => []);
+        const lo = from ? Date.parse(String(from) + 'T00:00:00Z') : null;
+        const hi = to ? Date.parse(String(to) + 'T23:59:59Z') : null;
+        const groups = new Map();
+        for (const e of rows) {
+            const at = Date.parse(e.deployed_at || e.committed_at || '');
+            if (!Number.isFinite(at)) continue;
+            if (lo !== null && at < lo) continue;
+            if (hi !== null && at > hi) continue;
+            if (!groups.has(e.service)) groups.set(e.service, []);
+            groups.get(e.service).push({ sha: e.short, url: e.url, title: e.subject });
+        }
+        return [...groups.entries()].map(([site, commits]) => ({ site, commits }));
+    }
+
     /** Render one post (also used by the editor's preview with a chosen revision). */
     async function renderPost(req, res, { blog, post, rev, preview = false, status = 200 }) {
         const decision = preview ? await publication.decide(blog, post, rev, { state: 'draft' }) : await publication.decide(blog, post, rev);
@@ -352,6 +375,11 @@ function createPublicRoutes(ctx) {
         const crumbs = [blogCrumb(blog), ...(firstCategory ? (await store.taxonomy.ancestors(firstCategory.id)).map((t) => ({ name: t.name, url: reading.urls.category(blog, t) })) : []), { name: rev.fields.title }];
         const comments = preview ? null : await commentsFor(req, blog, post, rev);
         const cacheable = !preview && post.state === 'published' && post.visibility === 'public';
+        // The sections and the hero art of the body: the contents rail, the JSON-LD parts and the
+        // picture a reader sees when the post is shared.
+        const bodySections = blockRender.sectionsOf(blockRender.bodyBlocks(rev.content));
+        const bodyHero = blockRender.heroOf(blockRender.bodyBlocks(rev.content));
+        const bodyHeroArt = bodyHero && bodyHero.attrs && typeof bodyHero.attrs.art === 'string' ? bodyHero.attrs.art : null;
         const csrf = req.viewer.kind === 'user' ? csrfToken(config, req.viewer) : '';
         send(req, res, status, {
             title: rev.fields.title,
@@ -361,13 +389,13 @@ function createPublicRoutes(ctx) {
             canonical: publication.postUrl(blog, post),
             type: 'article',
             author: person.known ? person.name : undefined,
-            image: (attachments.find((a) => a.role === 'cover' && !a.broken) || null) && media.urlFor(attachments.find((a) => a.role === 'cover' && !a.broken).mediaId),
+            image: bodyHeroArt ? media.urlFor(bodyHeroArt) : ((attachments.find((a) => a.role === 'cover' && !a.broken) || null) && media.urlFor(attachments.find((a) => a.role === 'cover' && !a.broken).mediaId)),
             published: post.first_published_at ? new Date(post.first_published_at).toISOString() : null,
             modified: post.published_revision ? rev.createdAt : null,
             feeds: await reading.feedsOf(blog),
             theme: { slug: blog.theme, vars: blogs.themeVars(blog) },
             lang: blog.language,
-            jsonLd: preview ? [] : [reading.postJsonLd({ blog, post, rev, person, tags, citations, attachments }), seo.structuredData.breadcrumbs(crumbs.map((c) => ({ name: c.name, url: c.url ? publication.abs(c.url) : publication.postUrl(blog, post) })))],
+            jsonLd: preview ? [] : [reading.postJsonLd({ blog, post, rev, person, tags, citations, attachments, sections: bodySections, heroArt: bodyHeroArt }), seo.structuredData.breadcrumbs(crumbs.map((c) => ({ name: c.name, url: c.url ? publication.abs(c.url) : publication.postUrl(blog, post) })))],
             body: pages.postPage({
                 blog, blogUrl: publication.blogPath(blog), post, rev,
                 author: { name: person.name, url: reading.urls.author(person, blog) },
@@ -378,6 +406,19 @@ function createPublicRoutes(ctx) {
                 urlFor: media.urlFor, shareUrl: publication.postUrl(blog, post), breadcrumbs: crumbs, jsonUrl: `${path}.json`,
                 postPath: path, csrf, signedIn: req.viewer.kind === 'user' && Boolean(req.viewer.subject),
                 loginUrl: `/auth/login?next=${encodeURIComponent(path)}`,
+                bodyOptions: {
+                    urlFor: media.urlFor, rel: blog.kind === 'official' ? 'noopener' : 'nofollow ugc noopener',
+                    reactions: await community.sectionReactions(post, req.ov),
+                    reactionAction: path + '/react',
+                    csrf, signedIn: req.viewer.kind === 'user' && Boolean(req.viewer.subject),
+                    loginUrl: `/auth/login?next=${encodeURIComponent(path)}`,
+                    path,
+                    person: async (subject) => {
+                        const p = await people.one(subject);
+                        return p.known ? { name: p.name, url: reading.urls.author(p, blog) } : null;
+                    },
+                    patchNotes: async (from, to) => await patchNotesFor(blog, post, from, to),
+                },
             }),
             styles: ['kit.css'],
         }, { cacheable });
@@ -464,6 +505,26 @@ function createPublicRoutes(ctx) {
             return res.json(await reading.postJson({ blog, post, rev, person: await people.one(post.author_subject), decision }));
         }
         return await renderPost(req, res, { blog, post, rev });
+    }));
+
+    // A reader's reaction to one section of a post (👍 or 👎). The form posts without script: it
+    // lands here, the counts go to Community, and the reader is back on the page.
+    router.post('/@:handle/:slug/react', express.urlencoded({ extended: false, limit: '4kb' }), wrap(async (req, res) => {
+        const blog = await activeBlog(req);
+        if (!blog) return notFound(req, res);
+        const post = await posts.bySlug(blog, req.params.slug);
+        if (!post || post.state !== 'published' || post.visibility !== 'public') return notFound(req, res);
+        if (req.viewer.kind !== 'user' || !req.viewer.subject) return res.redirect(303, `/auth/login?next=${encodeURIComponent(publication.postPath(blog, post))}`);
+        if (!checkCsrf(config, req.viewer, req.body && req.body._csrf)) return messagePage(req, res, 403, 'Form expired', 'Reload the page and try again.');
+        const section = String((req.body && req.body.section) || '').trim();
+        const value = String((req.body && req.body.reaction) || '').trim().toLowerCase() === 'up' ? 1 : -1;
+        if (!/^[a-z0-9][a-z0-9-]{0,63}$/.test(section)) return messagePage(req, res, 400, 'Unknown section', 'That is not a section of this post.');
+        try {
+            await community.reactToSection(post, null, req.viewer.subject, section, value, req.ov);
+        } catch (err) {
+            return messagePage(req, res, err.status === 429 ? 429 : 502, 'Reaction not recorded', `OpenVibe.Community did not accept the reaction: ${err.message}`);
+        }
+        return res.redirect(303, `${publication.postPath(blog, post)}#${encodeURIComponent(section)}`);
     }));
 
     // Per-actor limit (http/actor-limits.js) before the form is read: the comment goes to Community in

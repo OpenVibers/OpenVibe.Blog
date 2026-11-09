@@ -119,7 +119,7 @@ async function startCommunity({ network }) {
             const key = `${ref.service}:${ref.type}:${ref.id}`;
             if (byRef.has(key)) return json(200, { thread: { id: byRef.get(key), visibility: threads.get(byRef.get(key)).visibility }, created: false });
             const id = ++seq;
-            threads.set(id, { ref, visibility: 'public', comments: [] });
+            threads.set(id, { ref, visibility: 'public', comments: [], reactions: {} });
             byRef.set(key, id);
             return json(201, { thread: { id, visibility: 'public' }, created: true });
         }
@@ -139,6 +139,37 @@ async function startCommunity({ network }) {
             const comment = { id: t.comments.length + 1, origin: 'user', display_name: who ? who.display_name : 'Someone', message: body.message, deleted: false, created_at: new Date().toISOString() };
             t.comments.push(comment);
             return json(201, { comment });
+        }
+        m = req.url.match(/^\/api\/v1\/comments\/threads\/(\d+)\/section-reactions$/);
+        if (m && req.method === 'GET') {
+            const t = threads.get(Number(m[1]));
+            if (!t || t.visibility === 'hidden') return json(404, { code: 'thread.not_found' });
+            const sections = {};
+            for (const [key, r] of Object.entries(t.reactions)) {
+                const id = key.split(':')[0];
+                const s = sections[id] || (sections[id] = { up: 0, down: 0, mine: 0 });
+                if (r.value === 1) s.up++; else s.down++;
+            }
+            return json(200, { thread_id: Number(m[1]), sections });
+        }
+        if (m && req.method === 'POST') {
+            const c = auth();
+            if (!c || !(c.cap || []).includes('community.comment.write')) return json(403, { code: 'capability.denied' });
+            const t = threads.get(Number(m[1]));
+            if (!t) return json(404, { code: 'thread.not_found' });
+            const body = JSON.parse(raw);
+            const who = network.directory.get(req.headers['x-ov-subject']);
+            const key = `${body.section_id}:${who ? who.subject_id : 'anon'}`;
+            if (body.value === 0) delete t.reactions[key];
+            else t.reactions[key] = { value: body.value };
+            const sections = {};
+            for (const [key, r] of Object.entries(t.reactions)) {
+                const id = key.split(':')[0];
+                const s = sections[id] || (sections[id] = { up: 0, down: 0 });
+                if (r.value === 1) s.up++; else s.down++;
+            }
+            const out = sections[body.section_id] || { up: 0, down: 0 };
+            return json(200, { section_id: body.section_id, value: body.value, upvotes: out.up, downvotes: out.down });
         }
         m = req.url.match(/^\/api\/v1\/comments\/threads\/(\d+)\/visibility$/);
         if (m && req.method === 'PUT') {

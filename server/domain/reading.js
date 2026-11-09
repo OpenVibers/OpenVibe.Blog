@@ -141,9 +141,10 @@ function createReading({ store, blogs, posts: postsApi, publication, people, med
     }
 
     /** BlogPosting JSON-LD from real fields only (missing → omitted). */
-    function postJsonLd({ blog, post, rev, person, tags, citations, attachments }) {
+    function postJsonLd({ blog, post, rev, person, tags, citations, attachments, sections = [], heroArt = null }) {
         const url = publication.postUrl(blog, post);
         const cover = attachments.find((a) => a.role === 'cover' && !a.broken);
+        const art = heroArt || (cover ? cover.mediaId : null);
         return seo.structuredData.article({
             type: 'BlogPosting',
             headline: rev.fields.title,
@@ -153,11 +154,12 @@ function createReading({ store, blogs, posts: postsApi, publication, people, med
             dateModified: post.published_revision ? rev.createdAt : null,
             authors: person && person.known ? [{ name: person.name, url: publication.abs(urls.author(person, blog)) }] : [],
             publisher: blog.kind === 'official' ? { name: 'OpenVibe', url: 'https://openvibe.network' } : null,
-            image: cover ? media.urlFor(cover.mediaId) : null,
+            image: art ? media.urlFor(art) : null,
             keywords: tags.map((t) => t.name),
             inLanguage: blog.language,
             citations: citations.filter((c) => c.url).map((c) => ({ url: c.url, title: c.title })),
             wordCount: ssr.wordCount(ssr.markdownToText(rev.content)),
+            hasPart: sections.map((s) => ({ name: s.name || s.text || s.id, url: `${publication.postUrl(blog, post)}#${s.id}` })),
         });
     }
 

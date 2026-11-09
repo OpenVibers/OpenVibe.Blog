@@ -21,6 +21,7 @@ const { slugify } = require('openvibe-publishing/taxonomy');
 const seo = require('openvibe-publishing/seo');
 const authorship = require('openvibe-publishing/authorship');
 const { isMediaId } = require('openvibe-publishing/media');
+const blocks = require('openvibe-publishing/blocks');
 const { ApiError } = require('../http/errors');
 const { actorRef, canPublish } = require('./publication');
 const reviewKind = require('./review-kind');
@@ -84,6 +85,19 @@ function createPosts({ store, blogs, publication, access, outbox, log = console,
         const b = String(v == null ? '' : v).replace(/\r\n/g, '\n');
         if (b.length > MAX_BODY) throw new ApiError(413, 'post.too_long', `A post is at most ${MAX_BODY} characters`);
         return b;
+    }
+    /**
+     * The body of a post: Markdown, or the blocks of a body. A caller may send either (SDK:
+     * posts.create({ markdown | blocks })); the Markdown is what the post keeps, so blocks are
+     * written back as the Markdown they parse from. The Markdown stays the source of truth.
+     */
+    function bodyOf(input) {
+        if (input.blocks !== undefined && input.blocks !== null) {
+            const md = blocks.serialize(input.blocks);
+            if (md.length > MAX_BODY) throw new ApiError(413, 'post.too_long', `A post is at most ${MAX_BODY} characters`);
+            return md;
+        }
+        return body(input.body !== undefined ? input.body : input.markdown);
     }
     function summary(v) {
         if (v == null) return null;
@@ -261,7 +275,7 @@ function createPosts({ store, blogs, publication, access, outbox, log = console,
             const subject = actingSubject(viewer);
             if (!await access.canWrite(store, viewer, blog, 'create')) throw new ApiError(403, 'blog.forbidden', 'You cannot write on this blog');
             const t = title(input.title);
-            const content = body(input.body);
+            const content = bodyOf(input);
             const vis = visibilityOf(blog, input.visibility, input.entitlementKey ?? input.entitlement_key);
             const rec = authorshipFor(viewer, input, null);
             return await store.tx(async () => {
@@ -308,7 +322,7 @@ function createPosts({ store, blogs, publication, access, outbox, log = console,
                 const head = await store.revisions.head(post.id);
                 let revision = head;
                 let created = false;
-                const contentChange = input.title !== undefined || input.body !== undefined || input.summary !== undefined;
+                const contentChange = input.title !== undefined || input.body !== undefined || input.markdown !== undefined || input.blocks !== undefined || input.summary !== undefined;
                 if (contentChange) {
                     const expected = input.expectedRevision ?? input.expected_revision;
                     if (expected == null || expected === '') throw new ApiError(428, 'revision.expected_required', 'Send expectedRevision (the revision you edited) so concurrent edits are not lost');
@@ -318,7 +332,7 @@ function createPosts({ store, blogs, publication, access, outbox, log = console,
                     };
                     const rec = authorshipFor(viewer, input, publication.authorshipOf(head));
                     const out = await store.revisions.create({
-                        entityId: post.id, expectedRevision: parseInt(expected, 10), content: input.body !== undefined ? body(input.body) : head.content,
+                        entityId: post.id, expectedRevision: parseInt(expected, 10), content: (input.body !== undefined || input.markdown !== undefined || input.blocks !== undefined) ? bodyOf(input) : head.content,
                         fields, meta: { authorship: rec }, author: authorLabel(viewer), message: input.message || null,
                     });
                     revision = out.revision;

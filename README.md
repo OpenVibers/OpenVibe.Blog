@@ -330,7 +330,7 @@ Called elsewhere, as the service principal `blog`: `identity.subject.resolve` an
 
 - **PostgreSQL 18 and Valkey 9** (OpenVibe.Host `roles/data/`, ADR-035): every read and write is async through
   `openvibe-sdk/db`; Valkey holds the per-actor limit counters (optional: without `VALKEY_URL` they count per process).
-- **Packages** (all pinned by release tarball): `openvibe-publishing` v1.4.1 (async PostgreSQL stores: revisions,
+- **Packages** (all pinned by release tarball): `openvibe-publishing` v1.6.0 (async PostgreSQL stores: revisions,
   schedule, taxonomy, citations, media, discussion, seo, authorship, index-hooks, ssr, layout), `openvibe-contracts`
   v0.97.0, `openvibe-shared` v4.161.0 (Frame, app icon, footer, legal, release, metrics, ready, theme presets),
   `openvibe-sdk` v0.94.0 (sso, db, PostgreSQL events outbox, service tokens, per-actor limits, testing).
@@ -544,5 +544,5 @@ Part of the [OpenVibe network](https://openvibe.network). Built in the open by [
 - openvibe-contracts: v0.338.0
 - openvibe-sdk: v0.94.0
 - openvibe-shared: v4.161.0
-- openvibe-publishing: v1.4.1
+- openvibe-publishing: v1.6.0
 <!-- versions:end -->

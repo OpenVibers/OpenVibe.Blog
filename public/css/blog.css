@@ -251,3 +251,69 @@ body.post-page .page { max-width: 1160px; }
   .bl-fold-block > summary + * { margin-top: 0 !important; padding-top: 4px !important; }
   .bl-fold-block[open] { padding-bottom: 12px; }
 }
+
+/* ── Rich blocks (stage B1): the blocks of a body, server-rendered. Every block has a plain-HTML form,
+   so a reader without JavaScript sees the same thing. A section is a block: a big heading, a byline and
+   the reader's own read on it (👍 or 👎) at the end. The contents rail stands beside the text on a
+   computer; on a phone the sections are a row of chips under the title. */
+.post-header { margin-bottom: 4px; }
+.post-title { font-size: clamp(1.9rem, 1.35rem + 2.2vw, 3rem); line-height: 1.12; letter-spacing: -.02em; margin: 0 0 10px; }
+.post-teaser { margin: 0 0 10px; max-width: 62ch; color: var(--text-secondary, #96a7c2); font-size: 1.12rem; line-height: 1.5; }
+.post-hero-art { margin: 18px 0 4px; }
+.post-hero-art img { display: block; width: 100%; height: auto; border-radius: 16px; }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0 0; }
+.chip { display: inline-flex; align-items: center; min-height: 32px; padding: 3px 12px; border: 1px solid var(--border, #1f2d47); border-radius: 999px; color: var(--text-secondary, #96a7c2); font-size: .86rem; text-decoration: none; }
+.chip:hover { color: var(--text-primary); border-color: var(--accent, #3b82f6); }
+.chip-cat { background: var(--bg-card, #131c2e); color: var(--text-primary); }
+
+/* A section: the heading is big, the byline says who wrote it, and the reactions sit at its end. */
+.ov-section { margin: 34px 0; scroll-margin-top: calc(var(--ovnav-real-h, 56px) + 16px); }
+.ov-section > h2 { font-size: clamp(1.5rem, 1.2rem + 1.1vw, 2rem); line-height: 1.2; letter-spacing: -.015em; margin: 0 0 6px; }
+.ov-section > h2:target { color: var(--accent, #3b82f6); }
+.ov-section-by { margin: 0 0 14px; color: var(--text-muted, #7386a3); font-size: .9rem; }
+.ov-section-by a { color: var(--text-secondary, #96a7c2); }
+.ov-hero { margin: 0 0 6px; }
+.ov-hero .ov-kicker { margin: 0; color: var(--accent, #3b82f6); font-size: .86rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
+.ov-hero-date { margin: 2px 0 0; color: var(--text-muted, #7386a3); font-size: .86rem; }
+
+/* The reader's read on a section: a form that posts (it works without script) and the counts in place. */
+.ov-reactions { display: flex; align-items: center; gap: 8px; margin: 18px 0 0; }
+.ov-reactions button { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; padding: 0 14px; border: 1px solid var(--border, #1f2d47); border-radius: 999px; background: var(--bg-card, #131c2e); color: var(--text-primary); font-size: .95rem; cursor: pointer; }
+.ov-reactions button:hover { border-color: var(--accent, #3b82f6); }
+.ov-react-count { color: var(--text-secondary, #96a7c2); font-variant-numeric: tabular-nums; }
+.ov-react-signin { min-height: 44px; display: inline-flex; align-items: center; color: var(--text-secondary, #96a7c2); font-size: .92rem; }
+
+/* The other blocks: a callout, a stat, a quote, a compare, a gallery, a patch-notes fold, a timeline, an infobox. */
+.ov-callout { margin: 26px 0; padding: 16px 18px; border-left: 4px solid var(--accent, #3b82f6); border-radius: 10px; background: var(--bg-card, #131c2e); }
+.ov-callout-warn { border-left-color: #f59e0b; }
+.ov-callout-tip { border-left-color: #22c55e; }
+.ov-callout-title { margin: 0 0 6px; font-weight: 700; }
+.ov-stat { display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px; margin: 26px 0; }
+.ov-stat-value { font-size: 2.2rem; font-weight: 800; letter-spacing: -.02em; }
+.ov-stat-label { color: var(--text-secondary, #96a7c2); font-size: 1.05rem; }
+.ov-quote { margin: 26px 0; padding: 4px 0 4px 18px; border-left: 3px solid var(--border, #1f2d47); }
+.ov-quote-by { margin: 8px 0 0; color: var(--text-muted, #7386a3); font-size: .9rem; }
+.ov-compare { margin: 26px 0; }
+.ov-compare-pair { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr)); gap: 14px; }
+.ov-gallery { margin: 26px 0; }
+.ov-gallery-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr)); gap: 12px; }
+.ov-media-credit { display: block; margin-top: 6px; color: var(--text-muted, #7386a3); font-size: .82rem; }
+.ov-patchnotes { margin: 26px 0; border: 1px solid var(--border, #1f2d47); border-radius: 12px; background: var(--bg-card, #131c2e); }
+.ov-patchnotes > summary { display: flex; align-items: center; min-height: 46px; padding: 0 14px; font-weight: 700; cursor: pointer; list-style: none; }
+.ov-patchnotes > summary::-webkit-details-marker { display: none; }
+.ov-patchnotes-site { padding: 0 14px 10px; }
+.ov-patchnotes-site h3 { margin: 12px 0 4px; font-size: 1rem; }
+.ov-patchnotes-site ul { margin: 0; padding-left: 20px; }
+.ov-infobox, .ov-timeline { margin: 26px 0; padding: 16px 18px; border: 1px solid var(--border, #1f2d47); border-radius: 12px; background: var(--bg-card, #131c2e); }
+.ov-infobox dl { margin: 0; }
+.ov-infobox-row { display: flex; gap: 10px; padding: 4px 0; border-top: 1px solid var(--border, #1f2d47); }
+.ov-infobox-key { color: var(--text-muted, #7386a3); }
+.ov-infobox-value { margin: 0; }
+.ov-timeline ol { margin: 0; padding-left: 20px; }
+.ov-timeline-when { color: var(--text-muted, #7386a3); font-variant-numeric: tabular-nums; }
+.ov-timeline-text { margin-left: 8px; }
+
+/* The contents: a rail beside the text on a computer, a row of chips under the title on a phone. */
+.toc-chips { display: flex; gap: 8px; overflow-x: auto; margin: 14px 0 4px; padding-bottom: 4px; scrollbar-width: thin; }
+.toc-chip { flex: none; display: inline-flex; align-items: center; min-height: 40px; padding: 0 12px; border: 1px solid var(--border, #1f2d47); border-radius: 999px; color: var(--text-secondary, #96a7c2); font-size: .88rem; text-decoration: none; white-space: nowrap; }
+@media (min-width: 1100px) { .toc-chips { display: none; } }

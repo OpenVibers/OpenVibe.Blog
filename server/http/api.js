@@ -36,6 +36,7 @@ const cache = require('openvibe-shared/cache-policy');
 const { run, jsonBody, ApiError, privateNoStore } = require('./errors');
 const { guard } = require('../auth/viewer');
 const { checkCapability, CAPABILITIES } = require('../auth/capabilities');
+const blockRender = require('../render/blocks');
 
 function cors(origins) {
     const allowed = new Set(origins);
@@ -113,6 +114,9 @@ function createApi(ctx) {
             const rec = publication.authorshipOf(rev);
             Object.assign(out, {
                 entitlement_key: post.entitlement_key, body: rev ? rev.content : null,
+                // The blocks of the body, next to the Markdown: the Markdown stays the source of truth,
+                // and a caller that wants the blocks (an editor, an agent, another product) reads them here.
+                blocks: rev ? blockRender.bodyBlocks(rev.content) : null,
                 authorship: rec, review: rev ? await publication.reviewOf(post, rev) : null,
                 scheduled: await posts.pendingJobs(post), attachments: await posts.attachments(post),
                 citations: rev ? await posts.citations(post, rev.number) : [],
@@ -245,11 +249,21 @@ function createApi(ctx) {
 
     router.get('/posts/:id', guard('blog.post.read'), run(async (req) => {
         const { post, blog } = await mustPost(req);
-        if (await access.canWrite(store, req.viewer, blog, 'edit', post) || access.isStaff(req.viewer)) return { post: await postDto(post, { full: true }) };
+        // ?format=blocks: the blocks of the body, parsed. The Markdown is the source of truth, so the
+        // blocks are what it says — never a second copy of the truth.
+        const asBlocks = String((req.query && req.query.format) || '').toLowerCase() === 'blocks';
+        if (await access.canWrite(store, req.viewer, blog, 'edit', post) || access.isStaff(req.viewer)) {
+            const dto = await postDto(post, { full: true });
+            return asBlocks ? { post: dto, blocks: dto.blocks } : { post: dto };
+        }
         const d = await access.canReadPost(store, req.viewer, blog, post, entitlements, ctx.sharing);
         // Members only: the teaser (title, the author's summary) and the join link, never the body.
         if (!d.allowed && d.status === 403) throw new ApiError(403, 'post.members_only', 'Members only', { teaser: await reading.teaser(blog, post, { reason: d.vip || null }) });
         if (!d.allowed) throw new ApiError(d.status, 'post.not_found', 'No such post');
+        if (asBlocks) {
+            const rev = await posts.revision(post, post.published_revision);
+            return { blocks: rev ? blockRender.bodyBlocks(rev.content) : null };
+        }
         return { post: await postDto(post) };
     }));
 
