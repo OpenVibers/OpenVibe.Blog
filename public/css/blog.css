@@ -54,7 +54,6 @@ table.posts th, table.posts td { text-align: left; padding: 6px 8px; border-bott
 .ov-diff ins { background: rgba(34,197,94,.25); text-decoration: none; }
 .ov-diff del { background: rgba(239,68,68,.25); }
 .ov-diff { white-space: pre-wrap; }
-@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
 @media (max-width: 600px) { h1 { font-size: 1.7rem; } body { font-size: 16px; } }
 
 /* The home's showcase sections (openvibe-shared/showcase.css) sit inside the reading column, which has its own gutter. */
