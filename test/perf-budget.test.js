@@ -19,7 +19,7 @@ const BUDGETS = {
     htmlRawKB: 43.3, // 43.3: measured 41.3 with openvibe-shared 4.161.0, plus room for 4.162.0–4.163.0, 2026-11-09
     htmlBrotliKB: 10,   // 9.2 with the short home (2026-10-30: the pick blocks' chips and the folds' scripts); 8.2 (2026-10-22 the richer home); 4.5
     jsFiles: 5,   // 5 (theme-loader, web-runtime, navbar, footer, boost: openvibe-shared/shell adds web-runtime, 2026-10-04)
-    jsRawKB: 375.1, // 375.1: measured 367.1 with openvibe-shared 4.161.0, plus room for 4.162.0–4.163.0, 2026-11-09
+    jsRawKB: 375.4, // 375.4: measured 375.3 with Shared 4.184.0; server-nav hydration marker and atomic replacement, 2026-11-10
     jsBrotliKB: 89.5, // 89.5: measured 87.5 with openvibe-shared 4.163.0, plus room for 4.162.0–4.163.0, 2026-11-09
     cssFiles: 2,   // 1
     cssRawKB: 54.5, // 54.5: measured 49.5 with openvibe-shared 4.161.0, plus room for 4.162.0–4.163.0, 2026-11-09

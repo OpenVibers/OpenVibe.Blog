@@ -2,7 +2,7 @@
 /**
  * The page shell (server/render/layout.js): the document is openvibe-publishing/layout's
  * (openvibe-shared/shell page()): one title, the canonical and robots from the gate's decision, the
- * JSON-LD, the feeds, the blog stylesheet, the Frame (navbar mount, noscript navigation, the
+ * JSON-LD, the feeds, the blog stylesheet, the Frame (server navbar mount, the
  * server-rendered footer and its init), and a blog's theme preset on its content surface only.
  */
 const assert = require('assert');
@@ -48,8 +48,9 @@ const split = (html) => ({ head: html.slice(0, html.indexOf('</head>')), body: h
         assert.ok(head.includes('<link rel="alternate" type="application/feed+json" href="/@eve/feed.json" title="Eve notes (JSON Feed)">'), 'JSON feed link');
         assert.ok(/<link rel="stylesheet" href="\/css\/blog\.css\?v=[0-9a-f]+">/.test(head), 'the blog stylesheet');
         assert.ok(/<meta name="ov-boost" content="blog@[^"]+">/.test(head), 'the boost marker');
-        assert.ok(body.includes('<div id="navbar-mount"></div>'), 'the navbar mount');
-        assert.ok(body.includes('<nav aria-label="Site"'), 'the noscript navigation');
+        assert.ok(body.includes('<div id="navbar-mount"><nav class="openvibe-navbar" aria-label="Site"'), 'the server navbar mount');
+        assert.ok(body.includes('data-ov-nav-link="true" href="/desks">AI desks</a>'), 'the blog places are in server HTML');
+        assert.ok(body.includes('data-ov-nav-link="true" href="/write">Write</a>'), 'the writer link is in server HTML');
         assert.ok(body.includes('id="ov-footer"'), 'the server-rendered footer');
         assert.ok(body.includes('OpenVibeFooter.init(window.__OV_PAGE.footer)'), 'the footer is initialised');
         assert.ok(/<main id="main" class="page blog-surface" style="--[^"]+" data-blog-theme="paper">/.test(body), 'the theme preset stays on the content surface');
