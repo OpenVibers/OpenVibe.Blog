@@ -95,7 +95,10 @@ function createChangelogTagger({ config, fetchImpl = globalThis.fetch, log = con
         };
         const idempotency = crypto.createHash('sha256').update(input.entries.map((e) => `${e.service}:${e.id}`).join(',')).digest('hex');
         const answer = await run({
-            task: 'blog.changelog.tag', input,
+            // AI authorizes the workflow namespace before it can resolve the named task.
+            // Keep both fields: task selects the owner-chosen task configuration; workflow
+            // supplies the namespace-checked workflow key.
+            task: 'blog.changelog.tag', workflow: 'blog.changelog.tag', input,
             target: { service: 'blog', type: 'changelog', id: 'network' },
             idempotency_key: `changelog-tags:${idempotency}`,
         });

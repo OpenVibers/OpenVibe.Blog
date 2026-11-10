@@ -108,6 +108,7 @@ const { tagsFrom, parseLoose, createChangelogTagger } = require('../server/chang
         assert.strictEqual(tagger.enabled, true);
         const answer = await tagger.tag([{ id: 7, service: 'live', subject: 'Add a calmer chat (#9)', repo: 'OpenVibers/OpenVibe.Live' }]);
         assert.strictEqual(seen.run.body.task, 'blog.changelog.tag');
+        assert.strictEqual(seen.run.body.workflow, 'blog.changelog.tag', 'the AI API checks the workflow namespace before resolving the task');
         assert.strictEqual(seen.run.body.target.service, 'blog');
         assert.deepStrictEqual(seen.run.body.input.entries, [{ id: '7', service: 'live', subject: 'Add a calmer chat (#9)', repo: 'OpenVibers/OpenVibe.Live' }]);
         assert.match(seen.token, /audience=openvibe\.ai/);
