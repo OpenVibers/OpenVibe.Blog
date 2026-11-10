@@ -6,7 +6,7 @@
  *   - a "/" menu: type "/" at the start of a line, or press the toolbar button;
  *   - a form per block, with a live preview rendered by the server's own renderer (/write/preview);
  *   - drag to reorder the top-level blocks in the outline;
- *   - picture search, straight from Openverse and Wikimedia Commons (their APIs, their licences);
+ *   - picture search through the shared image task (Commons and Openverse, stored in Media);
  *   - "Make an image", the image task through OpenVibe.AI (/write/make-image).
  *
  * Blocks are the Markdown directives openvibe-publishing/blocks parses; the textarea stays the source
@@ -26,6 +26,7 @@
     var POST = root.getAttribute('data-post') || '';
     var PREVIEW = root.getAttribute('data-preview') || '/write/preview';
     var IMAGE = root.getAttribute('data-image') || '/write/make-image';
+    var FIND = root.getAttribute('data-find') || '/write/find-images';
 
     var BLOCKS = [
         { type: 'hero', label: 'Hero banner', hint: 'The post’s title art, kicker and teaser, as a banner at the top.', body: true, bodyDefault: '# Name of the update\nOne or two sentences that say what this is, and why it matters.', fields: [{ n: 'art', l: 'Art (Media id med_…)', ph: 'med_…' }, { n: 'kicker', l: 'Kicker', ph: 'Devblog' }, { n: 'date', l: 'Date', type: 'date' }] },
@@ -181,10 +182,10 @@
         redraw();
     }
 
-    // ── Picture search: Openverse and Commons, straight from the browser ──
+    // ── Picture search: the shared image task, through Blog and OpenVibe.AI ──
     function showSearch() {
         openPanel('<div class="ov-editor-card"><div class="ov-editor-cardhead"><h3>Find a picture</h3><button type="button" class="ov-editor-x" data-ov-close aria-label="Close">×</button></div>'
-            + '<p class="meta">Openverse and Wikimedia Commons, in their own licences. A picture found here is inserted as a linked image with its credit; a block figure needs a Media object, attached in the Media panel above.</p>'
+            + '<p class="meta">Wikimedia Commons and Openverse, found through OpenVibe.AI and stored in OpenVibe.Media with their licence and author. A picture found here is inserted as a figure that names its Media object.</p>'
             + '<div class="ov-editor-form ov-editor-search" data-ov-searchform><label>Search<input type="search" name="q" placeholder="a channel, a workbench, a town…"></label><div class="ov-editor-actions"><button type="button" data-ov-searchgo>Search</button></div></div>'
             + '<p class="meta" data-ov-status aria-live="polite"></p><ul class="ov-editor-results" data-ov-results></ul></div>');
         panel.querySelector('[data-ov-close]').addEventListener('click', closePanel);
@@ -194,61 +195,36 @@
         var search = function () {
             var q = form.querySelector('input[name=q]').value;
             if (!q) return;
-            status.textContent = 'Searching Openverse and Commons…';
+            status.textContent = 'Searching Commons and Openverse…';
             results.innerHTML = '';
-            Promise.allSettled([openverse(q), commons(q)]).then(function (out) {
-                var items = [];
-                out.forEach(function (r) { if (r.status === 'fulfilled') items = items.concat(r.value); else if (!items.length) status.textContent = 'One source could not be reached: ' + (r.reason && r.reason.message || 'no answer') + '.'; });
-                status.textContent = items.length ? items.length + ' pictures' : 'No pictures found.';
-                results.innerHTML = items.map(function (p, i) {
-                    return '<li><img src="' + esc(p.thumb) + '" alt="" loading="lazy" decoding="async"><div><b>' + esc(p.title || 'Untitled') + '</b><span class="meta">' + esc([p.author, p.licence, p.source].filter(Boolean).join(' · ')) + '</span></div><button type="button" data-ov-pick="' + i + '">Insert</button></li>';
-                }).join('');
-                results.querySelectorAll('[data-ov-pick]').forEach(function (b) {
-                    b.addEventListener('click', function () {
-                        var p = items[Number(b.getAttribute('data-ov-pick'))];
-                        var alt = (p.title || 'Picture').replace(/\s+/g, ' ').slice(0, 200);
-                        insertBlock('![' + alt.replace(/[[\]]/g, '') + '](' + p.url + ')\n*Picture: ' + [p.author, p.licence, p.source].filter(Boolean).join(' · ') + '*');
-                        closePanel();
+            var body = new URLSearchParams({ _csrf: CSRF, q: q });
+            fetch(FIND, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: body.toString() })
+                .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
+                .then(function (x) {
+                    if (!x.ok) { status.textContent = x.d && (x.d.detail || x.d.message) || 'The image task is not available here.'; return; }
+                    var items = (x.d && x.d.items) || [];
+                    status.textContent = items.length ? items.length + ' pictures' : (x.d && x.d.note) || 'No pictures found.';
+                    results.innerHTML = items.map(function (p, i) {
+                        return '<li><img src="' + esc(p.url) + '" alt="" loading="lazy" decoding="async"><div><b>' + esc(p.title || 'Untitled') + '</b><span class="meta">' + esc([p.author, p.license].filter(Boolean).join(' · ')) + '</span></div><button type="button" data-ov-pick="' + i + '">Insert</button></li>';
+                    }).join('');
+                    results.querySelectorAll('[data-ov-pick]').forEach(function (b) {
+                        b.addEventListener('click', function () {
+                            var p = items[Number(b.getAttribute('data-ov-pick'))];
+                            var alt = (p.alt || p.title || 'Picture').replace(/\s+/g, ' ').slice(0, 200);
+                            var credit = p.credit || [p.author, p.license].filter(Boolean).join(', ');
+                            if (p.mediaId) {
+                                insertBlock(':::figure{src="' + p.mediaId + '" alt="' + alt.replace(/"/g, '\\"') + '"' + (p.caption ? ' caption="' + String(p.caption).replace(/"/g, '\\"') + '"' : '') + (credit ? ' credit="' + credit.replace(/"/g, '\\"') + '"' : '') + '}:::');
+                            } else {
+                                insertBlock('![' + alt.replace(/[[\]]/g, '') + '](' + p.url + ')\n*Picture: ' + credit + '*');
+                            }
+                            closePanel();
+                        });
                     });
-                });
-            });
+                })
+                .catch(function () { status.textContent = 'The image task could not be reached.'; });
         };
         panel.querySelector('[data-ov-searchgo]').addEventListener('click', search);
         form.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); search(); } });
-    }
-
-    function openverse(q) {
-        return fetch('https://api.openverse.org/v1/images/?q=' + encodeURIComponent(q) + '&page_size=12', { headers: { Accept: 'application/json' } })
-            .then(function (r) { if (!r.ok) throw new Error('Openverse answered ' + r.status); return r.json(); })
-            .then(function (d) {
-                return (d.results || []).map(function (x) {
-                    return {
-                        url: x.url, thumb: x.thumbnail || x.url, title: x.title,
-                        author: x.creator, licence: [x.license, x.license_version].filter(Boolean).join(' ').toUpperCase(),
-                        source: 'Openverse',
-                    };
-                });
-            });
-    }
-
-    function commons(q) {
-        var api = 'https://commons.wikimedia.org/w/api.php?action=query&format=json&origin=*&generator=search&gsrnamespace=6&gsrlimit=12'
-            + '&gsrsearch=' + encodeURIComponent(q) + '&prop=imageinfo&iiprop=url%7Cextmetadata&iiurlwidth=480';
-        return fetch(api, { headers: { Accept: 'application/json' } })
-            .then(function (r) { if (!r.ok) throw new Error('Commons answered ' + r.status); return r.json(); })
-            .then(function (d) {
-                var pages = (d.query && d.query.pages) || {};
-                return Object.keys(pages).map(function (k) {
-                    var p = pages[k];
-                    var info = (p.imageinfo && p.imageinfo[0]) || {};
-                    var meta = info.extmetadata || {};
-                    var clean = function (v) { return v && v.value ? String(v.value).replace(/<[^>]*>/g, '').trim() : null; };
-                    return {
-                        url: info.url, thumb: info.thumburl || info.url, title: (p.title || '').replace(/^File:/, ''),
-                        author: clean(meta.Artist), licence: clean(meta.LicenseShortName), source: 'Wikimedia Commons',
-                    };
-                });
-            });
     }
 
     // ── Make an image ───────────────────────────────────────
@@ -273,14 +249,17 @@
                 .then(function (x) {
                     if (!x.ok) { status.textContent = x.d && (x.d.detail || x.d.message) || 'The image task is not available here.'; return; }
                     var alt = (x.d.alt || 'Illustration').replace(/\s+/g, ' ').slice(0, 200);
+                    if (x.d.dryRun) { status.textContent = 'This would make ' + (x.d.estimate ? x.d.estimate.images : 1) + ' image with ' + (x.d.estimate ? x.d.estimate.model : 'the model') + ', about $' + (x.d.estimate ? x.d.estimate.price_usd : '?') + '.'; return; }
                     if (x.d.mediaId) {
-                        insertBlock(':::figure{src="' + x.d.mediaId + '" alt="' + alt.replace(/"/g, '\\"') + '" credit="Made with ' + String(x.d.model || 'AI').replace(/"/g, '') + '"}:::');
-                        status.textContent = 'Inserted as a figure. Attach ' + x.d.mediaId + ' in the Media panel so it renders.';
+                        var credit = String(x.d.credit || ('Made with AI (' + String(x.d.model || 'AI') + ')')).replace(/"/g, '');
+                        var caption = String(x.d.caption || '').replace(/"/g, '\\"');
+                        insertBlock(':::figure{src="' + x.d.mediaId + '" alt="' + alt.replace(/"/g, '\\"') + '"' + (caption ? ' caption="' + caption + '"' : '') + ' credit="' + credit + '"}:::');
+                        status.textContent = 'Inserted as a figure, made in OpenVibe.Media.';
                         closePanel();
                     } else if (x.d.url) {
                         made.innerHTML = '<img src="' + esc(x.d.url) + '" alt="">';
                         status.textContent = 'Inserting the picture as a linked image…';
-                        insertBlock('![' + alt.replace(/[[\]]/g, '') + '](' + x.d.url + ')\n*Made with ' + String(x.d.model || 'AI') + '*');
+                        insertBlock('![' + alt.replace(/[[\]]/g, '') + '](' + x.d.url + ')\n*' + String(x.d.credit || 'Made with AI') + '*');
                         closePanel();
                     } else {
                         status.textContent = 'The run answered without a picture.';
