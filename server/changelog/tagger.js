@@ -80,7 +80,7 @@ function createChangelogTagger({ config, fetchImpl = globalThis.fetch, log = con
         if (!run || !['succeeded', 'cached'].includes(run.status)) {
             throw Object.assign(new Error(`run ${run && run.id} ${run && run.status}`), { status: 502 });
         }
-        return { output: run.output || {}, workflow: run.workflow || null, runId: run.id };
+        return { output: run.output || {}, workflow: run.workflow || null, runId: run.id, synthetic: Boolean(run.synthetic) };
     }
 
     /**
@@ -103,6 +103,10 @@ function createChangelogTagger({ config, fetchImpl = globalThis.fetch, log = con
             idempotency_key: `changelog-tags:${idempotency}`,
         });
         const out = new Map();
+        if (answer.synthetic) {
+            log.warn && log.warn('[changelog] AI returned synthetic output; use subject fallback');
+            return out;
+        }
         for (const t of tagsFrom(answer.output)) {
             const safe = normalizeTag(t);
             if (safe && input.entries.some((e) => e.id === String(t.id))) out.set(String(t.id), safe);

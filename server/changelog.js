@@ -154,20 +154,20 @@ function createChangelog({ config, store, blogs, posts, reading = null, tagger =
      * hundreds of commits per site): the backfill tags it.
      */
     async function tagPending(list) {
-        if (!list.length || !tagger || !tagger.enabled) return 0;
+        if (!list.length) return 0;
         let n = 0;
         for (let i = 0; i < list.length; i += TAG_BATCH) {
             const chunk = list.slice(i, i + TAG_BATCH);
+            let answer = new Map();
             try {
-                const answer = await tagger.tag(chunk);
-                for (const e of chunk) {
-                    const t = answer.get(String(e.id));
-                    if (!t) continue;
-                    n += (await q.tag.run(t.kind, t.areas, t.plain, nowMs(), 'ai', e.id)).changes;
-                }
+                if (tagger && tagger.enabled) answer = await tagger.tag(chunk);
             } catch (err) {
                 stats.lastError = `tag: ${err.message}`;
-                log.warn && log.warn(`[changelog] ${list.length} entries left untagged: ${err.message}`);
+                log.warn && log.warn(`[changelog] ${list.length} entries using subject fallbacks: ${err.message}`);
+            }
+            for (const e of chunk) {
+                const t = answer.get(String(e.id)) || tags.fallbackTag(e.subject);
+                n += (await q.tag.run(t.kind, t.areas, t.plain, nowMs(), answer.has(String(e.id)) ? 'ai' : 'subject-fallback', e.id)).changes;
             }
         }
         stats.tagged += n;

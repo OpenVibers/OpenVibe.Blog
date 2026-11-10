@@ -64,6 +64,7 @@ const { tagsFrom, parseLoose, createChangelogTagger } = require('../server/chang
         for (const subject of ['Add a watch page', 'feat: Add project sharing', 'Introduce saved searches']) assert.strictEqual(tags.initial(subject).kind, 'new', subject);
         for (const subject of ['Fix the player controls', 'fix(chat): stop duplicate messages', 'No longer drops the last frame', 'Keep the image whole']) assert.strictEqual(tags.initial(subject).kind, 'fixed', subject);
         assert.strictEqual(tags.initial('Improve the chat history').kind, null, 'ambiguous improvements are left to the AI task');
+        assert.deepStrictEqual(tags.fallbackTag('Improve the chat history'), { kind: 'better', areas: ['chat'], plain: 'Improve the chat history' }, 'ambiguous or unavailable AI output defaults to Improved');
     });
 
     await check('a model answer is made safe: a known kind, up to three known areas, plain words', async () => {
@@ -116,6 +117,19 @@ const { tagsFrom, parseLoose, createChangelogTagger } = require('../server/chang
         assert.deepStrictEqual(answer.get('7'), { kind: 'new', areas: ['chat', 'video'], plain: 'A calmer chat' });
         assert.strictEqual(answer.has('8'), false, 'an unknown kind is not written');
         assert.strictEqual((await createChangelogTagger({ config: { aiUrl: '', networkInternalUrl: '', oauth: {}, changelog: { tag: true } }, fetchImpl }).tag([{ id: 1 }])).size, 0, 'unconfigured is off');
+    });
+
+    await check('synthetic AI output is discarded so it cannot overwrite changelog subjects', async () => {
+        const json = (body, status = 200) => ({ ok: status < 300, status, json: async () => body });
+        const fetchImpl = async (url, opts = {}) => {
+            if (String(url).includes('/oauth/token')) return await json({ access_token: 'svc', token_type: 'Bearer', expires_in: 300 });
+            if (String(url).includes('/api/v1/runs')) return await json({ run: { id: 'run_synth', status: 'succeeded', synthetic: true, output: { tags: [{ id: '7', kind: 'internal', areas: [], plain: 'synthetic' }] } } }, 201);
+            return await json({}, 404);
+        };
+        const tagger = createChangelogTagger({ config: {
+            aiUrl: 'http://ai.test', networkInternalUrl: 'http://network.test', oauth: { clientId: 'blog', clientSecret: 'shh' }, changelog: { tag: true },
+        }, fetchImpl, log: { warn() {} } });
+        assert.strictEqual((await tagger.tag([{ id: '7', service: 'blog', subject: 'Improve the page' }])).size, 0);
     });
 
     await check('the backfill script is safe by default: it prints what it would do and writes nothing', async () => {

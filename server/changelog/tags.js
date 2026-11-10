@@ -105,6 +105,12 @@ function subjectAreas(subject) {
     return AREA_IDS.filter((id) => new RegExp(`(^|[^a-z0-9])${id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}([^a-z0-9]|$)`).test(s)).slice(0, 3);
 }
 
+/** Useful public kind when the model cannot answer: obvious subjects keep their rule, the rest are Improved. */
+function fallbackTag(subject) {
+    const tag = initial(subject);
+    return { kind: tag.kind || 'better', areas: tag.areas.length ? tag.areas : subjectAreas(subject), plain: tag.plain };
+}
+
 /**
  * What is stored when an entry is first collected: plain words always, and kind internal for
  * housekeeping. `kind: null` means the AI task has not answered yet.
@@ -136,4 +142,4 @@ function vocabulary() {
     return { kinds: [...KINDS], areas: AREAS.map((a) => ({ ...a })) };
 }
 
-module.exports = { KINDS, AREAS, AREA_IDS, AREA_LABELS, vocabulary, isKind, isArea, prOf, plainOf, isHousekeeping, subjectKind, subjectAreas, initial, normalizeTag };
+module.exports = { KINDS, AREAS, AREA_IDS, AREA_LABELS, vocabulary, isKind, isArea, prOf, plainOf, isHousekeeping, subjectKind, subjectAreas, initial, fallbackTag, normalizeTag };
