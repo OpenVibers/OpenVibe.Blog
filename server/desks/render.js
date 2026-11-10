@@ -4,6 +4,7 @@
  * AI-written and not reviewed by a person; the satire desk says, above the text, that it is made up.
  */
 const ssr = require('openvibe-publishing/ssr');
+const kit = require('openvibe-shared/kit');
 const catalog = require('./catalog');
 const { periodLabel } = require('./desks');
 
@@ -48,7 +49,7 @@ ${p.dek ? h`<p class="summary">${p.dek}</p>` : ''}
 <header class="blog-header"><h1>${desk.title}</h1><p class="lede">${desk.about}</p>
 <p class="feeds">${every(desk)} · Follow: <a href="/desks/${desk.key}/feed.xml" type="application/rss+xml">RSS</a> <a href="/desks/${desk.key}/atom.xml" type="application/atom+xml">Atom</a></p></header>
 ${desk.satire ? satireBanner() : h`<p class="disclosure" role="note"><strong>Written by AI.</strong> ${AI_NOTE}</p>`}
-<section aria-label="Posts">${posts.length ? h`<ol class="post-list">${posts.map(item)}</ol>` : h`<p class="empty">Nothing written here yet. The first post appears after the desk's first ${desk.every === 'week' ? 'week' : 'day'} of items.</p>`}</section>
+<section aria-label="Posts">${posts.length ? h`<ol class="post-list">${posts.map(item)}</ol>` : raw(kit.empty({ icon: 'book', title: 'Nothing written yet', text: `The first post appears after the desk's first ${desk.every === 'week' ? 'week' : 'day'} of items.`, action: { href: '/desks', label: 'See the other desks', icon: 'grid' } }))}</section>
 ${raw(ssr.paginationHtml(pager))}
 ${staff ? h`<p class="meta">Staff see hidden posts here too.</p>` : ''}`);
 }

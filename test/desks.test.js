@@ -102,6 +102,14 @@ function stub(handler) {
     let news;
     let satire;
 
+    await check('a desk with no post draws the kit empty state and one button', async () => {
+        const r = await t.get('/desks/news');
+        assert.strictEqual(r.status, 200);
+        assert.match(r.text, /class="ovk-empty"/, 'the kit empty state is used, not a bare sentence');
+        assert.match(r.text, /Nothing written yet/);
+        assert.match(r.text, /class="ovk-btn[^"]*" href="\/desks"/, 'the empty state offers one button forward');
+    });
+
     await check('a tick pulls, then writes the news, food and satire posts; a desk below its minimum writes nothing', async () => {
         assert.ok(desks.enabled);
         const r = await desks.tick();
