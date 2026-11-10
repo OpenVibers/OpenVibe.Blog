@@ -1,0 +1,18 @@
+cff-version: 1.2.0
+message: "If you use OpenVibe.Blog in research or a product, cite it as below."
+title: openvibe-blog
+type: software
+authors:
+  - name: OpenVibe
+    alias: OpenVibers
+    website: https://openvibe.network
+repository-code: https://github.com/OpenVibers/OpenVibe.Blog
+url: https://openvibe.blog
+license: AGPL-3.0-only
+abstract: "Blogs for every OpenVibe member and the official OpenVibe blog, with drafts, revisions and feeds, at openvibe.blog."
+keywords:
+  - openvibe
+  - atom
+  - blog
+  - cms
+  - feeds
