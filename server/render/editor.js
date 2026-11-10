@@ -78,7 +78,7 @@ ${head ? h`<input type="hidden" name="expectedRevision" value="${head.number}">`
 <label for="title">Title</label><input id="title" name="title" maxlength="200" required value="${f.title || ''}">
 <label for="summary">Summary <span class="meta">(optional, shown in lists and feeds)</span></label><input id="summary" name="summary" maxlength="500" value="${f.summary || ''}">
 <label for="body">Text <span class="meta">(Markdown and blocks; a line <code>[[media:med_…]]</code> places an attached Media object)</span></label>
-<div class="ov-editor" data-ov-editor data-post="${post ? post.id : ''}" data-csrf="${csrf}" data-preview="/write/preview" data-image="/write/make-image">
+<div class="ov-editor" data-ov-editor data-post="${post ? post.id : ''}" data-csrf="${csrf}" data-preview="/write/preview" data-image="/write/make-image" data-find="/write/find-images">
 <div class="ov-editor-bar">
 <button type="button" class="ov-editor-btn" data-ov-insert aria-expanded="false">Insert a block <kbd>/</kbd></button>
 <button type="button" class="ov-editor-btn" data-ov-outline aria-pressed="false">Outline</button>

@@ -167,10 +167,9 @@ async function createApp(opts = {}) {
                 imgSrc: ["'self'", 'data:', 'https:'],
                 mediaSrc: ["'self'", 'https:'],
                 // openvibe.events: release notifications (release-watch's EventSource, openvibe-shared 1.17).
-                // The navbar's Messages count asks Chat (openvibe-shared 4.130.0).
-                // The editor's picture search asks Openverse and Wikimedia Commons directly (the plan's
-                // fallback while Exchange's image search is not here): their APIs, not ours, answer.
-                connectSrc: ["'self'", 'https://openvibe.chat', 'https://openvibe.network', 'https://cloudflareinsights.com', 'https://openvibe.events', 'https://api.openverse.org', 'https://commons.wikimedia.org'],
+                // The navbar's Messages count asks Chat (openvibe-shared 4.130.0). Picture search goes through
+                // Blog's own server and the shared image task, so no picture source is a browser origin.
+                connectSrc: ["'self'", 'https://openvibe.chat', 'https://openvibe.network', 'https://cloudflareinsights.com', 'https://openvibe.events'],
                 frameSrc: ["'self'", 'https://openvibe.network'],
                 frameAncestors: ["'self'"],
                 objectSrc: ["'none'"],

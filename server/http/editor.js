@@ -312,14 +312,31 @@ function createEditorRoutes(ctx) {
         } catch (err) { next(err); }
     });
 
+    // "Find a picture" in the inserter: the shared image task's find mode through OpenVibe.AI. The browser
+    // no longer calls Openverse or Commons itself; the task keeps licence and author and stores the picture.
+    router.post('/find-images', B('blog.post.preview'), async (req, res, next) => {
+        try {
+            if (!ctx.aiDrafts || !ctx.aiDrafts.imageEnabled) return res.status(503).json({ code: 'ai.not_configured', detail: 'OpenVibe.AI has no image task on this server yet.' });
+            const out = await ctx.aiDrafts.findImages(req.viewer, await blogs.official(), formInput(req.body), { traceparent: req.ov && req.ov.traceparent });
+            res.json(out);
+        } catch (err) {
+            const e = asApiError(err);
+            if (e && e.status >= 400 && e.status < 500) return res.status(e.status).json({ code: e.code, detail: e.message });
+            next(err);
+        }
+    });
+
     // "Make an image" in the inserter: the image task through OpenVibe.AI, the same service the AI draft uses.
     router.post('/make-image', B('blog.post.ai_draft'), async (req, res, next) => {
         try {
             if (!ctx.aiDrafts || !ctx.aiDrafts.imageEnabled) return res.status(503).json({ code: 'ai.not_configured', detail: 'OpenVibe.AI has no image task on this server yet.' });
-            const found = await postFor(req);
-            const out = await ctx.aiDrafts.image(req.viewer, found ? found.blog : await blogs.official(), formInput(req.body), { traceparent: req.ov && req.ov.traceparent });
+            const out = await ctx.aiDrafts.image(req.viewer, await blogs.official(), formInput(req.body), { traceparent: req.ov && req.ov.traceparent });
             res.json(out);
-        } catch (err) { next(err); }
+        } catch (err) {
+            const e = asApiError(err);
+            if (e && e.status >= 400 && e.status < 500) return res.status(e.status).json({ code: e.code, detail: e.message });
+            next(err);
+        }
     });
 
     // Settings → How I write: the voice card the AI prompt uses.

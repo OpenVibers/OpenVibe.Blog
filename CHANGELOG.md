@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- The editor's picture search and "Make an image" now call OpenVibe.AI's one shared image task (`image.picture`):
+  find keeps the licence, author and source page and stores the picture in Media for the blog; make returns a Media
+  reference and the caption credit "Made with AI (<model>)". The browser no longer asks Openverse or Commons, and their
+  hosts are gone from the content security policy. `server/domain/ai-drafts.js`, `server/http/editor.js`,
+  `public/js/blog-editor.js`; `test/image-task.test.js`.
 - Weekly devblogs use the content.devblog AI agent and blog.devblog.write task: meaningful merged changes, stored screenshots, rich blocks, and a person-only review gate. Owner requests and the opt-in scheduler share durable weekly reservations. Per-site and network indexes use the first figure and summary; the back-catalogue script defaults to a read-only dry run.
 - The network changelog's entries carry `kind` (new, better, fixed or internal), one to three fixed `areas` and the
   subject in `plain` words. Library pins, merges and test/docs/CI-only work become internal without a model; the rest

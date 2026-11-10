@@ -98,22 +98,57 @@ function createAiDrafts({ config, store, posts, access, fetchImpl = globalThis.f
     }
 
     /**
-     * "Make an image" in the editor: the image task (`image.generate`) through OpenVibe.AI, with the same
-     * target and on-behalf-of a draft uses. The answer's Media id is what a figure block names; a plain
-     * URL is returned as well so the editor can show what was made. Nothing is stored here.
+     * "Find a picture" in the editor: the shared image task's find mode. Blog calls the task, never Openverse
+     * or Commons from a browser; the pictures are already in OpenVibe.Media, with their licence and author,
+     * so a figure block names a Media id and a plain URL is only the preview.
+     */
+    async function findImages(viewer, blog, input = {}, { traceparent } = {}) {
+        if (!viewer || !viewer.subject) throw new ApiError(401, 'subject.required', 'Sign in to find a picture');
+        const query = clean(input.query || input.q, 200);
+        if (!query) throw new ApiError(422, 'ai_image.query_required', 'Say what to look for');
+        const count = Math.max(1, Math.min(12, Number(input.count) || 8));
+        try {
+            const r = await ai.run('image.picture', { mode: 'find', query, count, media_app: 'blog' }, {
+                onBehalfOf: { type: 'user', id: viewer.subject }, target: { service: 'blog', type: 'blog', id: String(blog.id) }, traceparent,
+            });
+            const out = r.output || {};
+            return {
+                runId: r.runId, task: 'image.picture', query, note: out.note || null,
+                items: (Array.isArray(out.media) ? out.media : []).map((m) => ({
+                    mediaId: m.media_id || null, url: m.url || null, title: m.title || null, alt: m.alt || m.title || null,
+                    caption: m.caption || null, credit: m.credit || null, author: m.author || null, license: m.license || null,
+                    licenseUrl: m.license_url || null, sourceUrl: m.source_url || null, provider: m.provider || null,
+                    width: m.width == null ? null : Number(m.width), height: m.height == null ? null : Number(m.height), ai: m.ai === true,
+                })),
+            };
+        } catch (err) {
+            if (err instanceof AiRunError) throw new ApiError(err.status || 502, err.code, err.message);
+            throw err;
+        }
+    }
+
+    /**
+     * "Make an image" in the editor: the shared image task's make mode (`image.picture`) through OpenVibe.AI,
+     * with the same target and on-behalf-of a draft uses. The answer's Media id is what a figure block names;
+     * the caption credit says "Made with AI (<model>)". Nothing is stored here.
      */
     async function image(viewer, blog, input = {}, { traceparent } = {}) {
         if (!viewer || !viewer.subject) throw new ApiError(401, 'subject.required', 'Sign in to make an image');
         const prompt = clean(input.prompt, 1000);
         if (!prompt) throw new ApiError(422, 'ai_image.prompt_required', 'Say what the image should show');
+        const alt = clean(input.alt, 300);
         try {
-            const r = await ai.run('image.generate', { prompt, ...(input.alt ? { alt: clean(input.alt, 300) } : {}) }, {
+            const r = await ai.run('image.picture', { mode: 'make', prompt, ...(alt ? { alt } : {}), ...(input.dry_run ? { dry_run: true } : {}), media_app: 'blog' }, {
                 onBehalfOf: { type: 'user', id: viewer.subject }, target: { service: 'blog', type: 'blog', id: String(blog.id) }, traceparent,
             });
             const out = r.output || {};
+            const made = Array.isArray(out.media) && out.media[0] ? out.media[0] : {};
+            const model = made.model || (out.estimate && out.estimate.model) || (r.provenance && r.provenance.model) || null;
             return {
-                runId: r.runId, mediaId: out.media_id || out.mediaId || null, url: out.url || null,
-                alt: out.alt || clean(input.alt, 300) || null, model: (r.workflow && r.workflow.model) || null, synthetic: Boolean(r.synthetic),
+                runId: r.runId, dryRun: out.dry_run === true, estimate: out.estimate || null,
+                mediaId: made.media_id || null, url: made.url || null,
+                alt: made.alt || alt || null, caption: made.caption || null,
+                credit: made.credit || (model ? `Made with AI (${model})` : 'Made with AI'), model, synthetic: Boolean(r.synthetic),
             };
         } catch (err) {
             if (err instanceof AiRunError) throw new ApiError(err.status || 502, err.code, err.message);
@@ -132,7 +167,7 @@ function createAiDrafts({ config, store, posts, access, fetchImpl = globalThis.f
     async function devblog(viewer, blog, input, options = {}) {
         return devblogClient.run('content.devblog', input, { ...options, onBehalfOf: { type: 'user', id: viewer.subject }, target: { service: 'blog', type: 'blog', id: String(blog.id) } });
     }
-    return { devblog, enabled: ai.enabled, imageEnabled: ai.enabled, draft, rawDraft, image };
+    return { devblog, enabled: ai.enabled, imageEnabled: ai.enabled, draft, rawDraft, image, findImages };
 }
 
 module.exports = { createAiDrafts };

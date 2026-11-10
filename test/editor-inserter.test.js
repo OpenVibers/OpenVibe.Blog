@@ -20,7 +20,7 @@ const MED = 'med_01J8ZQ4X3M000000000000000A';
     await check('the edit page carries the inserter and its script; the form still works without it', async () => {
         const page = await t.get(`/write/posts/${id}`, { as: alice });
         assert.strictEqual(page.status, 200, page.text);
-        assert.match(page.text, /data-ov-editor data-post="pst_[^"]+" data-csrf="[^"]+" data-preview="\/write\/preview" data-image="\/write\/make-image"/);
+        assert.match(page.text, /data-ov-editor data-post="pst_[^"]+" data-csrf="[^"]+" data-preview="\/write\/preview" data-image="\/write\/make-image" data-find="\/write\/find-images"/);
         assert.match(page.text, /<script src="\/js\/blog-editor\.js" defer><\/script>/);
         assert.match(page.text, /<textarea id="body" name="body" rows="22">A first draft.<\/textarea>/, 'the textarea saves without script');
     });
