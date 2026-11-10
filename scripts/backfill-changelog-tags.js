@@ -66,11 +66,7 @@ async function main() {
         return 0;
     }
     const tagger = createChangelogTagger({ config, log: console });
-    if (needModel.length && !tagger.enabled) {
-        console.error('[backfill] blog.changelog.tag is not configured (OV_AI_INTERNAL_URL and OV_OAUTH_CLIENT_SECRET)');
-        await store.close();
-        return 1;
-    }
+    if (needModel.length && !tagger.enabled) console.log('[backfill] AI tagger is disabled; ambiguous subjects will use the Improved fallback');
     const tagStmt = db.prepare(`UPDATE changelog_entries SET kind = ?, areas = ?, plain = ?, tagged_at = ?, tagged_by = ? WHERE id = ?${retag ? '' : ' AND kind IS NULL'}`);
     let tagged = 0;
     for (const row of housekeeping) tagged += (await tagStmt.run(row.tag.kind, row.tag.areas, row.tag.plain, store.now(), retag ? 'retagged-subject' : row.tag.kind === 'internal' ? 'housekeeping' : 'subject-rule', row.id)).changes;
