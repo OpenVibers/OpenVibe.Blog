@@ -103,7 +103,7 @@ function createDeskRoutes(ctx) {
         send(req, res, 200, {
             title: desk.title, description: desk.about, canonical: abs(pager.page === 1 ? path : `${path}?page=${pager.page}`),
             feeds: feedsOf(desk), prev: pager.prev ? pager.prev.href : null, next: pager.next ? pager.next.href : null,
-            body: render.deskPage({ desk, posts, pager, staff }),
+            body: render.deskPage({ desk, posts, pager, staff }), styles: ['kit.css'],
         }, { cacheable: !staff });
     }));
 
