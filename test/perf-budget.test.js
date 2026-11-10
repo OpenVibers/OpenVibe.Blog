@@ -16,11 +16,11 @@ const { measure, check, format } = require('openvibe-shared/perf-budget');
 // 2026-11-08: openvibe-shared v4.152.0; CI measured JS 356.6 KB raw / 85.0 KB brotli.
 // 2026-11-06: openvibe-shared v4.118.0; CI measured JS 340.4 KB raw / 81.5 KB brotli.
 const BUDGETS = {
-    htmlRawKB: 43.3, // 43.3: measured 41.3 with openvibe-shared 4.161.0, plus room for 4.162.0–4.163.0, 2026-11-09
-    htmlBrotliKB: 10,   // 9.2 with the short home (2026-10-30: the pick blocks' chips and the folds' scripts); 8.2 (2026-10-22 the richer home); 4.5
+    htmlRawKB: 45.5, // 2026-11-11: openvibe-shared 4.190.0 (the site name's dropdown, the footer's online strip, the balances pill); 43.3: measured 41.3 with openvibe-shared 4.161.0, plus room for 4.162.0–4.163.0, 2026-11-09
+    htmlBrotliKB: 10.5,   // 2026-11-11: openvibe-shared 4.190.0 (the site name's dropdown, the footer's online strip, the balances pill); 9.2 with the short home (2026-10-30: the pick blocks' chips and the folds' scripts); 8.2 (2026-10-22 the richer home); 4.5
     jsFiles: 5,   // 5 (theme-loader, web-runtime, navbar, footer, boost: openvibe-shared/shell adds web-runtime, 2026-10-04)
-    jsRawKB: 376.4, // 376.4: measured 376.3 KB raw with openvibe-shared 4.186.0 (2026-11-10: the mark's Working and Thinking states, the Dock and the menu as one sheet, bare controls styled by the loader); 375.4: measured 375.3 with Shared 4.184.0; server-nav hydration marker and atomic replacement, 2026-11-10
-    jsBrotliKB: 89.8, // 89.8: measured 89.7 KB brotli with openvibe-shared 4.186.0 (2026-11-10: the mark's Working and Thinking states, the Dock and the menu as one sheet, bare controls styled by the loader); 89.5: measured 87.5 with openvibe-shared 4.163.0, plus room for 4.162.0–4.163.0, 2026-11-09
+    jsRawKB: 393, // 2026-11-11: openvibe-shared 4.190.0 (the site name's dropdown, the footer's online strip, the balances pill); 376.4: measured 376.3 KB raw with openvibe-shared 4.186.0 (2026-11-10: the mark's Working and Thinking states, the Dock and the menu as one sheet, bare controls styled by the loader); 375.4: measured 375.3 with Shared 4.184.0; server-nav hydration marker and atomic replacement, 2026-11-10
+    jsBrotliKB: 94, // 2026-11-11: openvibe-shared 4.190.0 (the site name's dropdown, the footer's online strip, the balances pill); 89.8: measured 89.7 KB brotli with openvibe-shared 4.186.0 (2026-11-10: the mark's Working and Thinking states, the Dock and the menu as one sheet, bare controls styled by the loader); 89.5: measured 87.5 with openvibe-shared 4.163.0, plus room for 4.162.0–4.163.0, 2026-11-09
     cssFiles: 2,   // 1
     cssRawKB: 54.5, // 54.5: measured 49.5 with openvibe-shared 4.161.0, plus room for 4.162.0–4.163.0, 2026-11-09
     cssBrotliKB: 10.4,   // 10.1 with the post pages' reading layout (2026-10-30); 9.2 with the short home (2026-10-30: the pick block's and the fold's own rules); 7.3 openvibe-shared 4.26.1 (hero visual); 6.2 (2026-10-26, Shared 4.13's home kit); 5.1 (2026-10-22); 1.4
