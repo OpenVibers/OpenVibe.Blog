@@ -22,12 +22,13 @@ const SITE_NAME = 'OpenVibe.Blog';
 // One site summary, shared by /llms.txt, /llms-full.txt and the home page's ai-summary.
 const SITE_SUMMARY = 'The official OpenVibe blog and a blog for every OpenVibe member: server-rendered posts with feeds, sitemaps and a JSON representation of every post.';
 const PUBLIC_DIR = path.join(__dirname, '..', '..', 'public');
+const PUBLISHING_BLOCKS_CSS = require.resolve('openvibe-publishing/blocks.css');
 
 const hashes = new Map();
 function assetVersion(rel) {
     if (hashes.has(rel)) return hashes.get(rel);
     let v = 'dev';
-    try { v = crypto.createHash('sha256').update(fs.readFileSync(path.join(PUBLIC_DIR, rel))).digest('hex').slice(0, 10); } catch { /* missing asset */ }
+    try { v = crypto.createHash('sha256').update(fs.readFileSync(rel === 'css/publishing-blocks.css' ? PUBLISHING_BLOCKS_CSS : path.join(PUBLIC_DIR, rel))).digest('hex').slice(0, 10); } catch { /* missing asset */ }
     hashes.set(rel, v);
     return v;
 }

@@ -29,6 +29,14 @@ const REVALIDATED = 'public, max-age=300, stale-while-revalidate=86400';
         assert.strictEqual(r.status, 200);
         assert.strictEqual(r.headers.get('cache-control'), REVALIDATED);
     });
+    await check('the library block sheet is content-addressed and served as CSS', async () => {
+        const rel = 'css/publishing-blocks.css';
+        const r = await t.get(`/${rel}?v=${assetVersion(rel)}`);
+        assert.strictEqual(r.status, 200);
+        assert.match(r.headers.get('content-type'), /^text\/css/);
+        assert.strictEqual(r.headers.get('cache-control'), IMMUTABLE);
+        assert.match(r.text, /\.ov-infobox/);
+    });
     await t.close();
     done();
 })().catch((err) => { console.error(err); process.exit(1); });
