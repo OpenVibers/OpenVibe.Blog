@@ -10,6 +10,7 @@
  *   node scripts/backfill-changelog-tags.js --service live   # one site
  *   node scripts/backfill-changelog-tags.js --limit 200      # at most this many rows (default 500)
  *   node scripts/backfill-changelog-tags.js --apply          # write, spending the AI task's calls
+ *   node scripts/backfill-changelog-tags.js --apply --retag  # reclassify existing tags too
  *   node scripts/backfill-changelog-tags.js --apply --production
  *
  * The dry run writes nothing and never calls the model. --apply needs OV_AI_INTERNAL_URL and the
@@ -24,7 +25,7 @@ const has = (name) => args.includes(`--${name}`);
 
 async function main() {
     if (has('help')) {
-        console.log('usage: node scripts/backfill-changelog-tags.js [--service <id>] [--limit 500] [--chunk 20] [--apply] [--production]');
+        console.log('usage: node scripts/backfill-changelog-tags.js [--service <id>] [--limit 500] [--chunk 20] [--apply] [--retag] [--production]');
         return 0;
     }
     const config = require('../server/config').load();
@@ -39,7 +40,8 @@ async function main() {
     const { openStore } = require('../server/db');
     const store = await openStore(config, { log: console });
     const db = store.db;
-    const where = ['kind IS NULL'];
+    const retag = has('retag');
+    const where = retag ? ["COALESCE(tagged_by, '') NOT LIKE 'retagged%'"] : ['kind IS NULL'];
     const params = [];
     if (service) { where.push('service = ?'); params.push(service); }
     const rows = await db.prepare(`SELECT id, service, repo, sha, subject FROM changelog_entries WHERE ${where.join(' AND ')} ORDER BY deployed_at, id LIMIT ?`).all(...params, limit);
@@ -48,13 +50,13 @@ async function main() {
     const needModel = [];
     for (const row of rows) {
         const initial = tags.initial(row.subject);
-        if (initial.kind === 'internal') housekeeping.push({ ...row, tag: initial });
+        if (initial.kind) housekeeping.push({ ...row, tag: initial });
         else needModel.push({ ...row, plain: initial.plain });
     }
     console.log(`[backfill] ${rows.length} untagged entr${rows.length === 1 ? 'y' : 'ies'}${service ? ` on ${service}` : ''} (limit ${limit})`);
-    console.log(`[backfill] ${housekeeping.length} housekeeping → internal without a model; ${needModel.length} need blog.changelog.tag (${Math.ceil(needModel.length / chunk)} run${Math.ceil(needModel.length / chunk) === 1 ? '' : 's'})`);
-    for (const row of housekeeping.slice(0, 40)) console.log(`  internal  ${row.service}  ${row.sha.slice(0, 7)}  ${row.tag.plain}`);
-    if (housekeeping.length > 40) console.log(`  … ${housekeeping.length - 40} more housekeeping`);
+    console.log(`[backfill] ${housekeeping.length} subject-rule classifications without a model; ${needModel.length} need blog.changelog.tag (${Math.ceil(needModel.length / chunk)} run${Math.ceil(needModel.length / chunk) === 1 ? '' : 's'})`);
+    for (const row of housekeeping.slice(0, 40)) console.log(`  ${row.tag.kind.padEnd(8)} ${row.service}  ${row.sha.slice(0, 7)}  ${row.tag.plain}`);
+    if (housekeeping.length > 40) console.log(`  … ${housekeeping.length - 40} more subject-rule classifications`);
     for (const row of needModel.slice(0, 40)) console.log(`  model     ${row.service}  ${row.sha.slice(0, 7)}  ${row.plain}`);
     if (needModel.length > 40) console.log(`  … ${needModel.length - 40} more for the model`);
 
@@ -64,14 +66,14 @@ async function main() {
         return 0;
     }
     const tagger = createChangelogTagger({ config, log: console });
-    if (!tagger.enabled) {
+    if (needModel.length && !tagger.enabled) {
         console.error('[backfill] blog.changelog.tag is not configured (OV_AI_INTERNAL_URL and OV_OAUTH_CLIENT_SECRET)');
         await store.close();
         return 1;
     }
-    const tagStmt = db.prepare('UPDATE changelog_entries SET kind = ?, areas = ?, plain = ?, tagged_at = ?, tagged_by = ? WHERE id = ? AND kind IS NULL');
+    const tagStmt = db.prepare(`UPDATE changelog_entries SET kind = ?, areas = ?, plain = ?, tagged_at = ?, tagged_by = ? WHERE id = ?${retag ? '' : ' AND kind IS NULL'}`);
     let tagged = 0;
-    for (const row of housekeeping) tagged += (await tagStmt.run('internal', [], row.tag.plain, store.now(), 'housekeeping', row.id)).changes;
+    for (const row of housekeeping) tagged += (await tagStmt.run(row.tag.kind, row.tag.areas, row.tag.plain, store.now(), retag ? 'retagged-subject' : row.tag.kind === 'internal' ? 'housekeeping' : 'subject-rule', row.id)).changes;
     for (let i = 0; i < needModel.length; i += chunk) {
         const batch = needModel.slice(i, i + chunk);
         try {
@@ -79,7 +81,7 @@ async function main() {
             for (const row of batch) {
                 const t = answer.get(String(row.id));
                 if (!t) continue;
-                tagged += (await tagStmt.run(t.kind, t.areas, t.plain, store.now(), 'ai', row.id)).changes;
+                tagged += (await tagStmt.run(t.kind, t.areas, t.plain, store.now(), retag ? 'retagged-ai' : 'ai', row.id)).changes;
             }
             console.log(`[backfill] tagged ${Math.min(i + chunk, needModel.length)}/${needModel.length} model entries`);
         } catch (err) {

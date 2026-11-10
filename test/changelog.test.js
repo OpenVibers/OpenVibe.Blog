@@ -63,11 +63,11 @@ const H = (n) => n.toString(16).padStart(40, 'a');
         assert.strictEqual(bySubject.size, 2, 'first lines only');
         assert.strictEqual(bySubject.get('Fix the chat scroll').kind, 'fixed');
         assert.deepStrictEqual(bySubject.get('Fix the chat scroll').areas, ['chat']);
-        assert.strictEqual(bySubject.get('Fix the chat scroll').plain, 'plain: Fix the chat scroll');
+        assert.strictEqual(bySubject.get('Fix the chat scroll').plain, 'Fix the chat scroll');
         assert.strictEqual(bySubject.get('Merge branch main').kind, 'internal', 'merges are housekeeping');
         assert.deepStrictEqual(bySubject.get('Merge branch main').areas, []);
         assert.ok(!tagCalls.flat().some((x) => /^Merge/.test(x.subject)), 'the model is never asked about housekeeping');
-        assert.strictEqual(bySubject.get('Fix the chat scroll').url, `https://github.com/OpenVibers/OpenVibe.Live/commit/${H(1)}`);
+        assert.strictEqual(bySubject.get('Fix the chat scroll').url, `https://git.openvibe.codes/OpenVibers/OpenVibe.Live/commit/${H(1)}`);
         assert.strictEqual(bySubject.get('Fix the chat scroll').major, false);
     });
 

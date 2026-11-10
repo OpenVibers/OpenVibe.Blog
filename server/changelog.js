@@ -422,7 +422,7 @@ function createChangelog({ config, store, blogs, posts, reading = null, tagger =
                     service: e.service, repo: e.repo, sha: e.sha, short: e.sha.slice(0, 7), subject: e.subject, plain: e.plain || tags.plainOf(e.subject),
                     kind: e.kind && tags.isKind(e.kind) ? e.kind : 'better', areas: Array.isArray(e.areas) ? e.areas.filter(tags.isArea).slice(0, 3) : [],
                     author: e.author || null, committed_at: e.committed_at, deployed_at: e.deployed_at,
-                    major: Boolean(e.major), url: `https://github.com/${e.repo}/commit/${e.sha}`,
+                    major: Boolean(e.major), url: `https://git.openvibe.codes/${e.repo}/commit/${e.sha}`,
                     post_id: e.post_id && e.post_id !== 'history' && e.post_state === 'published' ? e.post_id : null,
                     pr: pr || null, pr_url: pr ? `https://github.com/${e.repo}/pull/${pr}` : null,
                 };

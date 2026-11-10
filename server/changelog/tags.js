@@ -92,15 +92,29 @@ function isHousekeeping(subject) {
         || /^(?:Add|Update|Fix)\s+(?:a\s+)?(?:test|tests|docs?)\s+(?:only|for)\b/i.test(s);
 }
 
+/** Clear subject verbs win before the model; leave ambiguous summaries for the AI tag task. */
+function subjectKind(subject) {
+    const s = plainOf(subject).replace(/^[^:]{1,24}:\s*/, '').trim();
+    if (/^(?:add|introduce|create|launch|ship|enable|support)\b/i.test(s)) return 'new';
+    if (/^(?:fix|repair|restore|prevent|stop|no longer\b)|\b(?:no longer|stays? whole|keeps? (?:the )?\w+ whole|stops? (?:being|…|\.\.\.))\b/i.test(s)) return 'fixed';
+    return null;
+}
+
+function subjectAreas(subject) {
+    const s = String(subject || '').toLowerCase();
+    return AREA_IDS.filter((id) => new RegExp(`(^|[^a-z0-9])${id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}([^a-z0-9]|$)`).test(s)).slice(0, 3);
+}
+
 /**
  * What is stored when an entry is first collected: plain words always, and kind internal for
  * housekeeping. `kind: null` means the AI task has not answered yet.
  */
 function initial(subject) {
+    const housekeeping = isHousekeeping(subject);
     return {
         plain: plainOf(subject),
-        kind: isHousekeeping(subject) ? 'internal' : null,
-        areas: isHousekeeping(subject) ? [] : [],
+        kind: housekeeping ? 'internal' : subjectKind(subject),
+        areas: housekeeping ? [] : (subjectKind(subject) ? subjectAreas(subject) : []),
     };
 }
 
@@ -122,4 +136,4 @@ function vocabulary() {
     return { kinds: [...KINDS], areas: AREAS.map((a) => ({ ...a })) };
 }
 
-module.exports = { KINDS, AREAS, AREA_IDS, AREA_LABELS, vocabulary, isKind, isArea, prOf, plainOf, isHousekeeping, initial, normalizeTag };
+module.exports = { KINDS, AREAS, AREA_IDS, AREA_LABELS, vocabulary, isKind, isArea, prOf, plainOf, isHousekeeping, subjectKind, subjectAreas, initial, normalizeTag };
