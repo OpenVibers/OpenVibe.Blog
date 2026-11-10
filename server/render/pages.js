@@ -226,7 +226,8 @@ function postPage(o) {
     // summary only shows when the hero has no prose of its own.
     const heroHtml = rendered.heroHtml || null;
     const heroTitle = rendered.heroHeading || null;
-    return String(h`<link rel="stylesheet" href="${asset('css/blocks.css')}">
+    return String(h`<link rel="stylesheet" href="${asset('css/publishing-blocks.css')}">
+<link rel="stylesheet" href="${asset('css/blocks.css')}">
 ${raw(ssr.breadcrumbsHtml(o.breadcrumbs))}
 <div class="post-wrap${toc ? ' has-toc' : ''}">
 ${raw(toc ? contentsHtml(toc) : '')}

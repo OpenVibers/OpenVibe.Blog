@@ -70,7 +70,8 @@ function aiDraftForm({ blog, csrf }) {
 function postForm({ blog, post, head, terms, series, csrf, message, action }) {
     const f = head ? head.fields : {};
     const vis = post ? post.visibility : 'public';
-    return String(h`<link rel="stylesheet" href="${asset('css/blocks.css')}">
+    return String(h`<link rel="stylesheet" href="${asset('css/publishing-blocks.css')}">
+<link rel="stylesheet" href="${asset('css/blocks.css')}">
 ${flash(message)}
 <form method="post" action="${action}" class="post-form">${csrfField(csrf)}
 ${head ? h`<input type="hidden" name="expectedRevision" value="${head.number}">` : ''}

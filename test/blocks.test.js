@@ -90,6 +90,9 @@ const body = (by) => [
     await check('the published page renders the blocks: the hero art, the section, the byline, the rail', async () => {
         await t.get(`/api/v1/posts/${post.id}/publish`, { as: alice, json: {} });
         const page = await t.get('/@alice/blocks');
+        const sharedCss = page.text.match(/<link rel="stylesheet" href="(\/css\/publishing-blocks\.css\?v=[0-9a-f]{10})">/);
+        assert.ok(sharedCss, 'the post links the library blocks sheet');
+        assert.ok(page.text.indexOf(sharedCss[0]) < page.text.indexOf('<link rel="stylesheet" href="/css/blocks.css?'), 'the library sheet loads before Blog placement rules');
         assert.strictEqual(page.status, 200, page.text);
         assert.match(page.text, /class="ov-media ov-hero-art"/);
         assert.match(page.text, /id="blueprint-rework"/);

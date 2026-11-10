@@ -216,6 +216,11 @@ async function createApp(opts = {}) {
     // ── Static assets (content-hashed ?v= → immutable) ──────
     // This site's own pinned copy of the OpenVibe Frame's browser files (openvibe-shared/serve).
     app.use('/shared', require('openvibe-shared/serve').handler());
+    app.get('/css/publishing-blocks.css', (req, res) => {
+        const v = req.query.v;
+        res.type('css').set('Cache-Control', cache.assetHeaders('css/publishing-blocks.css', { hashed: !!v && v === assetVersion('css/publishing-blocks.css') }))
+            .sendFile(require.resolve('openvibe-publishing/blocks.css'));
+    });
     app.use(express.static(PUBLIC_DIR, {
         index: false, redirect: false,
         setHeaders(res, filePath) {

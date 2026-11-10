@@ -58,6 +58,7 @@ const idFrom = (location) => (location.match(/\/write\/posts\/(pst_[0-9A-Z]+)/) 
     await check('new draft, edit and publish with forms', async () => {
         const form = await t.get('/write/@eve/new', { as: eve });
         assert.match(form.text, /<textarea id="body" name="body"/);
+        assert.ok(form.text.indexOf('href="/css/publishing-blocks.css?v=') < form.text.indexOf('href="/css/blocks.css?v='), 'the editor loads shared block styles before its own');
         let r = await t.get('/write/@eve/new', { as: eve, form: { _csrf: csrf, title: 'Notes without script', body: `# Heading\n\nPlain *text*. ${LONG}`, tags: 'nojs', series: 'Field notes', seriesPosition: '1', visibility: 'public', allowComments: '1' } });
         assert.strictEqual(r.status, 303, r.text);
         postId = idFrom(r.headers.get('location'));
