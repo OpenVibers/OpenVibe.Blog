@@ -47,16 +47,23 @@ const { tagsFrom, parseLoose, createChangelogTagger } = require('../server/chang
             '0.376.0: Complete the Feed contract',
             'Tidy the docs',
         ]) assert.strictEqual(tags.isHousekeeping(s), true, s);
-        for (const s of ['Fix the chat scroll', 'Recent tools in the launcher', 'Add devblog cards', 'Make sign-in faster']) {
+        for (const s of ['Recent tools in the launcher', 'Make sign-in faster']) {
             assert.strictEqual(tags.isHousekeeping(s), false, s);
             const initial = tags.initial(s);
             assert.strictEqual(initial.kind, null, `${s} waits for the model`);
             assert.ok(initial.plain.length > 0);
         }
+        assert.strictEqual(tags.initial('Fix the chat scroll').kind, 'fixed');
         const hk = tags.initial('openvibe-shared v4.175.0 (was v4.173.0) (#401)');
         assert.strictEqual(hk.kind, 'internal');
         assert.deepStrictEqual(hk.areas, []);
         assert.strictEqual(hk.plain, 'openvibe-shared v4.175.0 (was v4.173.0)');
+    });
+
+    await check('clear commit subjects are classified before the AI task', async () => {
+        for (const subject of ['Add a watch page', 'feat: Add project sharing', 'Introduce saved searches']) assert.strictEqual(tags.initial(subject).kind, 'new', subject);
+        for (const subject of ['Fix the player controls', 'fix(chat): stop duplicate messages', 'No longer drops the last frame', 'Keep the image whole']) assert.strictEqual(tags.initial(subject).kind, 'fixed', subject);
+        assert.strictEqual(tags.initial('Improve the chat history').kind, null, 'ambiguous improvements are left to the AI task');
     });
 
     await check('a model answer is made safe: a known kind, up to three known areas, plain words', async () => {
