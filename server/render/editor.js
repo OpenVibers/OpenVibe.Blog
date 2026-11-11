@@ -33,12 +33,21 @@ ${own ? '' : h`<section class="card"><h2>Start your blog</h2>
 <p class="meta">Signed in as ${viewer.user && (viewer.user.display_name || viewer.user.username) ? (viewer.user.display_name || viewer.user.username) : viewer.subject}. · <a href="/write/voice">How I write</a></p>`);
 }
 
-function blogDashboard({ blog, posts, heads, role, csrf, message, publicUrl }) {
+function blogDashboard({ blog, posts, heads, role, csrf, message, publicUrl, defaultAudience = 'public' }) {
+    const audienceWords = { public: 'Everyone', unlisted: 'Anyone with the link', private: 'Only me' };
     return String(h`<p><a href="/write">← All your blogs</a></p>
 <h1>${blog.title}</h1>
 <p class="meta">@${blog.handle} · your role: ${role} · <a href="${publicUrl}">View the blog</a>${role === 'owner' ? h` · <a href="/write/@${blog.handle}/settings">Settings</a>` : ''}</p>
 ${flash(message)}
 <p><a class="button" href="/write/@${blog.handle}/new">New post</a></p>
+${role === 'owner' || role === 'editor' || role === 'author' ? h`<details class="share-default"><summary>New posts: ${audienceWords[defaultAudience] || 'Everyone'}</summary>
+<form method="post" action="/write/@${blog.handle}/sharing">${csrfField(csrf)}
+<label for="default-audience">Who can read a new post</label>
+${select('audience', [['public', 'Everyone'], ['unlisted', 'Anyone with the link'], ['private', 'Only me']], defaultAudience)}
+<p class="meta">Specific people is chosen per post in its Share sheet. This is only the starting choice; each post can differ.</p>
+<label><input type="checkbox" name="apply" value="1"> Apply it to all my existing posts on this blog too</label>
+<button type="submit">Save</button>
+</form></details>` : ''}
 ${posts.length ? h`<table class="posts"><thead><tr><th>Title</th><th>State</th><th>Visibility</th><th>Updated</th></tr></thead><tbody>
 ${posts.map((p) => h`<tr><td><a href="/write/posts/${p.id}">${(heads.get(p.id) || {}).title || p.slug}</a></td><td>${STATE_LABEL[p.state] || p.state}</td><td>${p.visibility}</td><td>${time(p.updated_at)}</td></tr>`)}
 </tbody></table>` : h`<p class="empty">No posts yet.</p>`}`);
@@ -67,9 +76,9 @@ function aiDraftForm({ blog, csrf }) {
 }
 
 /** New post and edit form (the same fields). */
-function postForm({ blog, post, head, terms, series, csrf, message, action }) {
+function postForm({ blog, post, head, terms, series, csrf, message, action, defaultVisibility = 'public' }) {
     const f = head ? head.fields : {};
-    const vis = post ? post.visibility : 'public';
+    const vis = post ? post.visibility : defaultVisibility;
     return String(h`<link rel="stylesheet" href="${asset('css/publishing-blocks.css')}">
 <link rel="stylesheet" href="${asset('css/blocks.css')}">
 ${flash(message)}

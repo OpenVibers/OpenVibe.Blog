@@ -36,7 +36,7 @@ function formInput(body) {
 }
 
 function createEditorRoutes(ctx) {
-    const { config, store, blogs, posts, publication, access, people, viewers, effects, publicRoutes, limits } = ctx;
+    const { config, store, blogs, posts, publication, access, people, viewers, effects, publicRoutes, limits, sharing } = ctx;
     const router = express.Router();
     const form = express.urlencoded({ extended: false, limit: '600kb' });
     router.use(viewers.middleware({ services: false }));
@@ -62,6 +62,7 @@ function createEditorRoutes(ctx) {
     router.post('/@:handle/ai-draft', B('blog.post.ai_draft'));
     router.post('/@:handle/new', B('blog.post.create'));
     router.post('/@:handle/settings', B('blog.blog.configure'));
+    router.post('/@:handle/sharing', B('blog.blog.configure'));
     router.post(['/@:handle/members', '/@:handle/members/remove'], B('blog.member.manage'));
     router.post(['/posts/:id', '/posts/:id/revert'], B('blog.post.update'));
     router.post(['/posts/:id/publish', '/posts/:id/schedule', '/posts/:id/unschedule', '/posts/:id/unpublish', '/posts/:id/review', '/posts/:id/checks'], B('blog.post.publish'));
@@ -136,14 +137,16 @@ function createEditorRoutes(ctx) {
         if (!blog) return notFound(req, res);
         const list = await posts.listForDashboard(blog, req.viewer);
         const heads = new Map(await Promise.all(list.map(async (p) => [p.id, ((await posts.head(p)) || { fields: {} }).fields])));
-        page(req, res, blog.title, editor.blogDashboard({ blog, posts: list, heads, role: await access.effectiveRole(store, req.viewer, blog) || 'staff', csrf: csrf(req), message: flashOf(req), publicUrl: publication.blogPath(blog) }));
+        const defaultAudience = sharing ? await sharing.defaultOf(req.viewer.subject, 'post') : 'public';
+        page(req, res, blog.title, editor.blogDashboard({ blog, posts: list, heads, role: await access.effectiveRole(store, req.viewer, blog) || 'staff', csrf: csrf(req), message: flashOf(req), publicUrl: publication.blogPath(blog), defaultAudience }));
     }));
 
     router.get('/@:handle/new', wrap(async (req, res) => {
         const blog = await blogFor(req);
         if (!blog || !await access.canWrite(store, req.viewer, blog, 'create')) return notFound(req, res);
         const aiForm = ctx.aiDrafts && ctx.aiDrafts.enabled ? editor.aiDraftForm({ blog, csrf: csrf(req) }) : '';
-        page(req, res, 'New post', `<p><a href="/write/@${esc(blog.handle)}">← ${esc(blog.title)}</a></p><h1>New post</h1>${aiForm}${editor.postForm({ blog, post: null, head: null, terms: {}, series: null, csrf: csrf(req), action: `/write/@${blog.handle}/new` })}`);
+        const defaultVisibility = sharing ? await sharing.defaultOf(req.viewer.subject, 'post') : 'public';
+        page(req, res, 'New post', `<p><a href="/write/@${esc(blog.handle)}">← ${esc(blog.title)}</a></p><h1>New post</h1>${aiForm}${editor.postForm({ blog, post: null, head: null, terms: {}, series: null, csrf: csrf(req), action: `/write/@${blog.handle}/new`, defaultVisibility })}`);
     }));
 
     // Draft with AI: the draft is AI-authored and stays a noindex draft until someone reviews it.
@@ -189,6 +192,26 @@ function createEditorRoutes(ctx) {
             await blogs.setFeedSettings(updated, { rss: b.rss === '1', atom: b.atom === '1', json: b.json === '1', itemCount: b.itemCount, fullContent: b.fullContent === '1' });
         });
         res.redirect(303, `/write/@${blog.handle}/settings?saved=${encodeURIComponent('Settings saved.')}`);
+    }));
+
+    // Sharing defaults (VISIBILITY-EVERYWHERE rules 1-2): the person's audience for new posts, and
+    // "Apply to all my existing posts" over the posts this person wrote on this blog.
+    router.post('/@:handle/sharing', wrap(async (req, res) => {
+        const blog = await blogFor(req);
+        if (!blog || !await access.canWrite(store, req.viewer, blog, 'create')) return notFound(req, res);
+        if (!sharing) return publicRoutes.messagePage(req, res, 503, 'Sharing is not available', 'Try again in a moment.', { href: `/write/@${blog.handle}`, label: 'Back' });
+        const b = formInput(req.body);
+        const audience = ['public', 'unlisted', 'private'].includes(b.audience) ? b.audience : null;
+        if (!audience) return publicRoutes.messagePage(req, res, 422, 'Choose an audience', 'Everyone, Anyone with the link or Only me.', { href: `/write/@${blog.handle}`, label: 'Back' });
+        await sharing.setDefault(req.viewer.subject, audience);
+        let applied = 0;
+        if (b.apply === '1') {
+            const own = await store.db.prepare("SELECT id, state FROM blog_posts WHERE blog_id = ? AND author_subject = ? AND state <> 'deleted' AND visibility <> 'members' ORDER BY updated_at DESC LIMIT 500").all(blog.id, req.viewer.subject);
+            applied = await sharing.applyDefault(req.viewer, own, audience);
+        }
+        const words = { public: 'Everyone', unlisted: 'Anyone with the link', private: 'Only me' }[audience];
+        const said = b.apply === '1' ? `New posts: ${words}. Applied to ${applied} existing post${applied === 1 ? '' : 's'}.` : `New posts: ${words}.`;
+        res.redirect(303, `/write/@${blog.handle}?saved=${encodeURIComponent(said)}`);
     }));
 
     router.post('/@:handle/members', wrap(async (req, res) => {
