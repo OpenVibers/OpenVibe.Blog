@@ -29,6 +29,11 @@ const AUDIENCES = ['public', 'link', 'people', 'private'];
 /** Blog's visibility words to the SDK's, and back. `members` is VIP and not a share audience. */
 const TO_SDK = { public: 'public', unlisted: 'link', private: 'private', members: 'private' };
 const FROM_SDK = { public: 'public', link: 'unlisted', people: 'private', private: 'private' };
+/**
+ * The audiences a person can make their default for new posts. Specific people needs a list per item,
+ * so it stays a per-post choice in the Share sheet; everyone else can be a default.
+ */
+const DEFAULTABLE = ['public', 'unlisted', 'private'];
 
 const refOf = (id) => ({ service: SERVICE, kind: KIND, id: String(id) });
 
@@ -133,6 +138,7 @@ function createSharing({ db, config, outbox, publication, now = Date.now, fetchI
         SERVICE,
         KIND,
         AUDIENCES,
+        DEFAULTABLE,
         refOf,
         shareViewer,
         /** Register a post with the sharing system (inside the post's own transaction). */
@@ -154,6 +160,44 @@ function createSharing({ db, config, outbox, publication, now = Date.now, fetchI
             });
         },
         shareOf: async (id) => await db.maybe('SELECT * FROM shares WHERE service = $1 AND kind = $2 AND resource_id = $3', [SERVICE, KIND, String(id)]),
+        /** The person's default audience for new posts; Everyone unless they chose another. */
+        defaultOf: async (owner, kind = KIND) => {
+            if (!owner) return 'public';
+            const row = await db.maybe('SELECT audience FROM share_defaults WHERE owner_subject = $1 AND kind = $2', [String(owner), String(kind)]);
+            return row ? row.audience : 'public';
+        },
+        /** Store a person's default for new posts (VISIBILITY-EVERYWHERE rule 1). */
+        setDefault: async (owner, audience, kind = KIND) => {
+            if (!owner) throw new Error('a default needs an owner');
+            if (!DEFAULTABLE.includes(audience)) throw new Error(`default audience must be one of ${DEFAULTABLE.join(', ')}`);
+            await db.prepare(`INSERT INTO share_defaults (owner_subject, kind, audience, updated_at) VALUES (?, ?, ?, ?)
+                              ON CONFLICT (owner_subject, kind) DO UPDATE SET audience = excluded.audience, updated_at = excluded.updated_at`)
+                .run(String(owner), String(kind), audience, new Date(now()).toISOString());
+            return audience;
+        },
+        /**
+         * Rule 2: apply an audience to posts this person already wrote. A published post moves through
+         * the SDK's own update, so the old column stays in step and a post that leaves Everyone is
+         * re-synced (or tombstoned) exactly as the Share sheet would do it. A draft is still Only me
+         * until its author publishes it, so only its intended-publish column moves: applying Everyone
+         * to a draft must not make the unpublished text readable by link.
+         */
+        applyDefault: async (viewer, items, audience, kind = KIND) => {
+            const next = TO_SDK[audience];
+            if (!next || next === 'people') throw new Error('an applied audience must be Everyone, Anyone with the link or Only me');
+            let changed = 0;
+            for (const item of items || []) {
+                const id = typeof item === 'string' ? item : item.id;
+                if (item && item.state === 'published') {
+                    await shares.update(sv(viewer), at(id), { audience: next, members: [] });
+                } else {
+                    await db.prepare('UPDATE blog_posts SET visibility = ?, updated_at = ? WHERE id = ?')
+                        .run(audience, now(), String(id));
+                }
+                changed++;
+            }
+            return changed;
+        },
         canView: async (viewer, id) => await shares.canView(sv(viewer), at(id)),
         canEdit: async (viewer, id) => await shares.canEdit(sv(viewer), at(id)),
         get: async (viewer, id) => await shares.get(sv(viewer), at(id)),

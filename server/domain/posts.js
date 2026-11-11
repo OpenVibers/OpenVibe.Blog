@@ -288,7 +288,11 @@ function createPosts({ store, blogs, publication, access, outbox, log = console,
             if (!await access.canWrite(store, viewer, blog, 'create')) throw new ApiError(403, 'blog.forbidden', 'You cannot write on this blog');
             const t = title(input.title);
             const content = bodyOf(input);
-            const vis = visibilityOf(blog, input.visibility, input.entitlementKey ?? input.entitlement_key);
+            // A person's default audience for new posts (VISIBILITY-EVERYWHERE rule 1); a per-post choice
+            // in the form or the API still wins.
+            let wanted = input.visibility;
+            if ((wanted === undefined || wanted === null || wanted === '') && sharing) wanted = await sharing.defaultOf(subject, 'post');
+            const vis = visibilityOf(blog, wanted, input.entitlementKey ?? input.entitlement_key);
             const rec = authorshipFor(viewer, input, null);
             return await store.tx(async () => {
                 const now = store.now();
