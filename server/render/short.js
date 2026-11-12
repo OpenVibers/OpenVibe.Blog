@@ -1,4 +1,5 @@
 'use strict';
+const { pick } = require('openvibe-shared/showcase');
 /**
  * The home on a phone (the owner's short-pages rule, 2026-10-30): one or two screens, app-like.
  *
@@ -21,13 +22,11 @@ const esc = (s) => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</
  *
  *   pickBlock({ key, label, head, panes })   panes: [{ id, label, html }]
  */
-function pickBlock({ key, label, head = '', panes }) {
-    // A pane with nothing to show is left out, so the chips and the rules that show them match the page.
-    panes = (panes || []).filter((p) => p.html);
-    if (!panes.length) return '';
-    const chips = panes.map((p, i) => '<input type="radio" name="pick-' + esc(key) + '" id="pk-' + esc(key) + '-' + esc(p.id) + '" value="' + esc(p.id) + '"' + (i === 0 ? ' checked' : '') + '><label for="pk-' + esc(key) + '-' + esc(p.id) + '">' + esc(p.label) + '</label>').join('');
-    const body = panes.map((p) => '<div class="pick-pane" id="' + esc(p.id) + '">' + p.html + '</div>').join('');
-    return '<div class="pick" id="pick-' + esc(key) + '"><div class="pick-bar"><div class="pick-head"><h2>' + esc(head || label) + '</h2></div><div class="pick-row" role="radiogroup" aria-label="' + esc(label) + '">' + chips + '</div></div><div class="pick-body">' + body + '</div></div>';
+// 4.228.0: Shared's showcase.pick() draws the block (tabs on a phone, every pane in the page, a link to a pane opens
+// it); this copy only jumped to a pane with chips, so a phone showed them all (the owner, 11-12). The ids are this
+// site's own, so its links keep working.
+function pickBlock({ key, label, head = '', headId = '', bodyClass = '', panes, checked = '' }) {
+    return pick({ key, label, head, headId, bodyClass, checked: checked ? checked : '', panes: (panes || []).map((p) => ({ id: p.id, label: p.label, html: p.html })) });
 }
 
 /** The rule that shows the picked block of a pick block: one per block, so the CSS is written for the page. */

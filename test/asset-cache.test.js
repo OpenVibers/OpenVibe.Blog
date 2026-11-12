@@ -10,7 +10,7 @@ const { assetVersion } = require('../server/render/layout');
 
 const REL = 'css/blog.css';
 const IMMUTABLE = 'public, max-age=31536000, immutable';
-const REVALIDATED = 'public, max-age=300, stale-while-revalidate=86400';
+const REVALIDATED = 'public, max-age=300, stale-while-revalidate=300';
 
 (async () => {
     const t = await boot();
