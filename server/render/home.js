@@ -6,6 +6,7 @@
  */
 const ssr = require('openvibe-publishing/ssr');
 const showcase = require('openvibe-shared/showcase');
+const glyphs = require('openvibe-shared/glyphs');
 const catalog = require('../desks/catalog');
 
 const { html: h, raw } = ssr;
@@ -79,7 +80,7 @@ ${art ? h`<a class="bh-feature-art" href="${url}" tabindex="-1" aria-hidden="tru
 <p class="bh-kicker">${cat ? h`<a class="chip chip-cat" href="${cat.url}">${cat.name}</a>` : h`<span class="badge">Newest</span>`} ${time(post.published_at)}${author ? h` · ${author.name}` : ''}</p>
 <h2 class="bh-feature-title"><a href="${url}">${rev.fields.title}</a></h2>
 ${summary ? h`<p class="bh-feature-sum">${summary}</p>` : ''}
-<p class="bh-feature-go"><a class="sc-btn sc-primary" href="${url}">Read more<span aria-hidden="true"> →</span></a></p>
+<p class="bh-feature-go"><a class="sc-btn sc-primary" href="${url}">Read more<span aria-hidden="true"> ${raw(glyphs.svg('arrow-right', { size: 14 }))}</span></a></p>
 </div></article>`;
 }
 function artCard(item) {
