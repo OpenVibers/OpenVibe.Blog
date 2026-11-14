@@ -64,7 +64,7 @@ function renderPage(o) {
         links: [
             { label: 'Blog', href: '/' },
             { label: 'AI desks', href: '/desks' },
-            { label: 'Write', href: '/write', icon: 'fa-pen' },
+            { label: 'Write', href: '/write', icon: 'pencil' },
         ],
         history: { type: 'page', title: o.title || SITE_NAME },
         silentLogin: `${o.config.baseUrl}/auth/login?silent=1&next={url}`,
