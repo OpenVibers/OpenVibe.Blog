@@ -260,7 +260,7 @@ const H = (n) => n.toString(16).padStart(40, 'a');
         releases.live = 'aaaaaaa20003';
         await off.tick();
         await off.tick();
-        assert.strictEqual(warned.filter((m) => /rate limit/.test(m)).length, 1, warned.join(' | '));
+        assert.strictEqual(warned.filter((m) => /compare\/.* answered 403/.test(m)).length, 1, warned.join(' | '));
     });
 
     await t.close();
