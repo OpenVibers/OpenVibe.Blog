@@ -230,6 +230,39 @@ const H = (n) => n.toString(16).padStart(40, 'a');
         assert.strictEqual(seen.auth.pop(), null, 'no service credentials: anonymous');
     });
 
+    await check('GitHub refuses (its rate limit): the compare comes from OpenVibe.Git\'s mirror, oldest first (11-18)', async () => {
+        const forgeAsked = [];
+        const fx = async (url, opts = {}) => {
+            const u = new URL(url);
+            const json = (body, status = 200) => ({ ok: status < 300, status, json: async () => body });
+            if (u.hostname === 'api.github.com') return await json({ message: 'API rate limit exceeded' }, 403);
+            if (u.hostname === 'git.openvibe.codes') {
+                forgeAsked.push(u.pathname);
+                const m = u.pathname.match(/^\/api\/v1\/repos\/openvibers\/openvibe\.live\/compare\/(.+)\.\.\.(.+)$/);
+                if (m) return await json({ base: m[1], head: m[2], commits: [{ sha: H(951), subject: 'Mirror second' }, { sha: H(950), subject: 'Mirror first' }], files: [{ path: 'a.js', added: '7', removed: '2' }] });
+                return await json({ message: 'not found' }, 404);
+            }
+            return await fetchImpl(url, opts);
+        };
+        const warned = [];
+        const fc = createChangelog({ config: { ...config, changelog: { ...config.changelog, githubToken: '', forgeUrl: 'https://git.openvibe.codes' } }, store: t.ctx.store, blogs: t.ctx.blogs, posts: t.ctx.posts, patchNotes, fetchImpl: fx, log: { log() {}, warn: (m) => warned.push(m) } });
+        releases.live = 'aaaaaaa20001';
+        await fc.tick();
+        assert.ok(forgeAsked.some((p) => p.startsWith('/api/v1/repos/openvibers/openvibe.live/compare/')), forgeAsked.join(' '));
+        const subjects = (await fc.entries({ service: 'live' })).map((x) => x.subject);
+        assert.ok(subjects.includes('Mirror first') && subjects.includes('Mirror second'), subjects.join(' | '));
+        // The next release compares from the mirror's newest commit.
+        releases.live = 'aaaaaaa20002';
+        await fc.tick();
+        assert.ok(forgeAsked.some((p) => p.endsWith(`/compare/${H(951)}...aaaaaaa20002`)), forgeAsked.join(' '));
+        // With the mirror off, the refusal is said in the log, once.
+        const off = createChangelog({ config: { ...config, changelog: { ...config.changelog, githubToken: '', forgeUrl: '' } }, store: t.ctx.store, blogs: t.ctx.blogs, posts: t.ctx.posts, patchNotes, fetchImpl: fx, log: { log() {}, warn: (m) => warned.push(m) } });
+        releases.live = 'aaaaaaa20003';
+        await off.tick();
+        await off.tick();
+        assert.strictEqual(warned.filter((m) => /compare\/.* answered 403/.test(m)).length, 1, warned.join(' | '));
+    });
+
     await t.close();
     done();
 })();
