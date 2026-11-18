@@ -218,6 +218,29 @@ function createChangelog({ config, store, blogs, posts, reading = null, tagger =
         return n;
     }
 
+    /**
+     * The commits between two releases: GitHub's compare, or, when GitHub refuses (403/429, its rate limit), the same
+     * compare from OpenVibe.Git's mirror of the repository. 11-18: Network's GitHub integration was not configured on
+     * the new host, so Blog asked GitHub anonymously (60 calls an hour, shared by the host) and from 17:03 every compare
+     * was refused: the network changelog, and every site's "shipped" line, stood still. The mirror gives each commit's
+     * sha and subject, newest first; here they are oldest first like GitHub's, with no author or body.
+     */
+    async function compareRange(svc, base, head) {
+        try {
+            return await gh(`/repos/${svc.repo}/compare/${base}...${head}`);
+        } catch (err) {
+            if (!(err.status === 403 || err.status === 429) || !c.forgeUrl) throw err;
+            const f = await getJson(`${String(c.forgeUrl).replace(/\/+$/, '')}/api/v1/repos/${String(svc.repo).toLowerCase()}/compare/${base}...${head}`, { timeoutMs: 20000 });
+            const commits = (Array.isArray(f.commits) ? f.commits : [])
+                .filter((x) => x && /^[0-9a-f]{40}$/i.test(String(x.sha || '')))
+                .map((x) => ({ sha: String(x.sha).toLowerCase(), commit: { message: String(x.subject || '') } }))
+                .reverse();
+            const files = (Array.isArray(f.files) ? f.files : []).map((x) => ({ additions: Number(x.added) || 0, deletions: Number(x.removed) || 0 }));
+            stats.viaForge = (stats.viaForge || 0) + 1;
+            return { status: commits.length ? 'ahead' : 'identical', commits, files };
+        }
+    }
+
     async function collectOne(svc) {
         const st = await q.state.get(svc.id);
         if (st && st.release === svc.release) return 0;
@@ -230,7 +253,7 @@ function createChangelog({ config, store, blogs, posts, reading = null, tagger =
             await q.putState.run({ service: svc.id, release: svc.release, head: null, at: nowMs() });
             return n;
         }
-        const cmp = await gh(`/repos/${svc.repo}/compare/${st.head || st.release}...${svc.release}`);
+        const cmp = await compareRange(svc, st.head || st.release, svc.release);
         const commits = Array.isArray(cmp.commits) ? cmp.commits : [];
         const lines = (Array.isArray(cmp.files) ? cmp.files : []).reduce((a, f) => a + (Number(f.additions) || 0) + (Number(f.deletions) || 0), 0);
         const n = cmp.status === 'behind' ? 0 : await addEntries(svc, commits, { releaseLines: lines, major: lines >= c.majorLines });
@@ -239,17 +262,33 @@ function createChangelog({ config, store, blogs, posts, reading = null, tagger =
         return n;
     }
 
+    // A failure used to land in stats.lastError alone; it is said once in the log per distinct message.
+    let lastSaid = '';
+    function noteError(msg) {
+        stats.lastError = msg;
+        const key = msg.replace(/[0-9a-f]{7,40}/g, '#');
+        if (key !== lastSaid) { lastSaid = key; log.warn && log.warn(`[changelog] ${msg}`); }
+    }
+
     async function collect() {
         let added = 0;
         let histories = 0;
         for (const svc of await registry()) {
             try {
                 added += await collectOne(svc);
-                // A few history imports per run keep an unauthenticated GitHub budget intact.
-                if (histories < 6 && !await q.history.get(svc.id)) { histories++; await importHistory(svc); }
             } catch (err) {
-                stats.lastError = `${svc.id}: ${err.message}`;
-                if (err.status === 403 || err.status === 429) break;     // GitHub's rate limit: try again next run
+                noteError(`${svc.id}: ${err.message}`);
+                if (err.status === 403 || err.status === 429) break;     // GitHub's rate limit (and no mirror): next run
+                continue;
+            }
+            // A few history imports per run keep an unauthenticated GitHub budget intact; a refused one stops the
+            // imports for this run, never the collection of the next service.
+            if (histories < 6 && !await q.history.get(svc.id)) {
+                histories++;
+                try { await importHistory(svc); } catch (err) {
+                    noteError(`${svc.id} history: ${err.message}`);
+                    if (err.status === 403 || err.status === 429) histories = 6;
+                }
             }
         }
         stats.entries += added;

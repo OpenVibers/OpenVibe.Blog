@@ -49,6 +49,8 @@ function load(env = process.env) {
             enabled: env.CHANGELOG !== 'off',
             networkUrl: trim(env.OV_NETWORK_INTERNAL_URL || 'http://127.0.0.1:4000'),
             githubToken: env.CHANGELOG_GITHUB_TOKEN || '',
+            // OpenVibe.Git's mirror answers a compare when GitHub refuses (its rate limit); 'off' turns it off.
+            forgeUrl: env.CHANGELOG_FORGE_URL === 'off' ? '' : trim(env.CHANGELOG_FORGE_URL || 'https://git.openvibe.codes'),
             blogHandle: String(env.CHANGELOG_BLOG || 'openvibe').toLowerCase(),
             batchSize: Math.max(5, parseInt(env.CHANGELOG_BATCH_SIZE, 10) || 40),
             majorLines: Math.max(50, parseInt(env.CHANGELOG_MAJOR_LINES, 10) || 800),
