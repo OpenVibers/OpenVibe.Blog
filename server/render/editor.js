@@ -7,6 +7,7 @@
 const ssr = require('openvibe-publishing/ssr');
 const { time } = require('./pages');
 const kit = require('openvibe-shared/kit');
+const glyphs = require('openvibe-shared/glyphs');
 const { asset } = require('./layout');
 
 const { html: h, raw } = ssr;
@@ -35,7 +36,7 @@ ${own ? '' : h`<section class="card"><h2>Start your blog</h2>
 
 function blogDashboard({ blog, posts, heads, role, csrf, message, publicUrl, defaultAudience = 'public' }) {
     const audienceWords = { public: 'Everyone', unlisted: 'Anyone with the link', private: 'Only me' };
-    return String(h`<p><a href="/write">← All your blogs</a></p>
+    return String(h`<p><a href="/write">${raw(glyphs.svg('arrow-left', { size: 14 }))} All your blogs</a></p>
 <h1>${blog.title}</h1>
 <p class="meta">@${blog.handle} · your role: ${role} · <a href="${publicUrl}">View the blog</a>${role === 'owner' ? h` · <a href="/write/@${blog.handle}/settings">Settings</a>` : ''}</p>
 ${flash(message)}
@@ -124,7 +125,7 @@ function gateSummary(decision) {
 
 function editPage(o) {
     const { blog, post, head, published, decision, jobs, attachments, csrf, disclosure, needsReview, publicUrl, canDelete, patchNotes } = o;
-    return String(h`<p><a href="/write/@${blog.handle}">← ${blog.title}</a></p>
+    return String(h`<p><a href="/write/@${blog.handle}">${raw(glyphs.svg('arrow-left', { size: 14 }))} ${blog.title}</a></p>
 <h1>${head.fields.title}</h1>
 <p class="meta">${STATE_LABEL[post.state] || post.state} · ${post.visibility} · revision ${head.number}${published ? h` · readers see revision ${published.number}` : ''} · <a href="/write/posts/${post.id}/revisions">History</a> · <a href="/write/posts/${post.id}/preview">Preview</a>${post.state === 'published' ? h` · <a href="${publicUrl}">View</a>` : ''}</p>
 <p class="post-share">${raw(kit.share({ title: head.fields.title, url: publicUrl, text: head.fields.summary || '', kind: 'post', id: post.id }))}</p>
@@ -158,17 +159,17 @@ ${raw(o.form)}`);
 }
 
 function revisionsPage({ post, head, revisions, diff, from, to, csrf }) {
-    return String(h`<p><a href="/write/posts/${post.id}">← Back to the post</a></p>
+    return String(h`<p><a href="/write/posts/${post.id}">${raw(glyphs.svg('arrow-left', { size: 14 }))} Back to the post</a></p>
 <h1>History of “${head.fields.title}”</h1>
 <form method="get" action="/write/posts/${post.id}/revisions" class="inline">
 <label>Compare <input name="from" type="number" min="1" value="${from || ''}"></label> <label>with <input name="to" type="number" min="1" value="${to || ''}"></label> <button type="submit">Diff</button></form>
-${diff ? h`<section><h2>Revision ${diff.from} → ${diff.to}</h2>${diff.fields.length ? h`<ul>${diff.fields.map((d) => h`<li>${d.field}: “${d.from}” → “${d.to}”</li>`)}</ul>` : ''}${raw(ssr.diffHtml(diff.content))}</section>` : ''}
+${diff ? h`<section><h2>Revision ${diff.from} to ${diff.to}</h2>${diff.fields.length ? h`<ul>${diff.fields.map((d) => h`<li>${d.field}: “${d.from}” to “${d.to}”</li>`)}</ul>` : ''}${raw(ssr.diffHtml(diff.content))}</section>` : ''}
 <ol class="revisions" reversed>${revisions.map((r) => h`<li><strong>Revision ${r.number}</strong> · ${r.kind}${r.revertedTo ? h` of ${r.revertedTo}` : ''} · ${time(Date.parse(r.createdAt))} · ${(r.meta && r.meta.authorship && r.meta.authorship.mode) || 'human'}${r.message ? h` · ${r.message}` : ''}
 ${r.number !== head.number ? h`<form method="post" action="/write/posts/${post.id}/revert" class="inline">${csrfField(csrf)}<input type="hidden" name="toRevision" value="${r.number}"><input type="hidden" name="expectedRevision" value="${head.number}"><button type="submit">Restore as a new revision</button></form>` : ''}</li>`)}</ol>`);
 }
 
 function settingsPage({ blog, feed, members, people, themes, csrf, message }) {
-    return String(h`<p><a href="/write/@${blog.handle}">← ${blog.title}</a></p>
+    return String(h`<p><a href="/write/@${blog.handle}">${raw(glyphs.svg('arrow-left', { size: 14 }))} ${blog.title}</a></p>
 <h1>Settings</h1>
 ${flash(message)}
 <form method="post" action="/write/@${blog.handle}/settings" class="card">${csrfField(csrf)}
@@ -225,7 +226,7 @@ ${slop.length ? h`<form method="post" action="/write/posts/${post.id}/checks">${
 function voicePage({ viewer, mine, official, csrf, message }) {
     const card = (mine && mine.card) || {};
     const field = (name, label, value, hint = '') => h`<label for="voice-${name}">${label}${hint ? h` <span class="meta">(${hint})</span>` : ''}</label><input id="voice-${name}" name="${name}" maxlength="300" value="${value || ''}">`;
-    return String(h`<p><a href="/write">← Write</a></p>
+    return String(h`<p><a href="/write">${raw(glyphs.svg('arrow-left', { size: 14 }))} Write</a></p>
 <h1>How I write</h1>
 ${flash(message)}
 <p class="meta">This card goes into the AI drafting prompt verbatim, with two samples of your writing. It is private unless you publish it on your author page.</p>

@@ -25,6 +25,7 @@ const blockRender = require('../render/blocks');
 const { csrfToken, checkCsrf } = require('../auth/forms');
 const { asApiError } = require('./errors');
 const cache = require('openvibe-shared/cache-policy');
+const glyphs = require('openvibe-shared/glyphs');
 
 /** Checkbox + hidden fallback arrive as ['1','0']; a text field repeated keeps its last value. */
 const one = (v) => (Array.isArray(v) ? (v.includes('1') ? '1' : v[v.length - 1]) : v);
@@ -146,7 +147,7 @@ function createEditorRoutes(ctx) {
         if (!blog || !await access.canWrite(store, req.viewer, blog, 'create')) return notFound(req, res);
         const aiForm = ctx.aiDrafts && ctx.aiDrafts.enabled ? editor.aiDraftForm({ blog, csrf: csrf(req) }) : '';
         const defaultVisibility = sharing ? await sharing.defaultOf(req.viewer.subject, 'post') : 'public';
-        page(req, res, 'New post', `<p><a href="/write/@${esc(blog.handle)}">← ${esc(blog.title)}</a></p><h1>New post</h1>${aiForm}${editor.postForm({ blog, post: null, head: null, terms: {}, series: null, csrf: csrf(req), action: `/write/@${blog.handle}/new`, defaultVisibility })}`);
+        page(req, res, 'New post', `<p><a href="/write/@${esc(blog.handle)}">${glyphs.svg('arrow-left', { size: 14 })} ${esc(blog.title)}</a></p><h1>New post</h1>${aiForm}${editor.postForm({ blog, post: null, head: null, terms: {}, series: null, csrf: csrf(req), action: `/write/@${blog.handle}/new`, defaultVisibility })}`);
     }));
 
     // Draft with AI: the draft is AI-authored and stays a noindex draft until someone reviews it.

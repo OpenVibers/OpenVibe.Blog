@@ -341,7 +341,7 @@ function createPublicRoutes(ctx) {
         if (!term) return notFound(req, res);
         const trail = await store.taxonomy.ancestors(term.id);
         const ids = [term.id, ...(await store.taxonomy.descendants(term.id)).map((t) => t.id)];
-        return await collection(req, res, { blog, heading: term.name, intro: `Posts in ${trail.map((t) => t.name).join(' › ')}.`, path: reading.urls.category(blog, term),
+        return await collection(req, res, { blog, heading: term.name, intro: `Posts in ${trail.map((t) => t.name).join(', then ')}.`, path: reading.urls.category(blog, term),
             crumbs: [blogCrumb(blog), ...trail.map((t, i) => (i === trail.length - 1 ? { name: t.name } : { name: t.name, url: reading.urls.category(blog, t) }))],
             filter: { termIds: ids }, empty: 'No public posts in this category yet.', hideEmpty: true });
     }));
